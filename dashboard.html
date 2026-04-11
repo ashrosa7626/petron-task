@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard – Petron Tasks</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .staff-row { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 12px; }
+    .staff-row__header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; cursor: pointer; }
+    .staff-row__avatar { width: 38px; height: 38px; border-radius: 50%; background: linear-gradient(135deg,var(--accent),var(--accent2)); display:flex;align-items:center;justify-content:center;font-weight:700;color:white;font-size:1rem;flex-shrink:0; }
+    .staff-row__name { font-weight: 700; flex: 1; }
+    .staff-row__tasks { display: none; border-top: 1px solid var(--border); margin-top: 10px; padding-top: 10px; }
+    .staff-row__tasks--open { display: block; }
+    .mini-task { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+    .mini-task:last-child { border-bottom: none; }
+    .mini-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--border); flex-shrink: 0; }
+    .mini-dot--done { background: var(--success); }
+    .refresh-btn { position: fixed; bottom: 24px; right: 24px; width: 52px; height: 52px; border-radius: 50%; background: var(--accent); border: none; color: white; font-size: 1.3rem; cursor: pointer; box-shadow: var(--shadow); transition: transform 0.2s; }
+    .refresh-btn:hover { transform: rotate(30deg); }
+  </style>
+</head>
+<body>
+<div class="page">
+  <div class="topbar">
+    <a href="lead.html" class="btn btn--ghost btn--sm">← Setup</a>
+    <div class="topbar__logo">Petron<span> Dashboard</span></div>
+    <div class="text-sm text-muted" id="clock"></div>
+  </div>
+
+  <div class="content content--wide">
+    <div style="margin-bottom:20px">
+      <div style="font-size:1.3rem;font-weight:700">Live Overview</div>
+      <div class="text-muted text-sm" id="dateLabel"></div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-row">
+      <div class="stat-card stat-card--green">
+        <div class="stat-card__num" id="statDone">–</div>
+        <div class="stat-card__label">Completed</div>
+      </div>
+      <div class="stat-card stat-card--amber">
+        <div class="stat-card__num" id="statPending">–</div>
+        <div class="stat-card__label">Pending</div>
+      </div>
+      <div class="stat-card stat-card--blue">
+        <div class="stat-card__num" id="statTotal">–</div>
+        <div class="stat-card__label">Total Tasks</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:24px">
+      <div class="flex flex--between" style="margin-bottom:8px">
+        <span class="text-sm" style="font-weight:600">Overall Progress</span>
+        <span class="text-sm text-muted" id="overallLabel">–</span>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-bar__fill" id="overallFill" style="width:0%"></div>
+      </div>
+    </div>
+
+    <div class="section-title">Staff Progress</div>
+    <div id="staffRows"><div class="empty-state">Loading...</div></div>
+  </div>
+</div>
+
+<button class="refresh-btn" onclick="loadDashboard()" title="Refresh">↻</button>
+<div id="toast" class="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="app.js"></script>
+<script>
+  document.getElementById('dateLabel').textContent =
+    new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+
+  function updateClock() {
+    document.getElementById('clock').textContent =
+      new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+  updateClock(); setInterval(updateClock, 1000);
+
+  // Auto-refresh every 30 seconds
+  setInterval(loadDashboard, 30000);
+
+  async function loadDashboard() {
+    const { data: assignments, error } = await db
+      .from('daily_assignments')
+      .select(`
+        id, is_adhoc, custom_task_name, staff_id,
+        task_templates(name, photo_required),
+        completions(id, completed_at, photo_url),
+        users(id, name)
+      `)
+      .eq('date', today());
+
+    if (error || !assignments) { return; }
+
+    // Group by staff
+    const byStaff = {};
+    for (const a of assignments) {
+      const sid = a.staff_id;
+      if (!byStaff[sid]) byStaff[sid] = { name: a.users?.name || 'Unknown', tasks: [] };
+      byStaff[sid].tasks.push({
+        name: a.is_adhoc ? a.custom_task_name : (a.task_templates?.name || 'Task'),
+        photo_required: a.task_templates?.photo_required || a.is_adhoc_photo || false,
+        done: a.completions && a.completions.length > 0,
+        completed_at: a.completions?.[0]?.completed_at,
+        photo_url: a.completions?.[0]?.photo_url,
+        is_adhoc: a.is_adhoc,
+      });
+    }
+
+    let totalDone = 0, totalAll = 0;
+    const container = document.getElementById('staffRows');
+    const entries = Object.entries(byStaff);
+
+    if (entries.length === 0) {
+      container.innerHTML = '<div class="empty-state">No tasks assigned today.</div>';
+      return;
+    }
+
+    container.innerHTML = entries.map(([sid, data]) => {
+      const done  = data.tasks.filter(t => t.done).length;
+      const total = data.tasks.length;
+      totalDone += done; totalAll += total;
+      const pct = total ? Math.round((done/total)*100) : 0;
+
+      const taskRows = data.tasks.map(t => `
+        <div class="mini-task">
+          <div class="mini-dot ${t.done ? 'mini-dot--done' : ''}"></div>
+          <div style="flex:1;font-size:0.88rem">${t.name}${t.is_adhoc ? ' <span class="badge badge--adhoc" style="font-size:0.7rem">Ad-hoc</span>' : ''}</div>
+          ${t.done ? `<span class="text-sm text-muted">${formatTime(t.completed_at)}</span>` : '<span class="badge badge--pending" style="font-size:0.72rem">Pending</span>'}
+          ${t.photo_url ? `<a href="${t.photo_url}" target="_blank" class="btn btn--ghost btn--sm" style="padding:4px 8px">📷</a>` : ''}
+        </div>
+      `).join('');
+
+      return `
+        <div class="staff-row">
+          <div class="staff-row__header" onclick="toggleStaff('s${sid}')">
+            <div class="staff-row__avatar">${data.name.charAt(0).toUpperCase()}</div>
+            <div class="staff-row__name">${data.name}</div>
+            <span class="badge ${done===total ? 'badge--done' : 'badge--pending'}">${done}/${total}</span>
+            <span style="color:var(--muted);font-size:0.8rem">${pct}%</span>
+          </div>
+          <div class="progress-bar" style="margin-bottom:0">
+            <div class="progress-bar__fill" style="width:${pct}%"></div>
+          </div>
+          <div class="staff-row__tasks" id="s${sid}">${taskRows}</div>
+        </div>
+      `;
+    }).join('');
+
+    document.getElementById('statDone').textContent    = totalDone;
+    document.getElementById('statPending').textContent = totalAll - totalDone;
+    document.getElementById('statTotal').textContent   = totalAll;
+    document.getElementById('overallLabel').textContent = `${totalDone} / ${totalAll}`;
+    document.getElementById('overallFill').style.width = totalAll ? `${(totalDone/totalAll)*100}%` : '0%';
+  }
+
+  function toggleStaff(id) {
+    document.getElementById(id).classList.toggle('staff-row__tasks--open');
+  }
+
+  loadDashboard();
+</script>
+</body>
+</html>

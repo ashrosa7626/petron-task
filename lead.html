@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Team Lead – Petron Tasks</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .login-wrap { max-width: 360px; margin: 60px auto 0; }
+    .login-title { font-size: 1.4rem; font-weight: 700; margin-bottom: 6px; }
+    .login-sub   { color: var(--muted); font-size: 0.9rem; margin-bottom: 28px; }
+
+    .tab-bar { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 4px; margin-bottom: 24px; }
+    .tab-btn { flex: 1; padding: 9px; border: none; background: transparent; border-radius: 6px; font-family: var(--font); font-size: 0.88rem; font-weight: 600; color: var(--muted); cursor: pointer; transition: all 0.15s; }
+    .tab-btn--active { background: var(--accent); color: white; }
+
+    .staff-assign-row { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; padding: 16px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); }
+    .staff-assign-row__name { font-weight: 700; font-size: 0.95rem; margin-bottom: 8px; }
+
+    .task-checkbox-list { display: flex; flex-direction: column; gap: 8px; }
+    .task-checkbox { display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 8px 10px; border-radius: var(--radius-sm); transition: background 0.1s; }
+    .task-checkbox:hover { background: var(--surface); }
+    .task-checkbox input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer; }
+    .task-checkbox__label { font-size: 0.9rem; flex: 1; }
+    .task-checkbox__photo { font-size: 0.75rem; color: var(--warning); }
+
+    .adhoc-section { border-top: 1px solid var(--border); margin-top: 12px; padding-top: 12px; }
+    .adhoc-title { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); margin-bottom: 10px; }
+    .adhoc-input-row { display: flex; gap: 8px; }
+    .adhoc-input-row input { flex: 1; padding: 9px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); font-family: var(--font); font-size: 0.88rem; outline: none; }
+    .adhoc-input-row input:focus { border-color: var(--accent); }
+    .adhoc-tag { display: inline-flex; align-items: center; gap: 6px; background: rgba(124,92,252,0.15); color: var(--accent2); border-radius: 99px; padding: 4px 12px; font-size: 0.82rem; font-weight: 600; margin: 4px 4px 0 0; cursor: pointer; }
+    .adhoc-tag:hover { background: rgba(124,92,252,0.25); }
+
+    .nav-link { color: var(--muted); font-size: 0.85rem; text-decoration: none; transition: color 0.15s; }
+    .nav-link:hover { color: var(--accent); }
+  </style>
+</head>
+<body>
+<div class="page">
+  <div class="topbar">
+    <a href="index.html" class="btn btn--ghost btn--sm">← Staff View</a>
+    <div class="topbar__logo">Petron<span> Lead</span></div>
+    <div id="leadNav" style="display:none;gap:12px;align-items:center" class="flex">
+      <a href="dashboard.html" class="nav-link">Dashboard</a>
+      <button class="btn btn--ghost btn--sm" onclick="logout()">Logout</button>
+    </div>
+  </div>
+
+  <!-- LOGIN -->
+  <div class="content" id="loginView">
+    <div class="login-wrap">
+      <div class="login-title">Team Lead Login</div>
+      <div class="login-sub">Enter your credentials to manage today's tasks.</div>
+      <div class="field"><label>Email</label><input type="email" id="email" placeholder="lead@petron.com"></div>
+      <div class="field"><label>Password</label><input type="password" id="password" placeholder="••••••••"></div>
+      <div style="color:var(--danger);font-size:0.85rem;min-height:20px;margin-bottom:12px" id="loginError"></div>
+      <button class="btn btn--primary btn--full" id="loginBtn" onclick="doLogin()">Login</button>
+    </div>
+  </div>
+
+  <!-- MAIN LEAD VIEW -->
+  <div class="content content--wide" id="leadView" style="display:none">
+    <div style="margin-bottom:24px">
+      <div style="font-size:1.3rem;font-weight:700">Morning Setup</div>
+      <div class="text-muted text-sm" id="leadDateLabel"></div>
+    </div>
+
+    <div class="tab-bar">
+      <button class="tab-btn tab-btn--active" id="tab-assign" onclick="showTab('assign')">Assign Tasks</button>
+      <button class="tab-btn" id="tab-templates" onclick="showTab('templates')">Task Templates</button>
+      <button class="tab-btn" id="tab-staff" onclick="showTab('staff')">Manage Staff</button>
+    </div>
+
+    <!-- ASSIGN TAB -->
+    <div id="view-assign">
+      <div class="flex flex--between" style="margin-bottom:16px">
+        <div class="section-title" style="margin:0">Assign to staff</div>
+        <button class="btn btn--primary btn--sm" id="saveAssignBtn" onclick="saveAssignments()">Save Day's Tasks</button>
+      </div>
+      <div id="assignList"><div class="empty-state">Loading...</div></div>
+    </div>
+
+    <!-- TEMPLATES TAB -->
+    <div id="view-templates" style="display:none">
+      <div class="flex flex--between" style="margin-bottom:16px">
+        <div class="section-title" style="margin:0">Default Task Templates</div>
+        <button class="btn btn--primary btn--sm" onclick="openNewTemplate()">+ New Template</button>
+      </div>
+      <div id="templateList"><div class="empty-state">Loading...</div></div>
+    </div>
+
+    <!-- STAFF TAB -->
+    <div id="view-staff" style="display:none">
+      <div class="flex flex--between" style="margin-bottom:16px">
+        <div class="section-title" style="margin:0">Staff Members</div>
+        <button class="btn btn--primary btn--sm" onclick="openNewStaff()">+ Add Staff</button>
+      </div>
+      <div id="staffList"><div class="empty-state">Loading...</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Template Modal -->
+<div class="modal-overlay" id="templateModal">
+  <div class="modal">
+    <div class="modal__title" id="templateModalTitle">New Task Template</div>
+    <input type="hidden" id="editTemplateId">
+    <div class="field"><label>Task Name</label><input type="text" id="tplName" placeholder="e.g. Clean counter tops"></div>
+    <div class="field"><label>Description (optional)</label><textarea id="tplDesc" placeholder="Any extra details..."></textarea></div>
+    <div class="toggle-row">
+      <span style="font-size:0.9rem;font-weight:600">Requires Photo</span>
+      <label class="toggle"><input type="checkbox" id="tplPhoto"><span class="toggle__slider"></span></label>
+    </div>
+    <div class="modal__actions">
+      <button class="btn btn--ghost" onclick="closeModal('templateModal')">Cancel</button>
+      <button class="btn btn--primary" onclick="saveTemplate()">Save Template</button>
+    </div>
+  </div>
+</div>
+
+<!-- Staff Modal -->
+<div class="modal-overlay" id="staffModal">
+  <div class="modal">
+    <div class="modal__title" id="staffModalTitle">Add Staff Member</div>
+    <input type="hidden" id="editStaffId">
+    <div class="field"><label>Full Name</label><input type="text" id="staffName" placeholder="e.g. Jane Smith"></div>
+    <div class="field"><label>4-Digit PIN</label><input type="text" id="staffPin" maxlength="4" placeholder="e.g. 1234" pattern="[0-9]{4}"></div>
+    <div class="modal__actions">
+      <button class="btn btn--ghost" onclick="closeModal('staffModal')">Cancel</button>
+      <button class="btn btn--primary" onclick="saveStaff()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="app.js"></script>
+<script>
+  let currentUser = null;
+  let allStaff = [];
+  let allTemplates = [];
+  // staffSelections: { staffId: { templateIds: Set, adhocTasks: [{name, photoRequired}] } }
+  let staffSelections = {};
+
+  document.getElementById('leadDateLabel').textContent =
+    new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+
+  // Check session
+  (async () => {
+    const { data: { session } } = await db.auth.getSession();
+    if (session) enterLeadView(session.user);
+  })();
+
+  async function doLogin() {
+    const email = document.getElementById('email').value.trim();
+    const pass  = document.getElementById('password').value;
+    const btn   = document.getElementById('loginBtn');
+    document.getElementById('loginError').textContent = '';
+    setLoading(btn, true);
+
+    const { data, error } = await db.auth.signInWithPassword({ email, password: pass });
+    setLoading(btn, false);
+
+    if (error) { document.getElementById('loginError').textContent = error.message; return; }
+
+    // Check role
+    const { data: user } = await db.from('users').select('role').eq('auth_id', data.user.id).single();
+    if (!user || user.role !== 'lead') {
+      await db.auth.signOut();
+      document.getElementById('loginError').textContent = 'Access denied. Team Lead accounts only.';
+      return;
+    }
+    enterLeadView(data.user);
+  }
+
+  function enterLeadView(user) {
+    currentUser = user;
+    document.getElementById('loginView').style.display = 'none';
+    document.getElementById('leadView').style.display = '';
+    document.getElementById('leadNav').style.display = 'flex';
+    loadAssignView();
+  }
+
+  async function logout() {
+    await db.auth.signOut();
+    window.location.reload();
+  }
+
+  // ── TABS ──────────────────────────────────────
+  function showTab(tab) {
+    ['assign','templates','staff'].forEach(t => {
+      document.getElementById('view-' + t).style.display = t === tab ? '' : 'none';
+      document.getElementById('tab-' + t).classList.toggle('tab-btn--active', t === tab);
+    });
+    if (tab === 'templates') loadTemplates();
+    if (tab === 'staff') loadStaffList();
+  }
+
+  // ── ASSIGN TAB ────────────────────────────────
+  async function loadAssignView() {
+    const [staffRes, tplRes, existingRes] = await Promise.all([
+      db.from('users').select('id, name').eq('role', 'staff').order('name'),
+      db.from('task_templates').select('*').eq('is_active', true).order('name'),
+      db.from('daily_assignments').select('*').eq('date', today()),
+    ]);
+
+    allStaff     = staffRes.data || [];
+    allTemplates = tplRes.data   || [];
+    const existing = existingRes.data || [];
+
+    // Pre-populate from existing assignments
+    staffSelections = {};
+    for (const s of allStaff) {
+      const myAssignments = existing.filter(a => a.staff_id === s.id);
+      staffSelections[s.id] = {
+        templateIds: new Set(myAssignments.filter(a => !a.is_adhoc).map(a => a.task_template_id)),
+        adhocTasks: myAssignments.filter(a => a.is_adhoc).map(a => ({
+          name: a.custom_task_name, photoRequired: a.photo_required || false, id: a.id
+        })),
+      };
+    }
+
+    renderAssignView();
+  }
+
+  function renderAssignView() {
+    const list = document.getElementById('assignList');
+    if (allStaff.length === 0) {
+      list.innerHTML = '<div class="empty-state">No staff found. Add staff in the Manage Staff tab first.</div>';
+      return;
+    }
+
+    list.innerHTML = allStaff.map(s => {
+      const sel = staffSelections[s.id];
+      const templateCheckboxes = allTemplates.map(t => `
+        <label class="task-checkbox">
+          <input type="checkbox" data-staff="${s.id}" data-tpl="${t.id}"
+            ${sel.templateIds.has(t.id) ? 'checked' : ''}
+            onchange="toggleTemplate('${s.id}','${t.id}',this.checked)">
+          <span class="task-checkbox__label">${t.name}</span>
+          ${t.photo_required ? '<span class="task-checkbox__photo">📷</span>' : ''}
+        </label>
+      `).join('');
+
+      const adhocTags = sel.adhocTasks.map((a, i) => `
+        <span class="adhoc-tag" onclick="removeAdhoc('${s.id}',${i})">
+          ${a.name} <span style="opacity:0.6">✕</span>
+        </span>
+      `).join('');
+
+      return `
+        <div class="staff-assign-row">
+          <div class="staff-assign-row__name">👤 ${s.name}</div>
+          <div class="task-checkbox-list">${templateCheckboxes || '<span class="text-muted text-sm">No templates yet</span>'}</div>
+          <div class="adhoc-section">
+            <div class="adhoc-title">Ad-hoc Tasks</div>
+            <div id="adhoc-tags-${s.id}">${adhocTags}</div>
+            <div class="adhoc-input-row" style="margin-top:8px">
+              <input type="text" id="adhoc-input-${s.id}" placeholder="Type ad-hoc task name..." onkeydown="adhocKeydown(event,'${s.id}')">
+              <button class="btn btn--ghost btn--sm" onclick="addAdhoc('${s.id}')">Add</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function toggleTemplate(staffId, tplId, checked) {
+    if (checked) staffSelections[staffId].templateIds.add(tplId);
+    else staffSelections[staffId].templateIds.delete(tplId);
+  }
+
+  function addAdhoc(staffId) {
+    const inp = document.getElementById('adhoc-input-' + staffId);
+    const name = inp.value.trim();
+    if (!name) return;
+    staffSelections[staffId].adhocTasks.push({ name, photoRequired: false });
+    inp.value = '';
+    renderAdhocTags(staffId);
+  }
+
+  function adhocKeydown(e, staffId) {
+    if (e.key === 'Enter') addAdhoc(staffId);
+  }
+
+  function removeAdhoc(staffId, index) {
+    staffSelections[staffId].adhocTasks.splice(index, 1);
+    renderAdhocTags(staffId);
+  }
+
+  function renderAdhocTags(staffId) {
+    const container = document.getElementById('adhoc-tags-' + staffId);
+    const tasks = staffSelections[staffId].adhocTasks;
+    container.innerHTML = tasks.map((a, i) => `
+      <span class="adhoc-tag" onclick="removeAdhoc('${staffId}',${i})">
+        ${a.name} <span style="opacity:0.6">✕</span>
+      </span>
+    `).join('');
+  }
+
+  async function saveAssignments() {
+    const btn = document.getElementById('saveAssignBtn');
+    setLoading(btn, true);
+
+    // Delete existing assignments for today
+    await db.from('daily_assignments').delete().eq('date', today());
+
+    const rows = [];
+    for (const s of allStaff) {
+      const sel = staffSelections[s.id];
+      for (const tplId of sel.templateIds) {
+        rows.push({ date: today(), staff_id: s.id, task_template_id: tplId, is_adhoc: false, created_by: currentUser?.id });
+      }
+      for (const adhoc of sel.adhocTasks) {
+        rows.push({ date: today(), staff_id: s.id, is_adhoc: true, custom_task_name: adhoc.name, photo_required: adhoc.photoRequired, created_by: currentUser?.id });
+      }
+    }
+
+    if (rows.length > 0) {
+      const { error } = await db.from('daily_assignments').insert(rows);
+      if (error) { showToast('Error saving assignments.', 'error'); setLoading(btn, false); return; }
+    }
+
+    showToast("Today's tasks saved successfully!");
+    setLoading(btn, false);
+  }
+
+  // ── TEMPLATES TAB ─────────────────────────────
+  async function loadTemplates() {
+    const { data, error } = await db.from('task_templates').select('*').order('name');
+    const list = document.getElementById('templateList');
+    if (error || !data?.length) { list.innerHTML = '<div class="empty-state">No templates yet. Create one above.</div>'; return; }
+
+    list.innerHTML = data.map(t => `
+      <div class="task-item">
+        <div class="task-item__body">
+          <div class="task-item__name">${t.name}</div>
+          <div class="task-item__meta">
+            ${t.description ? `<span>${t.description}</span>` : ''}
+            ${t.photo_required ? '<span class="badge badge--photo">📷 Photo</span>' : ''}
+            ${!t.is_active ? '<span class="badge" style="background:rgba(239,68,68,0.1);color:var(--danger)">Inactive</span>' : ''}
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-shrink:0">
+          <button class="btn btn--ghost btn--sm" onclick='editTemplate(${JSON.stringify(t)})'>Edit</button>
+          <button class="btn btn--ghost btn--sm" style="color:var(--danger)" onclick="toggleTemplateActive('${t.id}',${t.is_active})">${t.is_active ? 'Disable' : 'Enable'}</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function openNewTemplate() {
+    document.getElementById('templateModalTitle').textContent = 'New Task Template';
+    document.getElementById('editTemplateId').value = '';
+    document.getElementById('tplName').value = '';
+    document.getElementById('tplDesc').value = '';
+    document.getElementById('tplPhoto').checked = false;
+    document.getElementById('templateModal').classList.add('modal-overlay--open');
+  }
+
+  function editTemplate(t) {
+    document.getElementById('templateModalTitle').textContent = 'Edit Template';
+    document.getElementById('editTemplateId').value = t.id;
+    document.getElementById('tplName').value = t.name;
+    document.getElementById('tplDesc').value = t.description || '';
+    document.getElementById('tplPhoto').checked = t.photo_required;
+    document.getElementById('templateModal').classList.add('modal-overlay--open');
+  }
+
+  async function saveTemplate() {
+    const id   = document.getElementById('editTemplateId').value;
+    const name = document.getElementById('tplName').value.trim();
+    if (!name) { showToast('Task name is required.', 'error'); return; }
+
+    const payload = {
+      name,
+      description: document.getElementById('tplDesc').value.trim(),
+      photo_required: document.getElementById('tplPhoto').checked,
+      is_active: true,
+    };
+
+    const { error } = id
+      ? await db.from('task_templates').update(payload).eq('id', id)
+      : await db.from('task_templates').insert(payload);
+
+    if (error) { showToast('Error saving template.', 'error'); return; }
+    showToast('Template saved!');
+    closeModal('templateModal');
+    loadTemplates();
+  }
+
+  async function toggleTemplateActive(id, current) {
+    await db.from('task_templates').update({ is_active: !current }).eq('id', id);
+    loadTemplates();
+  }
+
+  // ── STAFF TAB ─────────────────────────────────
+  async function loadStaffList() {
+    const { data } = await db.from('users').select('*').eq('role', 'staff').order('name');
+    const list = document.getElementById('staffList');
+    if (!data?.length) { list.innerHTML = '<div class="empty-state">No staff added yet.</div>'; return; }
+
+    list.innerHTML = data.map(s => `
+      <div class="task-item">
+        <div class="staff-card__avatar" style="width:38px;height:38px;font-size:1rem;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-weight:700;color:white;flex-shrink:0">
+          ${s.name.charAt(0).toUpperCase()}
+        </div>
+        <div class="task-item__body">
+          <div class="task-item__name">${s.name}</div>
+          <div class="task-item__meta"><span>PIN: ****</span></div>
+        </div>
+        <button class="btn btn--ghost btn--sm" onclick='editStaff(${JSON.stringify(s)})'>Edit PIN</button>
+      </div>
+    `).join('');
+  }
+
+  function openNewStaff() {
+    document.getElementById('staffModalTitle').textContent = 'Add Staff Member';
+    document.getElementById('editStaffId').value = '';
+    document.getElementById('staffName').value = '';
+    document.getElementById('staffPin').value = '';
+    document.getElementById('staffModal').classList.add('modal-overlay--open');
+  }
+
+  function editStaff(s) {
+    document.getElementById('staffModalTitle').textContent = 'Edit Staff Member';
+    document.getElementById('editStaffId').value = s.id;
+    document.getElementById('staffName').value = s.name;
+    document.getElementById('staffPin').value = '';
+    document.getElementById('staffModal').classList.add('modal-overlay--open');
+  }
+
+  async function saveStaff() {
+    const id   = document.getElementById('editStaffId').value;
+    const name = document.getElementById('staffName').value.trim();
+    const pin  = document.getElementById('staffPin').value.trim();
+
+    if (!name) { showToast('Name is required.', 'error'); return; }
+    if (!id && pin.length !== 4) { showToast('PIN must be exactly 4 digits.', 'error'); return; }
+    if (pin && !/^\d{4}$/.test(pin)) { showToast('PIN must be 4 digits.', 'error'); return; }
+
+    const payload = { name, role: 'staff' };
+    if (pin) payload.pin_hash = pin; // Store PIN (hash in production)
+
+    const { error } = id
+      ? await db.from('users').update(payload).eq('id', id)
+      : await db.from('users').insert(payload);
+
+    if (error) { showToast('Error saving staff.', 'error'); return; }
+    showToast('Staff member saved!');
+    closeModal('staffModal');
+    loadStaffList();
+  }
+
+  function closeModal(id) {
+    document.getElementById(id).classList.remove('modal-overlay--open');
+  }
+
+  // Allow Enter to login
+  document.getElementById('password').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+</script>
+</body>
+</html>

@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Petron Tasks</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --ink:      #0e0e0e;
+      --ink2:     #3a3a3a;
+      --muted:    #888;
+      --border:   #e0e0e0;
+      --bg:       #f5f3ef;
+      --surface:  #ffffff;
+      --amber:    #e8860a;
+      --amber-lt: #fef3e2;
+      --amber-dk: #b56500;
+      --green:    #1a9e5c;
+      --green-lt: #e8f7f0;
+      --radius:   16px;
+      --shadow:   0 2px 16px rgba(0,0,0,0.07);
+      --shadow-lg:0 8px 40px rgba(0,0,0,0.12);
+    }
+
+    html, body {
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: 'IBM Plex Sans', sans-serif;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    /* ── Animated background grid ─────────────────────── */
+    .bg-grid {
+      position: fixed; inset: 0; pointer-events: none; z-index: 0;
+      background-image:
+        linear-gradient(rgba(0,0,0,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,0,0,0.04) 1px, transparent 1px);
+      background-size: 48px 48px;
+      animation: grid-drift 30s linear infinite;
+    }
+    @keyframes grid-drift {
+      0%   { background-position: 0 0, 0 0; }
+      100% { background-position: 48px 48px, 48px 48px; }
+    }
+
+    .bg-glow {
+      position: fixed; top: -120px; right: -120px;
+      width: 520px; height: 520px;
+      background: radial-gradient(circle, rgba(232,134,10,0.12) 0%, transparent 70%);
+      pointer-events: none; z-index: 0;
+    }
+
+    /* ── Layout ───────────────────────────────────────── */
+    .page {
+      position: relative; z-index: 1;
+      min-height: 100vh;
+      display: flex; flex-direction: column;
+    }
+
+    /* ── Header ───────────────────────────────────────── */
+    .header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 20px 32px;
+      background: rgba(255,255,255,0.75);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 100;
+      animation: slide-down 0.5s ease both;
+    }
+    @keyframes slide-down {
+      from { opacity: 0; transform: translateY(-16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .logo { display: flex; align-items: center; gap: 10px; }
+    .logo__mark {
+      width: 36px; height: 36px; border-radius: 10px;
+      background: var(--ink);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .logo__text {
+      font-family: 'Syne', sans-serif;
+      font-size: 1.15rem; font-weight: 800;
+      letter-spacing: -0.3px; color: var(--ink);
+    }
+    .logo__text span { color: var(--amber); }
+
+    .header-right { display: flex; align-items: center; gap: 16px; }
+    .clock-pill {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 99px; padding: 6px 16px;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.85rem; font-weight: 500; color: var(--ink2);
+    }
+    .date-pill { font-size: 0.8rem; color: var(--muted); font-family: 'IBM Plex Mono', monospace; }
+
+    /* ── Hero ─────────────────────────────────────────── */
+    .hero {
+      padding: 48px 32px 28px;
+      max-width: 760px; margin: 0 auto; width: 100%;
+      animation: fade-up 0.6s ease 0.1s both;
+    }
+    @keyframes fade-up {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .hero__eyebrow {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: var(--amber-lt); color: var(--amber-dk);
+      border: 1px solid rgba(232,134,10,0.2);
+      border-radius: 99px; padding: 5px 14px;
+      font-size: 0.75rem; font-weight: 600;
+      letter-spacing: 0.8px; text-transform: uppercase;
+      margin-bottom: 20px;
+    }
+    .pulse-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--amber);
+      animation: pulse 2s ease infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: 0.5; transform: scale(0.7); }
+    }
+
+    .hero__title {
+      font-family: 'Syne', sans-serif;
+      font-size: clamp(1.9rem, 5vw, 2.7rem);
+      font-weight: 800; line-height: 1.1;
+      letter-spacing: -1px; color: var(--ink);
+      margin-bottom: 12px;
+    }
+    .hero__title em { font-style: normal; color: var(--amber); }
+
+    .hero__sub {
+      font-size: 0.97rem; color: var(--muted);
+      font-weight: 400; line-height: 1.65; max-width: 480px;
+    }
+
+    /* ── Stats strip ──────────────────────────────────── */
+    .stats-strip {
+      display: flex;
+      max-width: 760px; margin: 24px auto 0;
+      width: 100%; padding: 0 32px;
+      animation: fade-up 0.6s ease 0.2s both;
+    }
+    .stat {
+      flex: 1; background: var(--surface);
+      border: 1px solid var(--border); padding: 16px 12px; text-align: center;
+    }
+    .stat:first-child { border-radius: var(--radius) 0 0 var(--radius); }
+    .stat:last-child  { border-radius: 0 var(--radius) var(--radius) 0; }
+    .stat + .stat { border-left: none; }
+    .stat__num {
+      font-family: 'Syne', sans-serif;
+      font-size: 1.55rem; font-weight: 800;
+      color: var(--ink); line-height: 1; margin-bottom: 4px;
+    }
+    .stat__num--amber { color: var(--amber); }
+    .stat__num--green { color: var(--green); }
+    .stat__label { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600; }
+
+    /* ── Staff section ────────────────────────────────── */
+    .staff-section {
+      flex: 1; max-width: 760px; margin: 28px auto 0;
+      width: 100%; padding: 0 32px 48px;
+      animation: fade-up 0.6s ease 0.3s both;
+    }
+
+    .section-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .section-label {
+      font-size: 0.7rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 1.2px; color: var(--muted);
+    }
+    .section-count {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.75rem; color: var(--muted);
+    }
+
+    /* ── Staff cards ──────────────────────────────────── */
+    .staff-grid {
+      display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;
+    }
+    @media (min-width: 480px) { .staff-grid { grid-template-columns: repeat(3, 1fr); } }
+    @media (min-width: 640px) { .staff-grid { grid-template-columns: repeat(4, 1fr); } }
+
+    .staff-card {
+      position: relative;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 22px 14px 18px;
+      text-align: center; cursor: pointer; overflow: hidden;
+      user-select: none;
+      opacity: 0;
+      animation: card-in 0.4s ease forwards;
+      transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+    }
+    @keyframes card-in {
+      from { opacity: 0; transform: translateY(12px) scale(0.97); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .staff-card::after {
+      content: '';
+      position: absolute; inset: 0;
+      background: linear-gradient(135deg, rgba(232,134,10,0.06), transparent 60%);
+      opacity: 0; transition: opacity 0.2s;
+    }
+    .staff-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); border-color: rgba(232,134,10,0.5); }
+    .staff-card:hover::after { opacity: 1; }
+    .staff-card:active { transform: translateY(-1px) scale(0.98); }
+
+    /* progress bar at top */
+    .staff-card__bar {
+      position: absolute; top: 0; left: 0; right: 0; height: 3px;
+      background: var(--border); border-radius: var(--radius) var(--radius) 0 0;
+      overflow: hidden;
+    }
+    .staff-card__bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--amber), #f5a83a);
+      transition: width 0.6s ease;
+    }
+    .staff-card__bar-fill--done { background: linear-gradient(90deg, var(--green), #2ec47a); }
+
+    .staff-card__avatar {
+      width: 58px; height: 58px; border-radius: 50%;
+      margin: 0 auto 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Syne', sans-serif;
+      font-size: 1.3rem; font-weight: 800; color: white;
+    }
+
+    .staff-card__name {
+      font-weight: 600; font-size: 0.88rem;
+      color: var(--ink); line-height: 1.3; margin-bottom: 8px;
+    }
+
+    .staff-card__status {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 0.68rem; font-weight: 600;
+      font-family: 'IBM Plex Mono', monospace;
+      padding: 3px 9px; border-radius: 99px;
+    }
+    .status-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+    .staff-card__status--pending { background: var(--amber-lt); color: var(--amber-dk); }
+    .staff-card__status--done    { background: var(--green-lt);  color: var(--green); }
+    .staff-card__status--none    { background: #f0f0f0; color: var(--muted); }
+
+    /* Skeleton */
+    .skeleton {
+      background: linear-gradient(90deg, #ebebeb 25%, #f5f5f5 50%, #ebebeb 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+      border-radius: var(--radius); height: 148px;
+    }
+    @keyframes shimmer {
+      0%   { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    /* Empty */
+    .empty {
+      grid-column: 1/-1; text-align: center; padding: 52px 20px;
+    }
+    .empty__icon { font-size: 2.5rem; margin-bottom: 14px; opacity: 0.35; }
+    .empty__title {
+      font-family: 'Syne', sans-serif; font-size: 1rem;
+      font-weight: 700; color: var(--ink2); margin-bottom: 6px;
+    }
+    .empty__sub { font-size: 0.85rem; color: var(--muted); }
+
+    /* ── Footer ───────────────────────────────────────── */
+    .footer {
+      border-top: 1px solid var(--border); padding: 18px 32px;
+      max-width: 760px; margin: 0 auto; width: 100%;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .footer-link {
+      display: inline-flex; align-items: center; gap: 6px;
+      color: var(--muted); font-size: 0.8rem; font-weight: 500;
+      text-decoration: none; transition: color 0.15s;
+    }
+    .footer-link:hover { color: var(--ink); }
+
+    /* Toast */
+    .toast {
+      position: fixed; bottom: 28px; left: 50%;
+      transform: translateX(-50%) translateY(60px);
+      background: var(--ink); color: #fff;
+      padding: 12px 24px; border-radius: 99px;
+      font-size: 0.88rem; font-weight: 500;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+      transition: transform 0.25s ease; z-index: 9999;
+      pointer-events: none;
+    }
+    .toast--show { transform: translateX(-50%) translateY(0); }
+  </style>
+</head>
+<body>
+<div class="bg-grid"></div>
+<div class="bg-glow"></div>
+
+<div class="page">
+
+  <header class="header">
+    <div class="logo">
+      <div class="logo__mark">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 22V6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16"/>
+          <path d="M3 11h12"/>
+          <path d="M15 6h1a2 2 0 0 1 2 2v3.5a1.5 1.5 0 0 0 3 0V8l-3-3"/>
+          <path d="M3 22h12"/>
+        </svg>
+      </div>
+      <div class="logo__text">Petron<span>Tasks</span></div>
+    </div>
+    <div class="header-right">
+      <div class="date-pill" id="dateLabel">—</div>
+      <div class="clock-pill" id="clock">--:--</div>
+    </div>
+  </header>
+
+  <div class="hero">
+    <div class="hero__eyebrow">
+      <div class="pulse-dot"></div>
+      Shift in progress
+    </div>
+    <h1 class="hero__title">Who's completing<br>tasks <em>today?</em></h1>
+    <p class="hero__sub">Select your name to view and complete your assigned tasks for this shift.</p>
+  </div>
+
+  <div class="stats-strip">
+    <div class="stat">
+      <div class="stat__num" id="statStaff">–</div>
+      <div class="stat__label">On shift</div>
+    </div>
+    <div class="stat">
+      <div class="stat__num stat__num--amber" id="statPending">–</div>
+      <div class="stat__label">Pending</div>
+    </div>
+    <div class="stat">
+      <div class="stat__num stat__num--green" id="statDone">–</div>
+      <div class="stat__label">Completed</div>
+    </div>
+  </div>
+
+  <div class="staff-section">
+    <div class="section-header">
+      <div class="section-label">Staff on shift today</div>
+      <div class="section-count" id="staffCount">Loading…</div>
+    </div>
+    <div class="staff-grid" id="staffGrid">
+      <div class="skeleton"></div>
+      <div class="skeleton"></div>
+      <div class="skeleton"></div>
+      <div class="skeleton"></div>
+    </div>
+  </div>
+
+  <footer class="footer">
+    <a href="lead.html" class="footer-link">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="8" r="4"/><path d="M6 20v-2a6 6 0 0 1 12 0v2"/>
+      </svg>
+      Team Lead Login
+    </a>
+    <a href="dashboard.html" class="footer-link">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+        <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+      </svg>
+      Live Dashboard
+    </a>
+  </footer>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+  const AVATAR_COLORS = [
+    ['#e8860a','#b56500'],['#1a9e5c','#0d7a43'],['#2563eb','#1d4ed8'],
+    ['#9333ea','#7e22ce'],['#e11d48','#be123c'],['#0891b2','#0e7490'],
+    ['#65a30d','#4d7c0f'],['#ea580c','#c2410c'],
+  ];
+  function avatarColors(name) {
+    let h = 0;
+    for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffffffff;
+    return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
+  }
+
+  function updateClock() {
+    const now = new Date();
+    document.getElementById('clock').textContent =
+      now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    document.getElementById('dateLabel').textContent =
+      now.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+  }
+  updateClock();
+  setInterval(updateClock, 1000);
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="app.js"></script>
+<script>
+  async function loadStaff() {
+    const grid = document.getElementById('staffGrid');
+
+    const { data: assignments, error } = await db
+      .from('daily_assignments')
+      .select(`id, staff_id, users(id, name), completions(id)`)
+      .eq('date', today());
+
+    if (error) {
+      grid.innerHTML = `<div class="empty"><div class="empty__icon">⚠️</div><div class="empty__title">Connection error</div><div class="empty__sub">Could not load staff. Check your connection.</div></div>`;
+      return;
+    }
+
+    const staffMap = {};
+    for (const a of (assignments || [])) {
+      if (!a.users) continue;
+      const sid = a.users.id;
+      if (!staffMap[sid]) staffMap[sid] = { id: sid, name: a.users.name, total: 0, done: 0 };
+      staffMap[sid].total++;
+      if (a.completions && a.completions.length > 0) staffMap[sid].done++;
+    }
+
+    const staff = Object.values(staffMap).sort((a, b) => a.name.localeCompare(b.name));
+
+    const totalDone    = staff.reduce((s, x) => s + x.done, 0);
+    const totalPending = staff.reduce((s, x) => s + (x.total - x.done), 0);
+    document.getElementById('statStaff').textContent   = staff.length || '0';
+    document.getElementById('statPending').textContent = totalPending;
+    document.getElementById('statDone').textContent    = totalDone;
+    document.getElementById('staffCount').textContent  =
+      staff.length ? `${staff.length} member${staff.length > 1 ? 's' : ''}` : '';
+
+    if (staff.length === 0) {
+      grid.innerHTML = `<div class="empty"><div class="empty__icon">📋</div><div class="empty__title">No tasks assigned yet</div><div class="empty__sub">Ask your Team Lead to set up today's tasks.</div></div>`;
+      return;
+    }
+
+    grid.innerHTML = staff.map((s, i) => {
+      const pct     = s.total ? Math.round((s.done / s.total) * 100) : 0;
+      const allDone = s.done === s.total && s.total > 0;
+      const [c1, c2] = avatarColors(s.name);
+      const initials  = s.name.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
+
+      const statusHtml = s.total === 0
+        ? `<span class="staff-card__status staff-card__status--none">No tasks</span>`
+        : allDone
+          ? `<span class="staff-card__status staff-card__status--done"><span class="status-dot"></span>${s.done}/${s.total} done</span>`
+          : `<span class="staff-card__status staff-card__status--pending"><span class="status-dot"></span>${s.done}/${s.total} done</span>`;
+
+      return `
+        <div class="staff-card" style="animation-delay:${i * 0.06}s"
+             onclick="go('${s.id}','${s.name.replace(/'/g,"\\'")}')">
+          <div class="staff-card__bar">
+            <div class="staff-card__bar-fill ${allDone ? 'staff-card__bar-fill--done' : ''}" style="width:${pct}%"></div>
+          </div>
+          <div class="staff-card__avatar" style="background:linear-gradient(135deg,${c1},${c2})">${initials}</div>
+          <div class="staff-card__name">${s.name}</div>
+          ${statusHtml}
+        </div>`;
+    }).join('');
+  }
+
+  function go(id, name) {
+    sessionStorage.setItem('staff_id', id);
+    sessionStorage.setItem('staff_name', name);
+    window.location.href = 'pin.html';
+  }
+
+  loadStaff();
+</script>
+</body>
+</html>

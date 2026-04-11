@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Enter PIN – Petron Tasks</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .pin-screen {
+      display: flex; flex-direction: column; align-items: center;
+      padding-top: 40px;
+    }
+    .pin-avatar {
+      width: 72px; height: 72px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.8rem; font-weight: 700; color: white;
+      margin-bottom: 14px;
+    }
+    .pin-name {
+      font-size: 1.2rem; font-weight: 700; margin-bottom: 4px;
+    }
+    .pin-hint {
+      color: var(--muted); font-size: 0.88rem; margin-bottom: 8px;
+    }
+    .pin-error {
+      color: var(--danger); font-size: 0.88rem; min-height: 20px;
+      margin-bottom: 6px; font-weight: 500;
+    }
+    .pin-grid { width: 100%; }
+  </style>
+</head>
+<body>
+<div class="page">
+  <div class="topbar">
+    <a href="index.html" class="btn btn--ghost btn--sm">← Back</a>
+    <div class="topbar__logo">Petron<span> Tasks</span></div>
+    <div style="width:60px"></div>
+  </div>
+
+  <div class="content">
+    <div class="pin-screen">
+      <div class="pin-avatar" id="avatar">?</div>
+      <div class="pin-name" id="staffName">Loading...</div>
+      <div class="pin-hint">Enter your 4-digit PIN</div>
+      <div class="pin-error" id="pinError"></div>
+
+      <div class="pin-display" id="pinDisplay">
+        <div class="pin-dot" id="dot0"></div>
+        <div class="pin-dot" id="dot1"></div>
+        <div class="pin-dot" id="dot2"></div>
+        <div class="pin-dot" id="dot3"></div>
+      </div>
+
+      <div class="pin-grid">
+        <div class="pin-grid" style="max-width:300px;margin:0 auto;">
+          <div class="pin-key" onclick="pressKey('1')">1</div>
+          <div class="pin-key" onclick="pressKey('2')">2</div>
+          <div class="pin-key" onclick="pressKey('3')">3</div>
+          <div class="pin-key" onclick="pressKey('4')">4</div>
+          <div class="pin-key" onclick="pressKey('5')">5</div>
+          <div class="pin-key" onclick="pressKey('6')">6</div>
+          <div class="pin-key" onclick="pressKey('7')">7</div>
+          <div class="pin-key" onclick="pressKey('8')">8</div>
+          <div class="pin-key" onclick="pressKey('9')">9</div>
+          <div class="pin-key pin-key--clear" onclick="clearPin()">✕</div>
+          <div class="pin-key" onclick="pressKey('0')">0</div>
+          <div class="pin-key" onclick="backspace()">⌫</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="app.js"></script>
+<script>
+  let pin = '';
+  const staffId   = sessionStorage.getItem('staff_id');
+  const staffName = sessionStorage.getItem('staff_name');
+
+  if (!staffId) window.location.href = 'index.html';
+
+  document.getElementById('staffName').textContent = staffName || '';
+  document.getElementById('avatar').textContent = (staffName || '?').charAt(0).toUpperCase();
+
+  function updateDots() {
+    for (let i = 0; i < 4; i++) {
+      document.getElementById('dot' + i).classList.toggle('pin-dot--filled', i < pin.length);
+    }
+  }
+
+  function pressKey(k) {
+    if (pin.length >= 4) return;
+    document.getElementById('pinError').textContent = '';
+    pin += k;
+    updateDots();
+    if (pin.length === 4) setTimeout(verifyPin, 150);
+  }
+
+  function backspace() {
+    pin = pin.slice(0, -1);
+    updateDots();
+  }
+
+  function clearPin() {
+    pin = '';
+    updateDots();
+  }
+
+  async function verifyPin() {
+    const { data, error } = await db
+      .from('users')
+      .select('id, pin_hash')
+      .eq('id', staffId)
+      .single();
+
+    if (error || !data) {
+      showError('Could not verify. Try again.');
+      return;
+    }
+
+    // Simple PIN check (stored as plain 4-digit for prototype; hash in production)
+    if (data.pin_hash === pin) {
+      window.location.href = 'tasks.html';
+    } else {
+      showError('Incorrect PIN. Try again.');
+      pin = '';
+      updateDots();
+    }
+  }
+
+  function showError(msg) {
+    document.getElementById('pinError').textContent = msg;
+    // Shake animation
+    const display = document.getElementById('pinDisplay');
+    display.style.animation = 'none';
+    display.offsetHeight;
+    display.style.animation = 'shake 0.3s ease';
+  }
+</script>
+<style>
+  @keyframes shake {
+    0%,100% { transform: translateX(0); }
+    20%      { transform: translateX(-8px); }
+    40%      { transform: translateX(8px); }
+    60%      { transform: translateX(-6px); }
+    80%      { transform: translateX(6px); }
+  }
+</style>
+</body>
+</html>
