@@ -5,6 +5,27 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>My Tasks – Petron Tasks</title>
   <link rel="stylesheet" href="style.css">
+  <style>
+    .flag-alert {
+      background: rgba(239,68,68,0.08);
+      border: 1px solid rgba(239,68,68,0.35);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      margin-bottom: 10px;
+      animation: alert-in 0.3s ease;
+    }
+    @keyframes alert-in {
+      from { opacity: 0; transform: translateY(-6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .flag-alert__header { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+    .flag-icon { width: 28px; height: 28px; border-radius: 50%; background: rgba(239,68,68,0.15); display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 0.9rem; }
+    .flag-alert__title { font-weight: 700; font-size: 0.92rem; color: var(--danger); flex: 1; }
+    .flag-alert__reason { font-size: 0.84rem; color: var(--text); background: rgba(239,68,68,0.05); border-radius: var(--radius-sm); padding: 8px 10px; margin-bottom: 10px; border-left: 2px solid var(--danger); }
+    .flag-alert__task { font-size: 0.78rem; color: var(--muted); margin-bottom: 10px; }
+    .task-item--flagged { border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.04); }
+    .task-item--flagged .task-item__name { color: var(--danger); }
+  </style>
 </head>
 <body>
 <div class="page">
@@ -20,7 +41,8 @@
       <div class="text-muted text-sm" id="dateLabel"></div>
     </div>
 
-    <!-- Progress -->
+    <div id="flagAlerts"></div>
+
     <div class="card" style="margin-bottom:20px">
       <div class="flex flex--between" style="margin-bottom:8px">
         <span class="text-sm" style="font-weight:600">Today's Progress</span>
@@ -36,19 +58,16 @@
   </div>
 </div>
 
-<!-- Photo Modal -->
 <div class="modal-overlay" id="photoModal">
   <div class="modal">
     <div class="modal__title" id="photoModalTitle">Upload Photo</div>
     <p class="text-sm text-muted" style="margin-bottom:16px">This task requires a photo to be completed.</p>
-
     <div class="photo-zone" id="photoZone" onclick="document.getElementById('photoInput').click()">
       <div class="photo-zone__icon">📷</div>
       <div class="photo-zone__label">Tap to take a photo or choose from gallery</div>
     </div>
     <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none">
     <img id="photoPreview" class="photo-preview" alt="Preview">
-
     <div class="modal__actions">
       <button class="btn btn--ghost" onclick="closePhotoModal()">Cancel</button>
       <button class="btn btn--success" id="confirmPhotoBtn" onclick="confirmPhoto()" disabled>Mark Complete</button>
@@ -85,29 +104,61 @@
       .select(`
         id, is_adhoc, custom_task_name,
         task_templates(name, description, photo_required),
-        completions(id, completed_at)
+        completions(id, completed_at, signoff_status,
+          sign_offs(notes, signed_at)
+        )
       `)
       .eq('date', today())
       .eq('staff_id', staffId);
 
-    if (error) { document.getElementById('taskList').innerHTML = '<div class="empty-state">Error loading tasks.</div>'; return; }
+    if (error) {
+      document.getElementById('taskList').innerHTML = '<div class="empty-state">Error loading tasks.</div>';
+      return;
+    }
 
-    tasks = (data || []).map(a => ({
-      id: a.id,
-      name: a.is_adhoc ? a.custom_task_name : (a.task_templates?.name || 'Unnamed Task'),
-      description: a.task_templates?.description || '',
-      photo_required: a.task_templates?.photo_required || false,
-      is_adhoc: a.is_adhoc,
-      done: a.completions && a.completions.length > 0,
-      completed_at: a.completions?.[0]?.completed_at || null,
-    }));
+    tasks = (data || []).map(a => {
+      const completion = a.completions?.[0] || null;
+      const signoff    = completion?.sign_offs?.[0] || null;
+      return {
+        id: a.id,
+        name: a.is_adhoc ? a.custom_task_name : (a.task_templates?.name || 'Unnamed Task'),
+        description: a.task_templates?.description || '',
+        photo_required: a.task_templates?.photo_required || false,
+        is_adhoc: a.is_adhoc,
+        done: !!completion,
+        completed_at: completion?.completed_at || null,
+        signoff_status: completion?.signoff_status || null,
+        flag_reason: signoff?.notes || null,
+        completion_id: completion?.id || null,
+      };
+    });
 
+    renderFlagAlerts();
     renderTasks();
+  }
+
+  function renderFlagAlerts() {
+    const flagged = tasks.filter(t => t.signoff_status === 'flagged');
+    const container = document.getElementById('flagAlerts');
+    if (flagged.length === 0) { container.innerHTML = ''; return; }
+    container.innerHTML = flagged.map(t => `
+      <div class="flag-alert">
+        <div class="flag-alert__header">
+          <div class="flag-icon">⚠️</div>
+          <div class="flag-alert__title">Task flagged by supervisor</div>
+        </div>
+        <div class="flag-alert__task">${t.name}</div>
+        ${t.flag_reason
+          ? `<div class="flag-alert__reason">"${t.flag_reason}"</div>`
+          : '<div class="flag-alert__reason">No reason provided — check with your supervisor.</div>'}
+        <button class="btn btn--danger btn--sm btn--full" onclick="redoTask('${t.id}')">Redo this task</button>
+      </div>
+    `).join('');
   }
 
   function renderTasks() {
     const list = document.getElementById('taskList');
-    const done = tasks.filter(t => t.done).length;
+    const done  = tasks.filter(t => t.done && t.signoff_status !== 'flagged').length;
     const total = tasks.length;
 
     document.getElementById('progressLabel').textContent = `${done} / ${total}`;
@@ -118,29 +169,63 @@
       return;
     }
 
-    list.innerHTML = tasks.map(t => `
-      <div class="task-item ${t.done ? 'task-item--done' : ''}">
-        <div class="task-check ${t.done ? 'task-check--done' : ''}" onclick="${t.done ? '' : `completeTask('${t.id}')`}" style="${t.done ? 'cursor:default' : ''}">
-          ${t.done ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
-        </div>
-        <div class="task-item__body">
-          <div class="task-item__name">${t.name}</div>
-          <div class="task-item__meta">
-            ${t.description ? `<span>${t.description}</span>` : ''}
-            ${t.photo_required ? '<span class="badge badge--photo">📷 Photo needed</span>' : ''}
-            ${t.is_adhoc ? '<span class="badge badge--adhoc">Ad-hoc</span>' : ''}
-            ${t.done ? `<span class="badge badge--done">✓ Done at ${formatTime(t.completed_at)}</span>` : '<span class="badge badge--pending">Pending</span>'}
+    list.innerHTML = tasks.map(t => {
+      const isFlagged  = t.signoff_status === 'flagged';
+      const isApproved = t.signoff_status === 'approved';
+      const canComplete = !t.done || isFlagged;
+
+      const statusBadge = isFlagged
+        ? '<span class="badge" style="background:rgba(239,68,68,0.1);color:var(--danger)">⚠ Flagged — redo required</span>'
+        : isApproved
+          ? '<span class="badge badge--done">✓ Approved</span>'
+          : t.done
+            ? `<span class="badge badge--done">✓ Done at ${formatTime(t.completed_at)}</span>`
+            : '<span class="badge badge--pending">Pending</span>';
+
+      return `
+        <div class="task-item ${t.done && !isFlagged ? 'task-item--done' : ''} ${isFlagged ? 'task-item--flagged' : ''}">
+          <div class="task-check ${t.done && !isFlagged ? 'task-check--done' : ''}"
+               onclick="${canComplete ? `completeTask('${t.id}')` : ''}"
+               style="${!canComplete ? 'cursor:default' : ''}">
+            ${t.done && !isFlagged
+              ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>'
+              : isFlagged ? '<span style="color:var(--danger);font-size:0.8rem">↺</span>' : ''}
+          </div>
+          <div class="task-item__body">
+            <div class="task-item__name">${t.name}</div>
+            <div class="task-item__meta">
+              ${t.description ? `<span>${t.description}</span>` : ''}
+              ${t.photo_required ? '<span class="badge badge--photo">📷 Photo needed</span>' : ''}
+              ${t.is_adhoc ? '<span class="badge badge--adhoc">Ad-hoc</span>' : ''}
+              ${statusBadge}
+            </div>
           </div>
         </div>
-      </div>
-    `).join('');
+      `;
+    }).join('');
+  }
+
+  async function redoTask(assignmentId) {
+    const task = tasks.find(t => t.id === assignmentId);
+    if (!task) return;
+    if (task.completion_id) {
+      await db.from('completions').delete().eq('id', task.completion_id);
+    }
+    task.done = false;
+    task.signoff_status = null;
+    task.flag_reason = null;
+    task.completion_id = null;
+    task.completed_at = null;
+    renderFlagAlerts();
+    renderTasks();
+    showToast('Task reset — please complete it again.');
   }
 
   function completeTask(assignmentId) {
     const task = tasks.find(t => t.id === assignmentId);
-    if (!task || task.done) return;
+    if (!task) return;
+    if (task.done && task.signoff_status !== 'flagged') return;
     currentAssignmentId = assignmentId;
-
     if (task.photo_required) {
       document.getElementById('photoModalTitle').textContent = `📷 ${task.name}`;
       document.getElementById('photoModal').classList.add('modal-overlay--open');
@@ -159,25 +244,20 @@
       completed_at: new Date().toISOString(),
       photo_url: photoUrl || null,
     });
-
     if (error) { showToast('Error saving. Try again.', 'error'); return; }
-
     const task = tasks.find(t => t.id === assignmentId);
-    if (task) { task.done = true; task.completed_at = new Date().toISOString(); }
-
+    if (task) { task.done = true; task.completed_at = new Date().toISOString(); task.signoff_status = 'pending'; }
     closePhotoModal();
+    renderFlagAlerts();
     renderTasks();
     showToast('Task marked complete!');
-
-    // Auto-return if all done
-    const allDone = tasks.every(t => t.done);
+    const allDone = tasks.every(t => t.done && t.signoff_status !== 'flagged');
     if (allDone) {
       showToast('All tasks complete! Great work 🎉');
       setTimeout(() => window.location.href = 'index.html', 2500);
     }
   }
 
-  // Photo handling
   document.getElementById('photoInput').addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -196,13 +276,10 @@
     if (!selectedFile || !currentAssignmentId) return;
     const btn = document.getElementById('confirmPhotoBtn');
     setLoading(btn, true);
-
     const ext = selectedFile.name.split('.').pop();
     const path = `completions/${currentAssignmentId}_${Date.now()}.${ext}`;
-
     const { error: uploadError } = await db.storage.from('task-photos').upload(path, selectedFile);
     if (uploadError) { showToast('Photo upload failed.', 'error'); setLoading(btn, false); return; }
-
     const { data: urlData } = db.storage.from('task-photos').getPublicUrl(path);
     await markComplete(currentAssignmentId, urlData?.publicUrl || path);
     setLoading(btn, false);
