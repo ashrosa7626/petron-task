@@ -12,12 +12,41 @@
     .staff-row__name { font-weight: 700; flex: 1; }
     .staff-row__tasks { display: none; border-top: 1px solid var(--border); margin-top: 10px; padding-top: 10px; }
     .staff-row__tasks--open { display: block; }
+
     .mini-task { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
     .mini-task:last-child { border-bottom: none; }
     .mini-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--border); flex-shrink: 0; }
-    .mini-dot--done { background: var(--success); }
-    .refresh-btn { position: fixed; bottom: 24px; right: 24px; width: 52px; height: 52px; border-radius: 50%; background: var(--accent); border: none; color: white; font-size: 1.3rem; cursor: pointer; box-shadow: var(--shadow); transition: transform 0.2s; }
+    .mini-dot--done     { background: var(--success); }
+    .mini-dot--approved { background: var(--success); box-shadow: 0 0 0 2px rgba(34,197,94,0.25); }
+    .mini-dot--flagged  { background: var(--danger); }
+
+    .signoff-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 0.68rem; font-weight: 600; padding: 2px 8px;
+      border-radius: 99px; font-family: var(--mono);
+    }
+    .signoff-badge--approved { background: rgba(34,197,94,0.12); color: var(--success); }
+    .signoff-badge--flagged  { background: rgba(239,68,68,0.12);  color: var(--danger); }
+    .signoff-badge--pending  { background: rgba(79,138,255,0.10); color: var(--muted); }
+
+    .refresh-btn { position: fixed; bottom: 90px; right: 24px; width: 52px; height: 52px; border-radius: 50%; background: var(--accent); border: none; color: white; font-size: 1.3rem; cursor: pointer; box-shadow: var(--shadow); transition: transform 0.2s; }
     .refresh-btn:hover { transform: rotate(30deg); }
+
+    .supervisor-btn { position: fixed; bottom: 24px; right: 24px; display: flex; align-items: center; gap: 8px; padding: 13px 20px; border-radius: 99px; background: var(--accent2); border: none; color: white; font-family: var(--font); font-size: 0.9rem; font-weight: 600; cursor: pointer; box-shadow: var(--shadow); text-decoration: none; }
+    .supervisor-btn:hover { background: #9d7dff; }
+
+    .signoff-summary {
+      display: flex; gap: 8px; margin-bottom: 24px;
+    }
+    .signoff-pill {
+      flex: 1; background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 12px 10px; text-align: center;
+    }
+    .signoff-pill__num { font-size: 1.4rem; font-weight: 700; font-family: var(--mono); }
+    .signoff-pill__label { font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+    .signoff-pill--approved .signoff-pill__num { color: var(--success); }
+    .signoff-pill--flagged  .signoff-pill__num { color: var(--danger); }
+    .signoff-pill--pending  .signoff-pill__num { color: var(--accent); }
   </style>
 </head>
 <body>
@@ -34,7 +63,7 @@
       <div class="text-muted text-sm" id="dateLabel"></div>
     </div>
 
-    <!-- Stats -->
+    <!-- Task completion stats -->
     <div class="stats-row">
       <div class="stat-card stat-card--green">
         <div class="stat-card__num" id="statDone">–</div>
@@ -60,12 +89,31 @@
       </div>
     </div>
 
+    <!-- Sign-off summary -->
+    <div class="section-title">Supervisor Sign-Off Status</div>
+    <div class="signoff-summary">
+      <div class="signoff-pill signoff-pill--approved">
+        <div class="signoff-pill__num" id="soApproved">–</div>
+        <div class="signoff-pill__label">Approved</div>
+      </div>
+      <div class="signoff-pill signoff-pill--flagged">
+        <div class="signoff-pill__num" id="soFlagged">–</div>
+        <div class="signoff-pill__label">Flagged</div>
+      </div>
+      <div class="signoff-pill signoff-pill--pending">
+        <div class="signoff-pill__num" id="soPending">–</div>
+        <div class="signoff-pill__label">Awaiting review</div>
+      </div>
+    </div>
+
     <div class="section-title">Staff Progress</div>
     <div id="staffRows"><div class="empty-state">Loading...</div></div>
   </div>
 </div>
 
 <button class="refresh-btn" onclick="loadDashboard()" title="Refresh">↻</button>
+<a href="supervisor.html" class="supervisor-btn">Sign-Off Review</a>
+
 <div id="toast" class="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -79,8 +127,6 @@
       new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
   updateClock(); setInterval(updateClock, 1000);
-
-  // Auto-refresh every 30 seconds
   setInterval(loadDashboard, 30000);
 
   async function loadDashboard() {
@@ -89,27 +135,43 @@
       .select(`
         id, is_adhoc, custom_task_name, staff_id,
         task_templates(name, photo_required),
-        completions(id, completed_at, photo_url),
+        completions(id, completed_at, photo_url, signoff_status),
         users(id, name)
       `)
       .eq('date', today());
 
-    if (error || !assignments) { return; }
+    if (error || !assignments) return;
 
     // Group by staff
     const byStaff = {};
+    let soApproved = 0, soFlagged = 0, soPending = 0;
+
     for (const a of assignments) {
       const sid = a.staff_id;
       if (!byStaff[sid]) byStaff[sid] = { name: a.users?.name || 'Unknown', tasks: [] };
+      const completion = a.completions?.[0] || null;
+      const signoffStatus = completion?.signoff_status || null;
+
+      if (completion) {
+        if (signoffStatus === 'approved') soApproved++;
+        else if (signoffStatus === 'flagged') soFlagged++;
+        else soPending++;
+      }
+
       byStaff[sid].tasks.push({
         name: a.is_adhoc ? a.custom_task_name : (a.task_templates?.name || 'Task'),
-        photo_required: a.task_templates?.photo_required || a.is_adhoc_photo || false,
-        done: a.completions && a.completions.length > 0,
-        completed_at: a.completions?.[0]?.completed_at,
-        photo_url: a.completions?.[0]?.photo_url,
+        photo_required: a.task_templates?.photo_required || false,
+        done: !!completion,
+        completed_at: completion?.completed_at,
+        photo_url: completion?.photo_url,
+        signoff_status: signoffStatus,
         is_adhoc: a.is_adhoc,
       });
     }
+
+    document.getElementById('soApproved').textContent = soApproved;
+    document.getElementById('soFlagged').textContent  = soFlagged;
+    document.getElementById('soPending').textContent  = soPending;
 
     let totalDone = 0, totalAll = 0;
     const container = document.getElementById('staffRows');
@@ -126,14 +188,32 @@
       totalDone += done; totalAll += total;
       const pct = total ? Math.round((done/total)*100) : 0;
 
-      const taskRows = data.tasks.map(t => `
-        <div class="mini-task">
-          <div class="mini-dot ${t.done ? 'mini-dot--done' : ''}"></div>
-          <div style="flex:1;font-size:0.88rem">${t.name}${t.is_adhoc ? ' <span class="badge badge--adhoc" style="font-size:0.7rem">Ad-hoc</span>' : ''}</div>
-          ${t.done ? `<span class="text-sm text-muted">${formatTime(t.completed_at)}</span>` : '<span class="badge badge--pending" style="font-size:0.72rem">Pending</span>'}
-          ${t.photo_url ? `<a href="${t.photo_url}" target="_blank" class="btn btn--ghost btn--sm" style="padding:4px 8px">📷</a>` : ''}
-        </div>
-      `).join('');
+      const taskRows = data.tasks.map(t => {
+        let dotClass = 'mini-dot';
+        if (t.done) {
+          if (t.signoff_status === 'approved') dotClass = 'mini-dot mini-dot--approved';
+          else if (t.signoff_status === 'flagged') dotClass = 'mini-dot mini-dot--flagged';
+          else dotClass = 'mini-dot mini-dot--done';
+        }
+
+        const signoffBadge = t.done
+          ? t.signoff_status === 'approved'
+            ? '<span class="signoff-badge signoff-badge--approved">Approved</span>'
+            : t.signoff_status === 'flagged'
+              ? '<span class="signoff-badge signoff-badge--flagged">Flagged</span>'
+              : '<span class="signoff-badge signoff-badge--pending">Awaiting sign-off</span>'
+          : '';
+
+        return `
+          <div class="mini-task">
+            <div class="${dotClass}"></div>
+            <div style="flex:1;font-size:0.88rem">${t.name}${t.is_adhoc ? ' <span class="badge badge--adhoc" style="font-size:0.7rem">Ad-hoc</span>' : ''}</div>
+            ${t.done ? `<span class="text-sm text-muted">${formatTime(t.completed_at)}</span>` : '<span class="badge badge--pending" style="font-size:0.72rem">Pending</span>'}
+            ${signoffBadge}
+            ${t.photo_url ? `<a href="${t.photo_url}" target="_blank" class="btn btn--ghost btn--sm" style="padding:4px 8px;font-size:0.75rem">Photo</a>` : ''}
+          </div>
+        `;
+      }).join('');
 
       return `
         <div class="staff-row">

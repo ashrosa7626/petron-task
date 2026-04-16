@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign-Off – Petron Tasks</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .filter-bar {
+      display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px;
+    }
+    .filter-btn {
+      padding: 7px 14px; border-radius: 99px; border: 1px solid var(--border);
+      background: var(--surface); color: var(--muted);
+      font-family: var(--font); font-size: 0.8rem; font-weight: 600;
+      cursor: pointer; transition: all 0.15s;
+    }
+    .filter-btn--active { background: var(--accent); color: white; border-color: var(--accent); }
+
+    .completion-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 18px; margin-bottom: 12px;
+      transition: border-color 0.15s;
+    }
+    .completion-card--approved { border-left: 3px solid var(--success); }
+    .completion-card--flagged  { border-left: 3px solid var(--danger); }
+    .completion-card--pending  { border-left: 3px solid var(--border); }
+
+    .completion-header {
+      display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px;
+    }
+    .completion-avatar {
+      width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; color: white; font-size: 0.9rem;
+    }
+    .completion-meta { flex: 1; min-width: 0; }
+    .completion-task { font-weight: 700; font-size: 0.97rem; margin-bottom: 3px; }
+    .completion-info { font-size: 0.8rem; color: var(--muted); display: flex; gap: 10px; flex-wrap: wrap; }
+
+    .photo-thumb {
+      width: 100%; max-height: 220px; object-fit: cover;
+      border-radius: var(--radius-sm); margin-bottom: 12px;
+      cursor: pointer; transition: opacity 0.15s;
+      display: block;
+    }
+    .photo-thumb:hover { opacity: 0.85; }
+
+    .signoff-actions {
+      display: flex; gap: 8px;
+    }
+    .signoff-actions .btn { flex: 1; }
+
+    .flag-notes {
+      width: 100%; margin-top: 10px; padding: 10px 12px;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); color: var(--text);
+      font-family: var(--font); font-size: 0.88rem; resize: none;
+      outline: none; display: none;
+      transition: border-color 0.15s;
+    }
+    .flag-notes:focus { border-color: var(--danger); }
+    .flag-notes--show { display: block; }
+
+    .summary-bar {
+      display: flex; gap: 10px; margin-bottom: 20px;
+    }
+    .summary-pill {
+      flex: 1; background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 12px 10px; text-align: center;
+    }
+    .summary-pill__num {
+      font-size: 1.5rem; font-weight: 700; font-family: var(--mono); line-height: 1;
+    }
+    .summary-pill__label {
+      font-size: 0.68rem; color: var(--muted); text-transform: uppercase;
+      letter-spacing: 0.5px; margin-top: 3px;
+    }
+    .summary-pill--pending  .summary-pill__num { color: var(--accent); }
+    .summary-pill--approved .summary-pill__num { color: var(--success); }
+    .summary-pill--flagged  .summary-pill__num { color: var(--danger); }
+
+    .lightbox-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.88); z-index: 600;
+      align-items: center; justify-content: center;
+      padding: 20px; cursor: zoom-out;
+    }
+    .lightbox-overlay--open { display: flex; }
+    .lightbox-overlay img { max-width: 100%; max-height: 90vh; border-radius: var(--radius-sm); }
+  </style>
+</head>
+<body>
+<div class="page">
+  <div class="topbar">
+    <a href="lead.html" class="btn btn--ghost btn--sm">← Lead Panel</a>
+    <div class="topbar__logo">Petron<span> Sign-Off</span></div>
+    <div id="supNav" style="display:none;gap:12px;align-items:center" class="flex">
+      <span class="text-sm text-muted" id="supName"></span>
+      <button class="btn btn--ghost btn--sm" onclick="logout()">Logout</button>
+    </div>
+  </div>
+
+  <!-- LOGIN -->
+  <div class="content" id="loginView">
+    <div style="max-width:360px;margin:60px auto 0">
+      <div style="font-size:1.4rem;font-weight:700;margin-bottom:6px">Supervisor Login</div>
+      <div class="text-muted text-sm" style="margin-bottom:28px">Sign in to review and approve task completions.</div>
+      <div class="field"><label>Email</label><input type="email" id="email" placeholder="supervisor@petron.com"></div>
+      <div class="field"><label>Password</label><input type="password" id="password" placeholder="••••••••"></div>
+      <div style="color:var(--danger);font-size:0.85rem;min-height:20px;margin-bottom:12px" id="loginError"></div>
+      <button class="btn btn--primary btn--full" id="loginBtn" onclick="doLogin()">Login</button>
+    </div>
+  </div>
+
+  <!-- MAIN SIGN-OFF VIEW -->
+  <div class="content content--wide" id="mainView" style="display:none">
+    <div style="margin-bottom:20px">
+      <div style="font-size:1.3rem;font-weight:700">Task Sign-Off</div>
+      <div class="text-muted text-sm" id="dateLabel"></div>
+    </div>
+
+    <!-- Summary -->
+    <div class="summary-bar">
+      <div class="summary-pill summary-pill--pending">
+        <div class="summary-pill__num" id="cntPending">–</div>
+        <div class="summary-pill__label">Pending</div>
+      </div>
+      <div class="summary-pill summary-pill--approved">
+        <div class="summary-pill__num" id="cntApproved">–</div>
+        <div class="summary-pill__label">Approved</div>
+      </div>
+      <div class="summary-pill summary-pill--flagged">
+        <div class="summary-pill__num" id="cntFlagged">–</div>
+        <div class="summary-pill__label">Flagged</div>
+      </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="filter-bar">
+      <button class="filter-btn filter-btn--active" onclick="setFilter('all', this)">All</button>
+      <button class="filter-btn" onclick="setFilter('pending', this)">Pending</button>
+      <button class="filter-btn" onclick="setFilter('approved', this)">Approved</button>
+      <button class="filter-btn" onclick="setFilter('flagged', this)">Flagged</button>
+    </div>
+
+    <div class="section-title" style="margin-bottom:14px">Completions for today</div>
+    <div id="completionList"><div class="empty-state">Loading...</div></div>
+  </div>
+</div>
+
+<!-- Photo lightbox -->
+<div class="lightbox-overlay" id="lightbox" onclick="closeLightbox()">
+  <img id="lightboxImg" src="" alt="Task photo">
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="app.js"></script>
+<script>
+  let currentUser = null;
+  let currentSupervisorId = null;
+  let allCompletions = [];
+  let activeFilter = 'all';
+
+  document.getElementById('dateLabel').textContent =
+    new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+
+  // Check existing session
+  (async () => {
+    const { data: { session } } = await db.auth.getSession();
+    if (session) await enterSupervisorView(session.user);
+  })();
+
+  async function doLogin() {
+    const email = document.getElementById('email').value.trim();
+    const pass  = document.getElementById('password').value;
+    const btn   = document.getElementById('loginBtn');
+    document.getElementById('loginError').textContent = '';
+    setLoading(btn, true);
+
+    const { data, error } = await db.auth.signInWithPassword({ email, password: pass });
+    setLoading(btn, false);
+
+    if (error) { document.getElementById('loginError').textContent = error.message; return; }
+
+    // Check role — allow both supervisor and lead to access sign-off
+    const { data: user } = await db.from('users')
+      .select('id, name, role')
+      .eq('auth_id', data.user.id)
+      .single();
+
+    if (!user || !['supervisor', 'lead'].includes(user.role)) {
+      await db.auth.signOut();
+      document.getElementById('loginError').textContent = 'Access denied. Supervisor accounts only.';
+      return;
+    }
+
+    await enterSupervisorView(data.user, user);
+  }
+
+  async function enterSupervisorView(authUser, userData) {
+    currentUser = authUser;
+
+    // If userData not passed (session restore), fetch it
+    if (!userData) {
+      const { data } = await db.from('users')
+        .select('id, name, role')
+        .eq('auth_id', authUser.id)
+        .single();
+
+      if (!data || !['supervisor', 'lead'].includes(data.role)) {
+        await db.auth.signOut(); window.location.reload(); return;
+      }
+      userData = data;
+    }
+
+    currentSupervisorId = userData.id;
+    document.getElementById('supName').textContent = userData.name;
+    document.getElementById('loginView').style.display = 'none';
+    document.getElementById('mainView').style.display = '';
+    document.getElementById('supNav').style.display = 'flex';
+    await loadCompletions();
+  }
+
+  async function logout() {
+    await db.auth.signOut();
+    window.location.reload();
+  }
+
+  async function loadCompletions() {
+    const { data, error } = await db
+      .from('completions')
+      .select(`
+        id, completed_at, photo_url, notes, signoff_status,
+        daily_assignments(
+          id, is_adhoc, custom_task_name, shift, area,
+          task_templates(name, photo_required),
+          users(id, name)
+        ),
+        sign_offs(id, status, notes, signed_at, supervisor_id)
+      `)
+      .gte('completed_at', today() + 'T00:00:00')
+      .lte('completed_at', today() + 'T23:59:59')
+      .order('completed_at', { ascending: false });
+
+    if (error) {
+      document.getElementById('completionList').innerHTML =
+        '<div class="empty-state">Error loading completions.</div>';
+      return;
+    }
+
+    allCompletions = (data || []).map(c => {
+      const assign = c.daily_assignments;
+      const taskName = assign?.is_adhoc
+        ? assign.custom_task_name
+        : (assign?.task_templates?.name || 'Task');
+      const staffName = assign?.users?.name || 'Unknown';
+      const existingSignoff = c.sign_offs?.[0];
+      return {
+        id: c.id,
+        taskName,
+        staffName,
+        staffInitial: staffName.charAt(0).toUpperCase(),
+        completedAt: c.completed_at,
+        photoUrl: c.photo_url,
+        notes: c.notes,
+        shift: assign?.shift || 'any',
+        area: assign?.area || 'any',
+        status: c.signoff_status || 'pending',
+        signoffNotes: existingSignoff?.notes || '',
+      };
+    });
+
+    updateCounts();
+    renderCompletions();
+  }
+
+  function updateCounts() {
+    const pending  = allCompletions.filter(c => c.status === 'pending').length;
+    const approved = allCompletions.filter(c => c.status === 'approved').length;
+    const flagged  = allCompletions.filter(c => c.status === 'flagged').length;
+    document.getElementById('cntPending').textContent  = pending;
+    document.getElementById('cntApproved').textContent = approved;
+    document.getElementById('cntFlagged').textContent  = flagged;
+  }
+
+  function setFilter(f, btn) {
+    activeFilter = f;
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('filter-btn--active'));
+    btn.classList.add('filter-btn--active');
+    renderCompletions();
+  }
+
+  function renderCompletions() {
+    const list = document.getElementById('completionList');
+    const filtered = activeFilter === 'all'
+      ? allCompletions
+      : allCompletions.filter(c => c.status === activeFilter);
+
+    if (filtered.length === 0) {
+      list.innerHTML = `<div class="empty-state">No ${activeFilter === 'all' ? '' : activeFilter + ' '}completions yet.</div>`;
+      return;
+    }
+
+    list.innerHTML = filtered.map(c => {
+      const statusBadge = c.status === 'approved'
+        ? '<span class="badge badge--done">Approved</span>'
+        : c.status === 'flagged'
+          ? '<span class="badge" style="background:rgba(239,68,68,0.1);color:var(--danger)">Flagged</span>'
+          : '<span class="badge badge--pending">Pending review</span>';
+
+      const shiftArea = [c.shift, c.area].filter(x => x && x !== 'any').join(' · ');
+
+      const photoHtml = c.photoUrl
+        ? `<img class="photo-thumb" src="${c.photoUrl}" alt="Task photo"
+               onclick="openLightbox('${c.photoUrl}')">`
+        : '';
+
+      const actionHtml = c.status === 'pending' ? `
+        <div class="signoff-actions" id="actions-${c.id}">
+          <button class="btn btn--success btn--sm" onclick="signOff('${c.id}','approved')">Approve</button>
+          <button class="btn btn--danger btn--sm"  onclick="showFlagInput('${c.id}')">Flag Issue</button>
+        </div>
+        <textarea class="flag-notes" id="notes-${c.id}" rows="2"
+          placeholder="Describe the issue (required to flag)..."></textarea>
+        <button class="btn btn--danger btn--sm btn--full" id="submitFlag-${c.id}"
+          style="display:none;margin-top:8px" onclick="signOff('${c.id}','flagged')">
+          Submit Flag
+        </button>
+      ` : c.status === 'approved'
+        ? '<div class="text-sm" style="color:var(--success);font-weight:600">Approved</div>'
+        : `<div class="text-sm" style="color:var(--danger);font-weight:600">Flagged${c.signoffNotes ? ': ' + c.signoffNotes : ''}</div>`;
+
+      return `
+        <div class="completion-card completion-card--${c.status}" id="card-${c.id}">
+          <div class="completion-header">
+            <div class="completion-avatar">${c.staffInitial}</div>
+            <div class="completion-meta">
+              <div class="completion-task">${c.taskName}</div>
+              <div class="completion-info">
+                <span>${c.staffName}</span>
+                <span>${formatTime(c.completedAt)}</span>
+                ${shiftArea ? `<span>${shiftArea}</span>` : ''}
+                ${statusBadge}
+              </div>
+            </div>
+          </div>
+          ${photoHtml}
+          ${c.notes ? `<div class="text-sm text-muted" style="margin-bottom:10px">"${c.notes}"</div>` : ''}
+          ${actionHtml}
+        </div>
+      `;
+    }).join('');
+  }
+
+  function showFlagInput(completionId) {
+    const notes    = document.getElementById('notes-' + completionId);
+    const submit   = document.getElementById('submitFlag-' + completionId);
+    const actions  = document.getElementById('actions-' + completionId);
+    notes.classList.add('flag-notes--show');
+    submit.style.display = 'block';
+    actions.style.display = 'none';
+    notes.focus();
+  }
+
+  async function signOff(completionId, status) {
+    let notes = '';
+    if (status === 'flagged') {
+      notes = (document.getElementById('notes-' + completionId)?.value || '').trim();
+      if (!notes) { showToast('Please describe the issue before flagging.', 'error'); return; }
+    }
+
+    // Insert sign_off record
+    const { error: soError } = await db.from('sign_offs').insert({
+      completion_id: completionId,
+      supervisor_id: currentSupervisorId,
+      status,
+      notes: notes || null,
+    });
+
+    if (soError) { showToast('Error saving sign-off.', 'error'); return; }
+
+    // Update completion signoff_status
+    const { error: upError } = await db.from('completions')
+      .update({ signoff_status: status })
+      .eq('id', completionId);
+
+    if (upError) { showToast('Error updating status.', 'error'); return; }
+
+    // Update local state
+    const c = allCompletions.find(x => x.id === completionId);
+    if (c) { c.status = status; c.signoffNotes = notes; }
+
+    updateCounts();
+    renderCompletions();
+    showToast(status === 'approved' ? 'Task approved!' : 'Issue flagged.');
+  }
+
+  function openLightbox(url) {
+    document.getElementById('lightboxImg').src = url;
+    document.getElementById('lightbox').classList.add('lightbox-overlay--open');
+  }
+
+  function closeLightbox() {
+    document.getElementById('lightbox').classList.remove('lightbox-overlay--open');
+  }
+
+  document.getElementById('password').addEventListener('keydown', e => {
+    if (e.key === 'Enter') doLogin();
+  });
+</script>
+</body>
+</html>
