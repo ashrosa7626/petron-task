@@ -1,1 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Tasks – Petron Tasks</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    /* ── Flag alerts ──────────────────────────── */
+    .flag-alert { background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.35); border-radius:var(--radius); padding:14px 16px; margin-bottom:10px; animation:alert-in 0.3s ease; }
+    @keyframes alert-in { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:translateY(0)} }
+    .flag-alert__header { display:flex; align-items:center; gap:10px; margin-bottom:6px; }
+    .flag-icon { width:28px;height:28px;border-radius:50%;background:rgba(239,68,68,0.15);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:0.9rem; }
+    .flag-alert__title { font-weight:700;font-size:0.92rem;color:var(--danger);flex:1; }
+    .flag-alert__reason { font-size:0.84rem;color:var(--text);background:rgba(239,68,68,0.05);border-radius:var(--radius-sm);padding:8px 10px;margin-bottom:10px;border-left:2px solid var(--danger); }
+    .flag-alert__task { font-size:0.78rem;color:var(--muted);margin-bottom:10px; }
 
+    /* ── Level 1: Category ────────────────────── */
+    .cat-block { margin-bottom:10px; }
+    .cat-header {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:14px 16px; background:var(--surface); border:1px solid var(--border);
+      border-radius:var(--radius); cursor:pointer; user-select:none;
+      transition:border-color 0.15s, background 0.15s;
+    }
+    .cat-header:hover { border-color:var(--accent); background:var(--surface2); }
+    .cat-header.open { border-radius:var(--radius) var(--radius) 0 0; border-bottom-color:transparent; }
+    .cat-header__name { font-weight:700; font-size:1rem; }
+    .cat-body { display:none; border:1px solid var(--border); border-top:none; border-radius:0 0 var(--radius) var(--radius); overflow:hidden; margin-bottom:0; }
+    .cat-body.open { display:block; }
+
+    /* ── Level 2: Subcategory ─────────────────── */
+    .subcat-block { border-bottom:1px solid var(--border); }
+    .subcat-block:last-child { border-bottom:none; }
+    .subcat-header {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:11px 16px; background:var(--surface2);
+      cursor:pointer; user-select:none; transition:background 0.1s;
+    }
+    .subcat-header:hover { background:var(--surface); }
+    .subcat-header__name { font-size:0.82rem;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted); }
+    .subcat-body { display:none; }
+    .subcat-body.open { display:block; }
+
+    /* ── Level 3: Subgroup (e.g. Lap Gondola) ─── */
+    .subgrp-block { border-bottom:1px solid var(--border); }
+    .subgrp-block:last-child { border-bottom:none; }
+    .subgrp-header {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:9px 20px; background:rgba(79,138,255,0.04);
+      cursor:pointer; user-select:none; transition:background 0.1s;
+      border-left:2px solid var(--accent);
+    }
+    .subgrp-header:hover { background:rgba(79,138,255,0.08); }
+    .subgrp-header__name { font-size:0.82rem;font-weight:600;color:var(--accent); }
+    .subgrp-body { display:none; }
+    .subgrp-body.open { display:block; }
+
+    /* ── Count pill ───────────────────────────── */
+    .count-pill { font-size:0.72rem;font-family:var(--mono);padding:2px 8px;border-radius:99px;background:rgba(79,138,255,0.1);color:var(--accent); }
+    .count-pill.done { background:rgba(34,197,94,0.12);color:var(--success); }
+
+    /* ── Chevron ──────────────────────────────── */
+    .chev { font-size:0.7rem;color:var(--muted);transition:transform 0.2s;margin-left:8px; }
+    .chev.open { transform:rotate(180deg); }
+
+    /* ── Task rows ────────────────────────────── */
+    .task-item { border-radius:0;border-left:none;border-right:none;border-top:none;margin-bottom:0; }
+    .task-item:last-child { border-bottom:none; }
+    .task-item--flagged { background:rgba(239,68,68,0.04); }
+    .task-item--flagged .task-item__name { color:var(--danger); }
+  </style>
+</head>
+<body>
+<div class="page">
+  <div class="topbar">
+    <a href="index.html" class="btn btn--ghost btn--sm">← Done</a>
+    <div class="topbar__logo">Petron<span> Tasks</span></div>
+    <div class="text-sm text-muted" id="clock"></div>
+  </div>
+
+  <div class="content">
+    <div style="margin-bottom:20px">
+      <div style="font-size:1.3rem;font-weight:700" id="greeting">Hi 👋</div>
+      <div class="text-muted text-sm" id="dateLabel"></div>
+    </div>
+
+    <div id="flagAlerts"></div>
+
+    <div class="card" style="margin-bottom:20px">
+      <div class="flex flex--between" style="margin-bottom:8px">
+        <span class="text-sm" style="font-weight:600">Today's Progress</span>
+        <span class="text-sm text-muted" id="progressLabel">0 / 0</span>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-bar__fill" id="progressFill" style="width:0%"></div>
+      </div>
+    </div>
+
+    <div class="section-title">Your Tasks</div>
+    <div id="taskList"><div class="empty-state">Loading tasks...</div></div>
+  </div>
+</div>
+
+<!-- Photo Modal -->
+<div class="modal-overlay" id="photoModal">
+  <div class="modal">
+    <div class="modal__title" id="photoModalTitle">Upload Photo</div>
+    <p class="text-sm text-muted" style="margin-bottom:16px">This task requires a photo to be completed.</p>
+    <div class="photo-zone" onclick="document.getElementById('photoInput').click()">
+      <div class="photo-zone__icon">📷</div>
+      <div class="photo-zone__label">Tap to take a photo or choose from gallery</div>
+    </div>
+    <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none">
+    <img id="photoPreview" class="photo-preview" alt="Preview">
+    <div class="modal__actions">
+      <button class="btn btn--ghost" onclick="closePhotoModal()">Cancel</button>
+      <button class="btn btn--success" id="confirmPhotoBtn" onclick="confirmPhoto()" disabled>Mark Complete</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="app.js"></script>
+<script>
+  const staffId   = sessionStorage.getItem('staff_id');
+  const staffName = sessionStorage.getItem('staff_name');
+  if (!staffId) window.location.href = 'index.html';
+
+  document.getElementById('greeting').textContent = `Hi, ${staffName} 👋`;
+  document.getElementById('dateLabel').textContent =
+    new Date().toLocaleDateString([], { weekday:'long', month:'long', day:'numeric' });
+
+  function updateClock() {
+    document.getElementById('clock').textContent =
+      new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+  }
+  updateClock(); setInterval(updateClock, 1000);
+
+  let tasks = [];
+  let currentAssignmentId = null;
+  let selectedFile = null;
+
+  async function loadTasks() {
+    const { data, error } = await db
+      .from('daily_assignments')
+      .select(`
+        id, is_adhoc, custom_task_name,
+        task_templates(
+          name, description, photo_required, has_note, sort_order,
+          category_id, subcategory_id, subgroup_id,
+          categories(id, name, sort_order),
+          subcategories(id, name, sort_order),
+          subgroups(id, name, sort_order)
+        ),
+        completions(id, completed_at, signoff_status,
+          sign_offs(notes)
+        )
+      `)
+      .eq('date', today())
+      .eq('staff_id', staffId);
+
+    if (error) {
+      document.getElementById('taskList').innerHTML = '<div class="empty-state">Error loading tasks.</div>';
+      return;
+    }
+
+    tasks = (data || []).map(a => {
+      const c   = a.completions?.[0] || null;
+      const so  = c?.sign_offs?.[0] || null;
+      const tpl = a.task_templates;
+      return {
+        id: a.id,
+        name: a.is_adhoc ? a.custom_task_name : (tpl?.name || 'Unnamed Task'),
+        description:    tpl?.description || '',
+        photo_required: tpl?.photo_required || false,
+        has_note:       tpl?.has_note || false,
+        is_adhoc:       a.is_adhoc,
+        cat_id:    tpl?.category_id    || null,
+        cat_name:  tpl?.categories?.name || null,
+        cat_order: tpl?.categories?.sort_order ?? 99,
+        sub_id:    tpl?.subcategory_id || null,
+        sub_name:  tpl?.subcategories?.name || null,
+        sub_order: tpl?.subcategories?.sort_order ?? 99,
+        grp_id:    tpl?.subgroup_id    || null,
+        grp_name:  tpl?.subgroups?.name || null,
+        grp_order: tpl?.subgroups?.sort_order ?? 99,
+        task_order: tpl?.sort_order ?? 99,
+        done:           !!c,
+        completed_at:   c?.completed_at || null,
+        signoff_status: c?.signoff_status || null,
+        flag_reason:    so?.notes || null,
+        completion_id:  c?.id || null,
+      };
+    });
+
+    renderFlagAlerts();
+    renderTasks();
+  }
+
+  function renderFlagAlerts() {
+    const flagged = tasks.filter(t => t.signoff_status === 'flagged');
+    const el = document.getElementById('flagAlerts');
+    if (!flagged.length) { el.innerHTML = ''; return; }
+    el.innerHTML = flagged.map(t => `
+      <div class="flag-alert">
+        <div class="flag-alert__header">
+          <div class="flag-icon">⚠️</div>
+          <div class="flag-alert__title">Task flagged by supervisor</div>
+        </div>
+        <div class="flag-alert__task">${t.name}</div>
+        ${t.flag_reason
+          ? `<div class="flag-alert__reason">"${t.flag_reason}"</div>`
+          : '<div class="flag-alert__reason">No reason given — check with your supervisor.</div>'}
+        <button class="btn btn--danger btn--sm btn--full" onclick="redoTask('${t.id}')">Redo this task</button>
+      </div>`).join('');
+  }
+
+  function counts(list) {
+    const done  = list.filter(t => t.done && t.signoff_status !== 'flagged').length;
+    const total = list.length;
+    const all   = done === total && total > 0;
+    return { done, total, all, pill: `<span class="count-pill ${all?'done':''}">${done}/${total}</span>` };
+  }
+
+  function renderTasks() {
+    const list  = document.getElementById('taskList');
+    const done  = tasks.filter(t => t.done && t.signoff_status !== 'flagged').length;
+    const total = tasks.length;
+    document.getElementById('progressLabel').textContent = `${done} / ${total}`;
+    document.getElementById('progressFill').style.width  = total ? `${(done/total)*100}%` : '0%';
+
+    if (!tasks.length) { list.innerHTML = '<div class="empty-state">No tasks assigned for today.</div>'; return; }
+
+    // Split categorised vs ad-hoc
+    const categorised = tasks.filter(t => !t.is_adhoc && t.cat_id);
+    const adhoc       = tasks.filter(t =>  t.is_adhoc || !t.cat_id);
+
+    // Build: cat → sub → grp → tasks
+    const catMap = {};
+    for (const t of categorised) {
+      if (!catMap[t.cat_id]) catMap[t.cat_id] = { name:t.cat_name, order:t.cat_order, subs:{} };
+      const sub = catMap[t.cat_id].subs;
+      if (!sub[t.sub_id||'__none__']) sub[t.sub_id||'__none__'] = { name:t.sub_name, order:t.sub_order, grps:{}, direct:[] };
+      if (t.grp_id) {
+        const grps = sub[t.sub_id].grps;
+        if (!grps[t.grp_id]) grps[t.grp_id] = { name:t.grp_name, order:t.grp_order, tasks:[] };
+        grps[t.grp_id].tasks.push(t);
+      } else {
+        sub[t.sub_id||'__none__'].direct.push(t);
+      }
+    }
+
+    let html = '';
+    const sortedCats = Object.entries(catMap).sort((a,b) => a[1].order - b[1].order);
+
+    for (const [cid, cat] of sortedCats) {
+      const allCatTasks = Object.values(cat.subs).flatMap(s =>
+        [...s.direct, ...Object.values(s.grps).flatMap(g => g.tasks)]
+      );
+      const cc = counts(allCatTasks);
+      const hasFlagged = allCatTasks.some(t => t.signoff_status === 'flagged');
+      const catOpen = hasFlagged; // auto-open if flagged
+
+      let subcatHtml = '';
+      const sortedSubs = Object.entries(cat.subs).sort((a,b) => a[1].order - b[1].order);
+
+      for (const [sid, sub] of sortedSubs) {
+        const allSubTasks = [...sub.direct, ...Object.values(sub.grps).flatMap(g => g.tasks)];
+        const sc = counts(allSubTasks);
+
+        // Direct tasks (no subgroup)
+        let directHtml = sub.direct
+          .sort((a,b) => a.task_order - b.task_order)
+          .map(t => taskRow(t)).join('');
+
+        // Subgroups
+        let grpHtml = '';
+        const sortedGrps = Object.entries(sub.grps).sort((a,b) => a[1].order - b[1].order);
+        for (const [gid, grp] of sortedGrps) {
+          const gc = counts(grp.tasks);
+          const rows = grp.tasks.sort((a,b) => a.task_order - b.task_order).map(t => taskRow(t)).join('');
+          grpHtml += `
+            <div class="subgrp-block">
+              <div class="subgrp-header" onclick="tog('sg-${gid}','sgc-${gid}')">
+                <span class="subgrp-header__name">${grp.name}</span>
+                <div style="display:flex;align-items:center">
+                  ${gc.pill}
+                  <span class="chev" id="sgc-${gid}">▼</span>
+                </div>
+              </div>
+              <div class="subgrp-body" id="sg-${gid}">${rows}</div>
+            </div>`;
+        }
+
+        if (sid === '__none__') {
+          subcatHtml += directHtml + grpHtml;
+        } else {
+          subcatHtml += `
+            <div class="subcat-block">
+              <div class="subcat-header" onclick="tog('sc-${sid}','scc-${sid}')">
+                <span class="subcat-header__name">${sub.name || ''}</span>
+                <div style="display:flex;align-items:center">
+                  ${sc.pill}
+                  <span class="chev" id="scc-${sid}">▼</span>
+                </div>
+              </div>
+              <div class="subcat-body" id="sc-${sid}">${directHtml}${grpHtml}</div>
+            </div>`;
+        }
+      }
+
+      html += `
+        <div class="cat-block">
+          <div class="cat-header ${catOpen?'open':''}" id="ch-${cid}" onclick="togCat('cb-${cid}','ch-${cid}','cc-${cid}')">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="cat-header__name">${cat.name}</span>
+              ${hasFlagged ? '<span style="color:var(--danger);font-size:0.85rem">⚠</span>' : ''}
+            </div>
+            <div style="display:flex;align-items:center">
+              ${cc.pill}
+              <span class="chev ${catOpen?'open':''}" id="cc-${cid}">▼</span>
+            </div>
+          </div>
+          <div class="cat-body ${catOpen?'open':''}" id="cb-${cid}">${subcatHtml}</div>
+        </div>`;
+    }
+
+    // Ad-hoc group
+    if (adhoc.length) {
+      const ac = counts(adhoc);
+      const rows = adhoc.map(t => taskRow(t)).join('');
+      html += `
+        <div class="cat-block">
+          <div class="cat-header" id="ch-adhoc" onclick="togCat('cb-adhoc','ch-adhoc','cc-adhoc')">
+            <span class="cat-header__name">Ad-hoc Tasks</span>
+            <div style="display:flex;align-items:center">
+              ${ac.pill}
+              <span class="chev" id="cc-adhoc">▼</span>
+            </div>
+          </div>
+          <div class="cat-body" id="cb-adhoc">${rows}</div>
+        </div>`;
+    }
+
+    list.innerHTML = html;
+  }
+
+  function taskRow(t) {
+    const isFlagged  = t.signoff_status === 'flagged';
+    const isApproved = t.signoff_status === 'approved';
+    const canDo = !t.done || isFlagged;
+    const status = isFlagged
+      ? '<span class="badge" style="background:rgba(239,68,68,0.1);color:var(--danger)">⚠ Flagged</span>'
+      : isApproved
+        ? '<span class="badge badge--done">✓ Approved</span>'
+        : t.done
+          ? `<span class="badge badge--done">✓ ${formatTime(t.completed_at)}</span>`
+          : '<span class="badge badge--pending">Pending</span>';
+    return `
+      <div class="task-item ${t.done&&!isFlagged?'task-item--done':''} ${isFlagged?'task-item--flagged':''}">
+        <div class="task-check ${t.done&&!isFlagged?'task-check--done':''}"
+             onclick="${canDo?`completeTask('${t.id}')`:'null'}"
+             style="${!canDo?'cursor:default':''}">
+          ${t.done&&!isFlagged
+            ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>'
+            : isFlagged ? '<span style="color:var(--danger);font-size:0.8rem">↺</span>' : ''}
+        </div>
+        <div class="task-item__body">
+          <div class="task-item__name">${t.name}</div>
+          <div class="task-item__meta">
+            ${t.photo_required ? '<span class="badge badge--photo">📷 Photo</span>' : ''}
+            ${t.has_note ? '<span class="badge" style="background:rgba(245,158,11,0.1);color:var(--warning)">📝 Note</span>' : ''}
+            ${status}
+          </div>
+        </div>
+      </div>`;
+  }
+
+  // Toggle helpers
+  function tog(bodyId, chevId) {
+    const b = document.getElementById(bodyId);
+    const c = document.getElementById(chevId);
+    b.classList.toggle('open');
+    c.classList.toggle('open');
+  }
+  function togCat(bodyId, headerId, chevId) {
+    const b = document.getElementById(bodyId);
+    const h = document.getElementById(headerId);
+    const c = document.getElementById(chevId);
+    const opening = !b.classList.contains('open');
+    b.classList.toggle('open', opening);
+    h.classList.toggle('open', opening);
+    c.classList.toggle('open', opening);
+  }
+
+  async function redoTask(assignmentId) {
+    const t = tasks.find(x => x.id === assignmentId);
+    if (!t) return;
+    if (t.completion_id) await db.from('completions').delete().eq('id', t.completion_id);
+    t.done=false; t.signoff_status=null; t.flag_reason=null; t.completion_id=null; t.completed_at=null;
+    renderFlagAlerts(); renderTasks();
+    showToast('Task reset — please complete it again.');
+  }
+
+  function completeTask(assignmentId) {
+    const t = tasks.find(x => x.id === assignmentId);
+    if (!t || (t.done && t.signoff_status !== 'flagged')) return;
+    currentAssignmentId = assignmentId;
+    if (t.photo_required) {
+      document.getElementById('photoModalTitle').textContent = `📷 ${t.name}`;
+      document.getElementById('photoModal').classList.add('modal-overlay--open');
+      selectedFile = null;
+      document.getElementById('photoPreview').style.display = 'none';
+      document.getElementById('confirmPhotoBtn').disabled = true;
+    } else {
+      markComplete(assignmentId, null);
+    }
+  }
+
+  async function markComplete(assignmentId, photoUrl) {
+    const { error } = await db.from('completions').insert({
+      assignment_id: assignmentId, staff_id: staffId,
+      completed_at: new Date().toISOString(), photo_url: photoUrl || null,
+    });
+    if (error) { showToast('Error saving. Try again.', 'error'); return; }
+    const t = tasks.find(x => x.id === assignmentId);
+    if (t) { t.done=true; t.completed_at=new Date().toISOString(); t.signoff_status='pending'; }
+    closePhotoModal(); renderFlagAlerts(); renderTasks();
+    showToast('Task marked complete!');
+    if (tasks.every(t => t.done && t.signoff_status !== 'flagged')) {
+      showToast('All tasks complete! Great work 🎉');
+      setTimeout(() => window.location.href = 'index.html', 2500);
+    }
+  }
+
+  document.getElementById('photoInput').addEventListener('change', e => {
+    const file = e.target.files[0]; if (!file) return;
+    selectedFile = file;
+    const r = new FileReader();
+    r.onload = ev => { const img=document.getElementById('photoPreview'); img.src=ev.target.result; img.style.display='block'; };
+    r.readAsDataURL(file);
+    document.getElementById('confirmPhotoBtn').disabled = false;
+  });
+
+  async function confirmPhoto() {
+    if (!selectedFile || !currentAssignmentId) return;
+    const btn = document.getElementById('confirmPhotoBtn');
+    setLoading(btn, true);
+    const ext  = selectedFile.name.split('.').pop();
+    const path = `completions/${currentAssignmentId}_${Date.now()}.${ext}`;
+    const { error: ue } = await db.storage.from('task-photos').upload(path, selectedFile);
+    if (ue) { showToast('Photo upload failed.', 'error'); setLoading(btn, false); return; }
+    const { data: ud } = db.storage.from('task-photos').getPublicUrl(path);
+    await markComplete(currentAssignmentId, ud?.publicUrl || path);
+    setLoading(btn, false);
+  }
+
+  function closePhotoModal() {
+    document.getElementById('photoModal').classList.remove('modal-overlay--open');
+    currentAssignmentId = null; selectedFile = null;
+  }
+
+  loadTasks();
+</script>
+</body>
+</html>
