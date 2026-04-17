@@ -448,6 +448,8 @@
     const key   = stockKey(subId, grp || task);
     ensureStock(staffId, key);
     const safeKey = encodeURIComponent(key);
+    const bodyId  = 'stk-' + staffId + '-' + safeKey;
+    const chevId  = 'stkc-' + staffId + '-' + safeKey;
     const rows = stockItems[staffId][key].map((val, i) => `
       <div class="stock-item-row">
         <input type="text" value="${val.replace(/"/g,'&quot;')}" placeholder="e.g. Milo 3in1, 100Plus..."
@@ -456,10 +458,17 @@
         <button class="del-btn" onclick="removeStockItem('${staffId}','${safeKey}',${i})" title="Remove">✕</button>
       </div>`).join('');
     return `
-      <div class="stock-subgroup">
-        <div class="stock-subgroup-name">${label}</div>
-        <div class="stock-items" id="si-${staffId}-${safeKey}">${rows}</div>
-        <button class="btn btn--ghost btn--sm stock-add-btn" onclick="addStockItem('${staffId}','${safeKey}')">+ Add item</button>
+      <div class="stock-subgroup-wrap">
+        <div class="ac-grp-header" style="padding-left:28px" onclick="togAc('${bodyId}','${chevId}')">
+          <span class="ac-grp-name">${label}</span>
+          <span class="ac-chev" id="${chevId}">▼</span>
+        </div>
+        <div class="ac-grp-body" id="${bodyId}">
+          <div class="stock-subgroup">
+            <div class="stock-items" id="si-${staffId}-${safeKey}">${rows}</div>
+            <button class="btn btn--ghost btn--sm stock-add-btn" onclick="addStockItem('${staffId}','${safeKey}')">+ Add item</button>
+          </div>
+        </div>
       </div>`;
   }
 
