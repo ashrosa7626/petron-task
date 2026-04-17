@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Team Lead – Petron Tasks v6</title>
+  <title>Team Lead – Petron Tasks v7</title>
   <link rel="stylesheet" href="style.css">
   <style>
     .login-wrap { max-width:360px; margin:60px auto 0; }
@@ -271,12 +271,30 @@
     const existing = existingRes.data || [];
 
     staffSelections = {};
+    stockItems = {};
     for (const s of allStaff) {
       const mine = existing.filter(a => a.staff_id === s.id);
+      const stockAssignments = mine.filter(a => a.is_adhoc && a.custom_task_name?.startsWith('TOPUP:'));
+      const realAdhoc        = mine.filter(a => a.is_adhoc && !a.custom_task_name?.startsWith('TOPUP:'));
       staffSelections[s.id] = {
         templateIds: new Set(mine.filter(a => !a.is_adhoc).map(a => a.task_template_id)),
-        adhocTasks:  mine.filter(a => a.is_adhoc).map(a => ({ name: a.custom_task_name, photoRequired: a.photo_required || false })),
+        adhocTasks:  realAdhoc.map(a => ({ name: a.custom_task_name, photoRequired: a.photo_required || false })),
       };
+      // Restore stock items into stockItems store
+      if (!stockItems[s.id]) stockItems[s.id] = {};
+      for (const sa of stockAssignments) {
+        const parts   = sa.custom_task_name.split(':');
+        const subName = parts[1] || 'Stock';
+        const section = parts[2] || subName;
+        const item    = parts.slice(3).join(':');
+        // Find subId from subName
+        const subcat  = allSubcats.find(sc => sc.name === subName);
+        const subId   = subcat?.id || subName;
+        const key     = subId + '||' + section;
+        if (!stockItems[s.id][key]) stockItems[s.id][key] = [];
+        if (item) stockItems[s.id][key].push(item);
+      }
+      // Ensure at least one empty slot per stock section
     }
 
     renderAssignView();
@@ -667,15 +685,14 @@
       for (const adhoc of sel.adhocTasks) {
         rows.push({ date: today(), staff_id: s.id, is_adhoc: true, custom_task_name: adhoc.name, photo_required: adhoc.photoRequired, created_by: currentUser?.id });
       }
-      // Stock manual items — tagged with STOCK: prefix for grouping on staff view
+      // Stock manual items — saved with TOPUP: prefix for clean grouping
       if (stockItems[s.id]) {
         for (const [key, items] of Object.entries(stockItems[s.id])) {
-          const parts = key.split('||');
-          const subId = parts[0];
-          const sectionLabel = parts[1] || 'Stock';
-          // Find subcategory name for grouping
-          const subcat = allSubcats.find(sc => sc.id === subId);
-          const subName = subcat?.name || sectionLabel;
+          const parts   = key.split('||');
+          const subId   = parts[0];
+          const section = parts[1] || 'Stock';
+          const subcat  = allSubcats.find(sc => sc.id === subId);
+          const subName = subcat?.name || section;
           for (const item of items) {
             const trimmed = item.trim();
             if (!trimmed) continue;
@@ -683,7 +700,7 @@
               date: today(),
               staff_id: s.id,
               is_adhoc: true,
-              custom_task_name: `__STOCK__${subName}||${sectionLabel}||${trimmed}`,
+              custom_task_name: `TOPUP:${subName}:${section}:${trimmed}`,
               photo_required: false,
               created_by: currentUser?.id
             });
