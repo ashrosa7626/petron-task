@@ -226,12 +226,34 @@
       .eq('date', getSelectedDate())
       .eq('branch', currentBranch);
 
-    if (error || !assignments) { document.getElementById('staffRows').innerHTML = '<div class="empty-state">Error loading.</div>'; return; }
+    // If no results, try without branch filter (for legacy data)
+    let finalAssignments = assignments;
+    if (!error && (!assignments || assignments.length === 0)) {
+      const { data: fallback } = await db
+        .from('daily_assignments')
+        .select(`
+          id, is_adhoc, custom_task_name, staff_id,
+          task_templates(
+            name, photo_required, category_id, subcategory_id, subgroup_id, sort_order,
+            categories(id, name, sort_order),
+            subcategories(id, name, sort_order),
+            subgroups(id, name, sort_order)
+          ),
+          completions(id, completed_at, photo_url, signoff_status),
+          users(id, name)
+        `)
+        .eq('date', getSelectedDate())
+        .is('branch', null);
+      finalAssignments = fallback || [];
+    }
+
+    if (error) { document.getElementById('staffRows').innerHTML = '<div class="empty-state">Error loading.</div>'; return; }
+    const assignments2 = finalAssignments;
 
     const byStaff = {};
     let soApproved=0, soFlagged=0, soPending=0;
 
-    for (const a of assignments) {
+    for (const a of assignments2) {
       const sid = a.staff_id;
       if (!byStaff[sid]) byStaff[sid] = { name: a.users?.name || 'Unknown', tasks: [] };
       const comp = a.completions?.[0] || null;
