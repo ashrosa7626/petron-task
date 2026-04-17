@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Team Lead – Petron Tasks v4</title>
+  <title>Team Lead – Petron Tasks v5</title>
   <link rel="stylesheet" href="style.css">
   <style>
     .login-wrap { max-width:360px; margin:60px auto 0; }
@@ -557,10 +557,27 @@
   }
 
   function togAc(bodyId, chevId) {
+    // Save any typed stock input values before toggling
+    saveAllStockInputs();
     const b = document.getElementById(bodyId);
     const c = document.getElementById(chevId);
     b.classList.toggle('open');
     c.classList.toggle('open');
+  }
+
+  function saveAllStockInputs() {
+    document.querySelectorAll('[id^="si-"]').forEach(container => {
+      const parts = container.id.split('-');
+      // id format: si-{staffId}-{safeKey}
+      const staffId  = parts[1];
+      const safeKey  = parts.slice(2).join('-');
+      const key      = decodeURIComponent(safeKey);
+      if (!stockItems[staffId]) stockItems[staffId] = {};
+      const inputs = container.querySelectorAll('input');
+      if (inputs.length > 0) {
+        stockItems[staffId][key] = Array.from(inputs).map(i => i.value);
+      }
+    });
   }
 
   function toggleTemplate(staffId, tplId, checked) {
@@ -640,6 +657,7 @@
     const btn = document.getElementById('saveAssignBtn');
     setLoading(btn, true);
     await db.from('daily_assignments').delete().eq('date', today());
+    saveAllStockInputs();
     const rows = [];
     for (const s of allStaff) {
       const sel = staffSelections[s.id];
