@@ -50,10 +50,9 @@
     .so-pill.approved .so-pill__num { color:var(--success); }
     .so-pill.flagged  .so-pill__num { color:var(--danger); }
     .so-pill.pending  .so-pill__num { color:var(--accent); }
-    .branch-bar { padding:12px 24px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px; }
-    .br-btn { padding:6px 16px;border-radius:99px;font-family:var(--font);font-size:0.85rem;font-weight:600;cursor:pointer;transition:all 0.15s; }
-    .br-btn.active { background:var(--accent);border:1px solid var(--accent);color:white; }
-    .br-btn.inactive { background:transparent;border:1px solid var(--border);color:var(--muted); }
+    .br-btn { padding:7px 18px;border-radius:99px;font-family:var(--font);font-size:0.88rem;font-weight:600;cursor:pointer;transition:all 0.15s;border:1px solid var(--border); }
+    .br-btn.active { background:var(--accent);border-color:var(--accent);color:white; }
+    .br-btn.inactive { background:transparent;color:var(--muted); }
   </style>
 </head>
 <body>
@@ -64,24 +63,26 @@
     <div class="text-sm text-muted" id="clock"></div>
   </div>
 
-  <div class="branch-bar">
-    <span class="text-sm text-muted" style="font-weight:600">Branch:</span>
-    <button class="br-btn active" id="br-Safari" onclick="switchBranch('Safari')">Safari</button>
-    <button class="br-btn inactive" id="br-NDJ" onclick="switchBranch('Nilai Desa Jati')">Nilai Desa Jati</button>
-    <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
-      <span class="text-sm text-muted" style="font-weight:600">Date:</span>
-      <input type="date" id="dashDate"
-        style="padding:5px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--font);font-size:0.85rem;outline:none;cursor:pointer"
-        onchange="loadDashboard()">
-      <button class="br-btn inactive" onclick="goToday()" id="todayBtn" style="padding:5px 12px;font-size:0.78rem">Today</button>
+  <div style="padding:16px 24px;background:var(--surface);border-bottom:1px solid var(--border)">
+    <!-- Branch toggle -->
+    <div style="display:flex;justify-content:center;gap:8px;margin-bottom:14px">
+      <button class="br-btn active" id="br-Safari" onclick="switchBranch('Safari')">Safari</button>
+      <button class="br-btn inactive" id="br-NDJ" onclick="switchBranch('Nilai Desa Jati')">Nilai Desa Jati</button>
     </div>
+    <!-- Date navigator -->
+    <div style="display:flex;align-items:center;justify-content:center;gap:12px">
+      <button onclick="shiftDate(-1)" style="width:32px;height:32px;border-radius:50%;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:1.1rem;cursor:pointer;display:flex;align-items:center;justify-content:center">‹</button>
+      <div style="text-align:center;min-width:180px">
+        <div style="font-weight:700;font-size:1rem;color:var(--text)" id="dateDisplay">—</div>
+        <div style="font-size:0.75rem;color:var(--muted)" id="dateSubDisplay">Today</div>
+      </div>
+      <button onclick="shiftDate(1)" id="nextDateBtn" style="width:32px;height:32px;border-radius:50%;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:1.1rem;cursor:pointer;display:flex;align-items:center;justify-content:center">›</button>
+    </div>
+    <input type="hidden" id="dashDate">
   </div>
 
   <div class="content content--wide">
-    <div style="margin-bottom:20px">
-      <div style="font-size:1.3rem;font-weight:700">Overview</div>
-      <div class="text-muted text-sm" id="dateLabel"></div>
-    </div>
+
 
     <div class="stats-row">
       <div class="stat-card stat-card--green"><div class="stat-card__num" id="statDone">–</div><div class="stat-card__label">Completed</div></div>
@@ -131,14 +132,41 @@
 
   function goToday() {
     document.getElementById('dashDate').value = today();
-    document.getElementById('todayBtn').className = 'br-btn inactive';
+    updateDateDisplay();
     loadDashboard();
   }
 
-  // Set date picker to today on load
+  function shiftDate(days) {
+    const current = document.getElementById('dashDate').value || today();
+    const d = new Date(current + 'T00:00:00');
+    d.setDate(d.getDate() + days);
+    const newDate = d.toISOString().split('T')[0];
+    // Don't go into the future
+    if (newDate > today()) return;
+    document.getElementById('dashDate').value = newDate;
+    updateDateDisplay();
+    loadDashboard();
+  }
+
+  function updateDateDisplay() {
+    const val = document.getElementById('dashDate').value || today();
+    const isToday = val === today();
+    const d = new Date(val + 'T00:00:00');
+    document.getElementById('dateDisplay').textContent =
+      d.toLocaleDateString([], { weekday:'long', day:'numeric', month:'long' });
+    document.getElementById('dateSubDisplay').textContent = isToday ? 'Today' : '';
+    // Disable next button if on today
+    const nextBtn = document.getElementById('nextDateBtn');
+    if (nextBtn) {
+      nextBtn.style.opacity = isToday ? '0.3' : '1';
+      nextBtn.style.cursor  = isToday ? 'default' : 'pointer';
+    }
+  }
+
+  // Set date to today on load
   window.addEventListener('load', () => {
     const dp = document.getElementById('dashDate');
-    if (dp) dp.value = today();
+    if (dp) { dp.value = today(); updateDateDisplay(); }
   });
 
   function switchBranch(branch) {
@@ -184,10 +212,6 @@
   async function loadDashboard() {
     document.getElementById('staffRows').innerHTML = '<div class="empty-state">Loading...</div>';
     const selectedDate = getSelectedDate();
-    const isToday = selectedDate === today();
-    document.getElementById('dateLabel').textContent = isToday
-      ? new Date().toLocaleDateString([], { weekday:'long', month:'long', day:'numeric' })
-      : new Date(selectedDate + 'T00:00:00').toLocaleDateString([], { weekday:'long', month:'long', day:'numeric' });
 
     const { data: assignments, error } = await db
       .from('daily_assignments')
