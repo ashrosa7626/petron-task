@@ -58,13 +58,16 @@
   </div>
 
   <!-- Branch selector -->
-  <div style="padding:12px 24px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px">
-    <span class="text-sm text-muted">Branch:</span>
-    <select id="dashBranch" onchange="loadDashboard()" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--font);font-size:0.88rem;outline:none">
-      <option value="Safari">Safari</option>
-      <option value="Nilai Desa Jati">Nilai Desa Jati</option>
-    </select>
-    <span class="text-sm text-muted" id="branchIndicator" style="font-weight:600;color:var(--accent)">Safari</span>
+  <div style="padding:12px 24px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <span class="text-sm text-muted" style="font-weight:600">Branch:</span>
+    <button onclick="switchBranch('Safari')" id="btn-Safari"
+      style="padding:6px 16px;border-radius:99px;border:1px solid var(--accent);background:var(--accent);color:white;font-family:var(--font);font-size:0.85rem;font-weight:600;cursor:pointer">
+      Safari
+    </button>
+    <button onclick="switchBranch('Nilai Desa Jati')" id="btn-Nilai Desa Jati"
+      style="padding:6px 16px;border-radius:99px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:var(--font);font-size:0.85rem;font-weight:600;cursor:pointer">
+      Nilai Desa Jati
+    </button>
   </div>
 
   <div class="content content--wide">
@@ -132,6 +135,27 @@
   document.getElementById('dateLabel').textContent =
     new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
 
+  window.currentBranch = 'Safari';
+
+  function switchBranch(branch) {
+    window.currentBranch = branch;
+    // Update button styles
+    ['Safari', 'Nilai Desa Jati'].forEach(b => {
+      const btn = document.getElementById('btn-' + b);
+      if (!btn) return;
+      if (b === branch) {
+        btn.style.background = 'var(--accent)';
+        btn.style.borderColor = 'var(--accent)';
+        btn.style.color = 'white';
+      } else {
+        btn.style.background = 'transparent';
+        btn.style.borderColor = 'var(--border)';
+        btn.style.color = 'var(--muted)';
+      }
+    });
+    loadDashboard();
+  }
+
   function updateClock() {
     document.getElementById('clock').textContent =
       new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -147,10 +171,7 @@
     document.getElementById('soApproved').textContent  = '–';
     document.getElementById('soFlagged').textContent   = '–';
     document.getElementById('soPending').textContent   = '–';
-    const branchEl = document.getElementById('dashBranch');
-    const branch = branchEl?.value || 'Safari';
-    const indicator = document.getElementById('branchIndicator');
-    if (indicator) indicator.textContent = branch;
+    const branch = window.currentBranch || 'Safari';
     const { data: assignments, error } = await db
       .from('daily_assignments')
       .select(`
