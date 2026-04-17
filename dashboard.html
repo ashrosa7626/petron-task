@@ -57,6 +57,15 @@
     <div class="text-sm text-muted" id="clock"></div>
   </div>
 
+  <!-- Branch selector -->
+  <div style="padding:12px 24px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px">
+    <span class="text-sm text-muted">Branch:</span>
+    <select id="dashBranch" onchange="loadDashboard()" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--font);font-size:0.88rem;outline:none">
+      <option value="Safari">Safari</option>
+      <option value="Nilai Desa Jati">Nilai Desa Jati</option>
+    </select>
+  </div>
+
   <div class="content content--wide">
     <div style="margin-bottom:20px">
       <div style="font-size:1.3rem;font-weight:700">Live Overview</div>
@@ -130,6 +139,7 @@
   setInterval(loadDashboard, 30000);
 
   async function loadDashboard() {
+    const branch = document.getElementById('dashBranch')?.value || 'Safari';
     const { data: assignments, error } = await db
       .from('daily_assignments')
       .select(`
@@ -138,7 +148,8 @@
         completions(id, completed_at, photo_url, signoff_status),
         users(id, name)
       `)
-      .eq('date', today());
+      .eq('date', today())
+      .eq('branch', branch);
 
     if (error || !assignments) return;
 
