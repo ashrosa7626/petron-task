@@ -6,51 +6,108 @@
   <title>Dashboard – Petron Tasks</title>
   <link rel="stylesheet" href="style.css">
   <style>
+    /* ── Petron Brand Colours ─────────────────── */
+    :root {
+      --petron-blue:     #003087;
+      --petron-blue-lt:  #0066CC;
+      --petron-red:      #E31837;
+      --petron-red-lt:   rgba(227,24,55,0.15);
+      --petron-blue-lt2: rgba(0,48,135,0.15);
+    }
+
+    /* ── Topbar override ──────────────────────── */
+    .topbar {
+      background: var(--petron-blue) !important;
+      border-bottom: 3px solid var(--petron-red) !important;
+    }
+    .topbar select {
+      background: rgba(255,255,255,0.15) !important;
+      border-color: rgba(255,255,255,0.3) !important;
+      color: white !important;
+    }
+    #dashTitle { color: white !important; }
+    #dateDisplay { color: rgba(255,255,255,0.9) !important; }
+    #dateSubDisplay { color: var(--petron-red) !important; }
+    #clock { color: rgba(255,255,255,0.6) !important; }
+    .topbar button {
+      background: rgba(255,255,255,0.15) !important;
+      border-color: rgba(255,255,255,0.3) !important;
+      color: white !important;
+    }
+    .topbar button:hover { background: rgba(255,255,255,0.25) !important; }
+
+    /* ── Staff accordion ──────────────────────── */
     .ac-staff { margin-bottom:10px; }
-    .ac-staff-hdr { display:flex;align-items:center;gap:12px;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;user-select:none; }
-    .ac-staff-hdr:hover { border-color:var(--accent); }
+    .ac-staff-hdr { display:flex;align-items:center;gap:12px;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--petron-blue);border-radius:var(--radius);cursor:pointer;user-select:none;transition:border-color 0.15s; }
+    .ac-staff-hdr:hover { border-color:var(--petron-blue-lt); }
     .ac-staff-hdr.open { border-radius:var(--radius) var(--radius) 0 0;border-bottom-color:transparent; }
-    .ac-staff-av { width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-weight:700;color:white;font-size:1rem;flex-shrink:0; }
-    .ac-staff-nm { font-weight:700;flex:1;font-size:0.97rem; }
+    .ac-staff-av { width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--petron-blue),var(--petron-blue-lt));display:flex;align-items:center;justify-content:center;font-weight:700;color:white;font-size:1rem;flex-shrink:0; }
+    .ac-staff-nm { font-weight:700;flex:1;font-size:0.97rem;color:var(--petron-blue-lt); }
     .ac-staff-bd { display:none;border:1px solid var(--border);border-top:none;border-radius:0 0 var(--radius) var(--radius);overflow:hidden; }
     .ac-staff-bd.open { display:block; }
+
+    /* ── Category tier ────────────────────────── */
     .ac-cat-hdr { display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:var(--surface2);cursor:pointer;border-bottom:1px solid var(--border); }
     .ac-cat-hdr:hover { background:var(--surface); }
     .ac-cat-bd { display:none; }
     .ac-cat-bd.open { display:block; }
-    .ac-sub-hdr { display:flex;align-items:center;justify-content:space-between;padding:8px 20px;background:var(--surface);cursor:pointer;border-bottom:1px solid var(--border);border-left:3px solid var(--border); }
+
+    /* ── Subcategory tier ─────────────────────── */
+    .ac-sub-hdr { display:flex;align-items:center;justify-content:space-between;padding:8px 20px;background:var(--surface);cursor:pointer;border-bottom:1px solid var(--border);border-left:3px solid var(--petron-blue); }
     .ac-sub-hdr:hover { background:var(--surface2); }
     .ac-sub-bd { display:none; }
     .ac-sub-bd.open { display:block; }
-    .ac-grp-hdr { display:flex;align-items:center;justify-content:space-between;padding:7px 28px;background:var(--surface2);cursor:pointer;border-bottom:1px solid var(--border);border-left:3px solid var(--accent); }
+
+    /* ── Subgroup tier ────────────────────────── */
+    .ac-grp-hdr { display:flex;align-items:center;justify-content:space-between;padding:7px 28px;background:var(--surface2);cursor:pointer;border-bottom:1px solid var(--border);border-left:3px solid var(--petron-red); }
     .ac-grp-hdr:hover { background:var(--surface); }
+    .ac-grp-hdr span { color:var(--petron-red) !important; }
     .ac-grp-bd { display:none; }
     .ac-grp-bd.open { display:block; }
+
+    /* ── Chevron & pill ───────────────────────── */
     .chev { font-size:0.7rem;color:var(--muted);transition:transform 0.2s;margin-left:6px; }
     .chev.open { transform:rotate(180deg); }
-    .cpill { font-size:0.72rem;font-family:var(--mono);padding:2px 8px;border-radius:99px;background:rgba(79,138,255,0.15);color:var(--accent);margin-right:4px; }
+    .cpill { font-size:0.72rem;font-family:var(--mono);padding:2px 8px;border-radius:99px;background:var(--petron-blue-lt2);color:var(--petron-blue-lt);margin-right:4px; }
     .cpill.done { background:rgba(34,197,94,0.15);color:var(--success); }
+
+    /* ── Mini task row ────────────────────────── */
     .mtask { display:flex;align-items:center;gap:10px;padding:9px 16px;border-bottom:1px solid var(--border); }
     .mtask:last-child { border-bottom:none; }
     .mdot { width:10px;height:10px;border-radius:50%;background:var(--border);flex-shrink:0; }
-    .mdot.done { background:var(--success); }
+    .mdot.done { background:var(--petron-blue-lt); }
     .mdot.approved { background:var(--success);box-shadow:0 0 0 2px rgba(34,197,94,0.25); }
-    .mdot.flagged { background:var(--danger); }
+    .mdot.flagged { background:var(--petron-red); }
     .sbadge { font-size:0.68rem;font-weight:600;padding:2px 8px;border-radius:99px;font-family:var(--mono); }
     .sbadge.approved { background:rgba(34,197,94,0.12);color:var(--success); }
-    .sbadge.flagged  { background:rgba(239,68,68,0.12);color:var(--danger); }
-    .sbadge.pending  { background:rgba(79,138,255,0.10);color:var(--muted); }
-    .refresh-btn { position:fixed;bottom:90px;right:24px;width:52px;height:52px;border-radius:50%;background:var(--accent);border:none;color:white;font-size:1.3rem;cursor:pointer;box-shadow:var(--shadow);transition:transform 0.2s; }
-    .refresh-btn:hover { transform:rotate(30deg); }
-    .sup-btn { position:fixed;bottom:24px;right:24px;display:flex;align-items:center;gap:8px;padding:13px 20px;border-radius:99px;background:var(--accent2);border:none;color:white;font-family:var(--font);font-size:0.9rem;font-weight:600;cursor:pointer;box-shadow:var(--shadow);text-decoration:none; }
+    .sbadge.flagged  { background:var(--petron-red-lt);color:var(--petron-red); }
+    .sbadge.pending  { background:var(--petron-blue-lt2);color:var(--petron-blue-lt); }
+
+    /* ── Stat cards Petron themed ─────────────── */
+    .stat-card--green .stat-card__num { color:var(--success); }
+    .stat-card--amber .stat-card__num { color:var(--petron-red); }
+    .stat-card--blue  .stat-card__num { color:var(--petron-blue-lt); }
+
+    /* ── Sign-off pills ───────────────────────── */
     .signoff-summary { display:flex;gap:8px;margin-bottom:24px; }
     .so-pill { flex:1;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 10px;text-align:center; }
     .so-pill__num { font-size:1.4rem;font-weight:700;font-family:var(--mono); }
     .so-pill__lbl { font-size:0.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-top:2px; }
     .so-pill.approved .so-pill__num { color:var(--success); }
-    .so-pill.flagged  .so-pill__num { color:var(--danger); }
-    .so-pill.pending  .so-pill__num { color:var(--accent); }
+    .so-pill.flagged  .so-pill__num { color:var(--petron-red); }
+    .so-pill.pending  .so-pill__num { color:var(--petron-blue-lt); }
 
+    /* ── Progress bar Petron blue ─────────────── */
+    .progress-bar__fill { background:linear-gradient(90deg, var(--petron-blue), var(--petron-blue-lt)) !important; }
+
+    /* ── Buttons ──────────────────────────────── */
+    .refresh-btn { position:fixed;bottom:90px;right:24px;width:52px;height:52px;border-radius:50%;background:var(--petron-blue);border:none;color:white;font-size:1.3rem;cursor:pointer;box-shadow:var(--shadow);transition:transform 0.2s; }
+    .refresh-btn:hover { transform:rotate(30deg); background:var(--petron-blue-lt); }
+    .sup-btn { position:fixed;bottom:24px;right:24px;display:flex;align-items:center;gap:8px;padding:13px 20px;border-radius:99px;background:var(--petron-red);border:none;color:white;font-family:var(--font);font-size:0.9rem;font-weight:600;cursor:pointer;box-shadow:var(--shadow);text-decoration:none; }
+    .sup-btn:hover { background:#c0102c; }
+
+    /* ── Section title ────────────────────────── */
+    .section-title { color:var(--petron-blue-lt) !important; }
   </style>
 </head>
 <body>
@@ -64,7 +121,7 @@
     </select>
     <!-- Big centred title -->
     <div style="position:absolute;left:50%;transform:translateX(-50%);text-align:center;pointer-events:none">
-      <div style="font-size:1.5rem;font-weight:800;letter-spacing:-0.5px;color:var(--text)" id="dashTitle">Safari Dashboard</div>
+      <div style="font-size:1.5rem;font-weight:800;letter-spacing:-0.5px;color:white" id="dashTitle"><span style="color:#E31837">Safari</span> Dashboard</div>
     </div>
     <!-- Date navigator right -->
     <div style="display:flex;align-items:center;gap:8px;margin-left:auto">
@@ -170,7 +227,7 @@
   function switchBranch(branch) {
     currentBranch = branch;
     document.getElementById('branchSelect').value = branch;
-    document.getElementById('dashTitle').textContent = branch + ' Dashboard';
+    document.getElementById('dashTitle').innerHTML = '<span style="color:#E31837">' + branch + '</span> Dashboard';
     loadDashboard();
   }
 
