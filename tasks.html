@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>My Tasks – Petron Tasks</title>
+  <title>My Tasks – Petron Tasks v2</title>
   <link rel="stylesheet" href="style.css">
   <style>
     /* ── Flag alerts ──────────────────────────── */
@@ -162,21 +162,52 @@
       const c   = a.completions?.[0] || null;
       const so  = c?.sign_offs?.[0]  || null;
       const tpl = a.task_templates;
+      const raw = a.custom_task_name || '';
+      const isStock = a.is_adhoc && raw.startsWith('__STOCK__');
+
+      let name, cat_id, cat_name, cat_order, sub_id, sub_name, sub_order, grp_id, grp_name, is_adhoc;
+
+      if (isStock) {
+        // Parse: __STOCK__{subName}||{sectionLabel}||{itemName}
+        const inner = raw.replace('__STOCK__', '');
+        const parts = inner.split('||');
+        const subName     = parts[0] || 'Stocks';
+        const sectionLabel = parts[1] || subName;
+        name       = parts[2] || inner;
+        // Use a virtual stock category — fixed ID so all stock items group together
+        cat_id     = '__stock_cat__';
+        cat_name   = 'Stocks & Merchandise (Top-up)';
+        cat_order  = 2;
+        sub_id     = '__stock_' + subName + '__';
+        sub_name   = subName;
+        sub_order  = 1;
+        grp_id     = '__stock_grp_' + sectionLabel + '__';
+        grp_name   = sectionLabel;
+        is_adhoc   = false; // treat as categorised
+      } else {
+        name       = a.is_adhoc ? raw : (tpl?.name || 'Unnamed Task');
+        cat_id     = tpl?.category_id    || null;
+        cat_name   = tpl?.categories?.name || null;
+        cat_order  = tpl?.categories?.sort_order ?? 99;
+        sub_id     = tpl?.subcategory_id || null;
+        sub_name   = tpl?.subcategories?.name || null;
+        sub_order  = tpl?.subcategories?.sort_order ?? 99;
+        grp_id     = tpl?.subgroup_id    || null;
+        grp_name   = tpl?.subgroups?.name || null;
+        is_adhoc   = a.is_adhoc;
+      }
+
       return {
         id:             a.id,
-        name:           a.is_adhoc ? a.custom_task_name : (tpl?.name || 'Unnamed Task'),
+        name,
         description:    tpl?.description || '',
         photo_required: tpl?.photo_required || false,
-        is_adhoc:       a.is_adhoc,
-        cat_id:         tpl?.category_id    || null,
-        cat_name:       tpl?.categories?.name || null,
-        cat_order:      tpl?.categories?.sort_order ?? 99,
-        sub_id:         tpl?.subcategory_id || null,
-        sub_name:       tpl?.subcategories?.name || null,
-        sub_order:      tpl?.subcategories?.sort_order ?? 99,
-        grp_id:         tpl?.subgroup_id    || null,
-        grp_name:       tpl?.subgroups?.name || null,
-        grp_order:      tpl?.subgroups?.sort_order ?? 99,
+        is_adhoc,
+        cat_id, cat_name, cat_order,
+        sub_id, sub_name, sub_order,
+        grp_id,
+        grp_name,
+        grp_order:      99,
         task_order:     tpl?.sort_order ?? 99,
         done:           !!c,
         completed_at:   c?.completed_at    || null,
