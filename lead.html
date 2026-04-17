@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Team Lead – Petron Tasks v8</title>
+  <title>Team Lead – Petron Tasks v9</title>
   <link rel="stylesheet" href="style.css">
   <style>
     .login-wrap { max-width:360px; margin:60px auto 0; }
@@ -701,7 +701,8 @@
   async function saveAssignments() {
     const btn = document.getElementById('saveAssignBtn');
     setLoading(btn, true);
-    await db.from('daily_assignments').delete().eq('date', today());
+    const currentBranch = sessionStorage.getItem('lead_branch') || '';
+    await db.from('daily_assignments').delete().eq('date', today()).eq('branch', currentBranch);
     saveAllStockInputs();
     const rows = [];
     for (const s of allStaff) {
