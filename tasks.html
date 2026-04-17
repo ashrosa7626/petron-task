@@ -199,7 +199,7 @@
         id:             a.id,
         name,
         description:    tpl?.description || '',
-        photo_required: tpl?.photo_required || false,
+        photo_required: tpl?.photo_required || (a.is_adhoc && !isStock) || false,
         is_adhoc,
         cat_id, cat_name, cat_order,
         sub_id, sub_name, sub_order,
