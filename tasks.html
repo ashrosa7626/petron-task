@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>My Tasks – Petron Tasks v3</title>
+  <title>My Tasks – Petron Tasks v4</title>
   <link rel="stylesheet" href="style.css">
   <style>
     /* ── Flag alerts ──────────────────────────── */
@@ -407,7 +407,10 @@
     if (!t) return;
     if (t.completion_id) await db.from('completions').delete().eq('id', t.completion_id);
     t.done=false; t.signoff_status=null; t.flag_reason=null; t.completion_id=null; t.completed_at=null;
-    renderFlagAlerts(); renderTasks();
+    renderFlagAlerts();
+    updateTaskRowInPlace(assignmentId);
+    updateAllCountPills();
+    updateProgressBar();
     showToast('Task reset — please complete it again.');
   }
 
@@ -434,12 +437,105 @@
     if (error) { showToast('Error saving. Try again.', 'error'); return; }
     const t = tasks.find(x => x.id === assignmentId);
     if (t) { t.done=true; t.completed_at=new Date().toISOString(); t.signoff_status='pending'; }
-    closePhotoModal(); renderFlagAlerts(); renderTasks();
+    closePhotoModal();
+
+    // Update just this task row in place — no full re-render
+    updateTaskRowInPlace(assignmentId);
+    updateAllCountPills();
+    updateProgressBar();
+    renderFlagAlerts();
+
     showToast('Task marked complete!');
     if (tasks.every(t => t.done && t.signoff_status !== 'flagged')) {
       showToast('All tasks complete! Great work 🎉');
       setTimeout(() => window.location.href = 'index.html', 2500);
     }
+  }
+
+  function updateTaskRowInPlace(assignmentId) {
+    const t = tasks.find(x => x.id === assignmentId);
+    if (!t) return;
+    // Find the task-item div — it has the task-check inside with onclick containing the id
+    const allItems = document.querySelectorAll('.task-item');
+    for (const item of allItems) {
+      const check = item.querySelector('.task-check');
+      if (check && check.getAttribute('onclick')?.includes(assignmentId)) {
+        // Replace this item with updated version
+        const newItem = document.createElement('div');
+        newItem.innerHTML = taskRow(t);
+        item.replaceWith(newItem.firstElementChild);
+        break;
+      }
+    }
+  }
+
+  function updateAllCountPills() {
+    // Update count pills for all categories and subcategories
+    const list = document.getElementById('taskList');
+    if (!list) return;
+
+    // Re-calculate counts per category
+    const categorised = tasks.filter(t => !t.is_adhoc && t.cat_id);
+    const catMap = {};
+    for (const t of categorised) {
+      if (!catMap[t.cat_id]) catMap[t.cat_id] = [];
+      catMap[t.cat_id].push(t);
+    }
+
+    // Update each category pill
+    for (const [cid, catTasks] of Object.entries(catMap)) {
+      const done  = catTasks.filter(t => t.done && t.signoff_status !== 'flagged').length;
+      const total = catTasks.length;
+      const all   = done === total && total > 0;
+      const pillEl = document.querySelector(`#ach-${cid} .count-pill`);
+      if (pillEl) {
+        pillEl.textContent = `${done}/${total}`;
+        pillEl.className = `count-pill${all?' done':''}`;
+      }
+    }
+
+    // Update subcategory pills
+    const subMap = {};
+    for (const t of categorised) {
+      if (!t.sub_id) continue;
+      if (!subMap[t.sub_id]) subMap[t.sub_id] = [];
+      subMap[t.sub_id].push(t);
+    }
+    for (const [sid, subTasks] of Object.entries(subMap)) {
+      const done  = subTasks.filter(t => t.done && t.signoff_status !== 'flagged').length;
+      const total = subTasks.length;
+      const all   = done === total && total > 0;
+      const pillEl = document.querySelector(`#asc-${sid}`)?.previousElementSibling;
+      if (pillEl) {
+        pillEl.textContent = `${done}/${total}`;
+        pillEl.className = `count-pill${all?' done':''}`;
+      }
+    }
+
+    // Update subgroup pills
+    const grpMap = {};
+    for (const t of categorised) {
+      if (!t.grp_id) continue;
+      if (!grpMap[t.grp_id]) grpMap[t.grp_id] = [];
+      grpMap[t.grp_id].push(t);
+    }
+    for (const [gid, grpTasks] of Object.entries(grpMap)) {
+      const done  = grpTasks.filter(t => t.done && t.signoff_status !== 'flagged').length;
+      const total = grpTasks.length;
+      const all   = done === total && total > 0;
+      const pillEl = document.querySelector(`#agc-${gid}`)?.previousElementSibling;
+      if (pillEl) {
+        pillEl.textContent = `${done}/${total}`;
+        pillEl.className = `count-pill${all?' done':''}`;
+      }
+    }
+  }
+
+  function updateProgressBar() {
+    const done  = tasks.filter(t => t.done && t.signoff_status !== 'flagged').length;
+    const total = tasks.length;
+    document.getElementById('progressLabel').textContent = `${done} / ${total}`;
+    document.getElementById('progressFill').style.width  = total ? `${(done/total)*100}%` : '0%';
   }
 
   document.getElementById('photoInput').addEventListener('change', e => {
