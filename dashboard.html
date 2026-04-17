@@ -76,6 +76,7 @@
       <button onclick="shiftDate(1)" id="nextDateBtn" style="width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:1rem;cursor:pointer;padding:0;line-height:1">›</button>
     </div>
     <input type="hidden" id="dashDate">
+    <span class="text-sm text-muted" id="clock" style="margin-left:8px;font-family:var(--mono);font-size:0.82rem"></span>
   </div>
 
   <div class="content content--wide">
@@ -115,8 +116,8 @@
 <script src="app.js"></script>
 <script>
   function updateClock() {
-    document.getElementById('clock').textContent =
-      new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+    const el = document.getElementById('clock');
+    if (el) el.textContent = new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
   }
   updateClock(); setInterval(updateClock, 1000);
   setInterval(loadDashboard, 30000);
