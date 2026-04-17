@@ -155,7 +155,11 @@
       .from('daily_assignments')
       .select(`
         id, is_adhoc, custom_task_name, staff_id,
-        task_templates(name, photo_required),
+        task_templates(name, photo_required, category_id, subcategory_id, subgroup_id, sort_order,
+          categories(id, name, sort_order),
+          subcategories(id, name, sort_order),
+          subgroups(id, name, sort_order)
+        ),
         completions(id, completed_at, photo_url, signoff_status),
         users(id, name)
       `)
@@ -171,8 +175,12 @@
     for (const a of assignments) {
       const sid = a.staff_id;
       if (!byStaff[sid]) byStaff[sid] = { name: a.users?.name || 'Unknown', tasks: [] };
-      const completion = a.completions?.[0] || null;
+      const completion    = a.completions?.[0] || null;
       const signoffStatus = completion?.signoff_status || null;
+      const tpl           = a.task_templates;
+      const rawName       = a.is_adhoc ? a.custom_task_name : (tpl?.name || 'Task');
+      const isStock       = a.is_adhoc && rawName?.startsWith('TOPUP:');
+      const taskName      = isStock ? rawName.split(':').slice(3).join(':') : rawName;
 
       if (completion) {
         if (signoffStatus === 'approved') soApproved++;
@@ -181,13 +189,21 @@
       }
 
       byStaff[sid].tasks.push({
-        name: a.is_adhoc ? a.custom_task_name : (a.task_templates?.name || 'Task'),
-        photo_required: a.task_templates?.photo_required || false,
-        done: !!completion,
-        completed_at: completion?.completed_at,
-        photo_url: completion?.photo_url,
+        name:           taskName,
+        done:           !!completion,
+        completed_at:   completion?.completed_at,
+        photo_url:      completion?.photo_url,
         signoff_status: signoffStatus,
-        is_adhoc: a.is_adhoc,
+        is_adhoc:       a.is_adhoc && !isStock,
+        cat_id:         isStock ? '__stock_cat__' : (tpl?.category_id || null),
+        cat_name:       isStock ? 'Stocks & Merchandise (Top-up)' : (tpl?.categories?.name || null),
+        cat_order:      isStock ? 2 : (tpl?.categories?.sort_order ?? 99),
+        sub_id:         isStock ? '__stock_' + rawName.split(':')[1] + '__' : (tpl?.subcategory_id || null),
+        sub_name:       isStock ? rawName.split(':')[1] : (tpl?.subcategories?.name || null),
+        sub_order:      isStock ? 1 : (tpl?.subcategories?.sort_order ?? 99),
+        grp_id:         isStock ? '__stock_grp_' + rawName.split(':')[2] + '__' : (tpl?.subgroup_id || null),
+        grp_name:       isStock ? rawName.split(':')[2] : (tpl?.subgroups?.name || null),
+        grp_order:      99,
       });
     }
 
@@ -208,49 +224,104 @@
       const done  = data.tasks.filter(t => t.done).length;
       const total = data.tasks.length;
       totalDone += done; totalAll += total;
-      const pct = total ? Math.round((done/total)*100) : 0;
+      const allDone = done === total && total > 0;
+      const hasFlagged = data.tasks.some(t => t.signoff_status === 'flagged');
+      const initials = data.name.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
 
-      const taskRows = data.tasks.map(t => {
-        let dotClass = 'mini-dot';
-        if (t.done) {
-          if (t.signoff_status === 'approved') dotClass = 'mini-dot mini-dot--approved';
-          else if (t.signoff_status === 'flagged') dotClass = 'mini-dot mini-dot--flagged';
-          else dotClass = 'mini-dot mini-dot--done';
+      // Group tasks by category → subcategory → subgroup
+      const catMap = {};
+      for (const t of data.tasks) {
+        const cid = t.cat_id || '__none__';
+        if (!catMap[cid]) catMap[cid] = { name: t.cat_name || 'Other', order: t.cat_order || 99, subs: {} };
+        const sid2 = t.sub_id || '__none__';
+        if (!catMap[cid].subs[sid2]) catMap[cid].subs[sid2] = { name: t.sub_name, order: t.sub_order || 99, grps: {}, direct: [] };
+        if (t.grp_id) {
+          if (!catMap[cid].subs[sid2].grps[t.grp_id]) catMap[cid].subs[sid2].grps[t.grp_id] = { name: t.grp_name, order: t.grp_order || 99, tasks: [] };
+          catMap[cid].subs[sid2].grps[t.grp_id].tasks.push(t);
+        } else {
+          catMap[cid].subs[sid2].direct.push(t);
+        }
+      }
+
+      let tieredHtml = '';
+      const sortedCats = Object.entries(catMap).sort((a,b) => a[1].order - b[1].order);
+
+      for (const [cid2, cat] of sortedCats) {
+        const catTasks = Object.values(cat.subs).flatMap(s => [...s.direct, ...Object.values(s.grps).flatMap(g => g.tasks)]);
+        const catDone  = catTasks.filter(t => t.done).length;
+        const catAll   = catTasks.length === catDone && catDone > 0;
+        let subcatHtml = '';
+
+        const sortedSubs = Object.entries(cat.subs).sort((a,b) => a[1].order - b[1].order);
+        for (const [sid2, sub] of sortedSubs) {
+          const allSubTasks = [...sub.direct, ...Object.values(sub.grps).flatMap(g => g.tasks)];
+          const subDone = allSubTasks.filter(t => t.done).length;
+          let subContent = sub.direct.map(t => miniTaskRow(t)).join('');
+
+          const sortedGrps = Object.entries(sub.grps).sort((a,b) => a[1].order - b[1].order);
+          for (const [gid, grp] of sortedGrps) {
+            const grpDone = grp.tasks.filter(t => t.done).length;
+            const grpRows = grp.tasks.map(t => miniTaskRow(t)).join('');
+            subContent += `
+              <div class="ac-grp">
+                <div class="ac-grp-header" onclick="tog('dg-${sid}-${gid}','dgc-${sid}-${gid}')">
+                  <span class="ac-grp-name">${grp.name}</span>
+                  <div style="display:flex;align-items:center">
+                    <span class="count-pill ${grpDone===grp.tasks.length&&grp.tasks.length>0?'done':''}">${grpDone}/${grp.tasks.length}</span>
+                    <span class="ac-chev" id="dgc-${sid}-${gid}">▼</span>
+                  </div>
+                </div>
+                <div class="ac-grp-body" id="dg-${sid}-${gid}">${grpRows}</div>
+              </div>`;
+          }
+
+          if (sid2 === '__none__') {
+            subcatHtml += subContent;
+          } else {
+            subcatHtml += `
+              <div class="ac-sub">
+                <div class="ac-sub-header" onclick="tog('ds-${sid}-${sid2}','dsc-${sid}-${sid2}')">
+                  <span class="ac-sub-name">${sub.name || ''}</span>
+                  <div style="display:flex;align-items:center">
+                    <span class="count-pill ${subDone===allSubTasks.length&&allSubTasks.length>0?'done':''}">${subDone}/${allSubTasks.length}</span>
+                    <span class="ac-chev" id="dsc-${sid}-${sid2}">▼</span>
+                  </div>
+                </div>
+                <div class="ac-sub-body" id="ds-${sid}-${sid2}">${subContent}</div>
+              </div>`;
+          }
         }
 
-        const signoffBadge = t.done
-          ? t.signoff_status === 'approved'
-            ? '<span class="signoff-badge signoff-badge--approved">Approved</span>'
-            : t.signoff_status === 'flagged'
-              ? '<span class="signoff-badge signoff-badge--flagged">Flagged</span>'
-              : '<span class="signoff-badge signoff-badge--pending">Awaiting sign-off</span>'
-          : '';
+        tieredHtml += `
+          <div class="ac-cat">
+            <div class="ac-cat-header" onclick="tog('dc-${sid}-${cid2}','dcc-${sid}-${cid2}')">
+              <span class="ac-cat-name">${cat.name}</span>
+              <div style="display:flex;align-items:center">
+                <span class="count-pill ${catAll?'done':''}">${catDone}/${catTasks.length}</span>
+                <span class="ac-chev" id="dcc-${sid}-${cid2}">▼</span>
+              </div>
+            </div>
+            <div class="ac-cat-body" id="dc-${sid}-${cid2}">${subcatHtml}</div>
+          </div>`;
+      }
 
-        return `
-          <div class="mini-task">
-            <div class="${dotClass}"></div>
-            <div style="flex:1;font-size:0.88rem">${t.name}${t.is_adhoc ? ' <span class="badge badge--adhoc" style="font-size:0.7rem">Ad-hoc</span>' : ''}</div>
-            ${t.done ? `<span class="text-sm text-muted">${formatTime(t.completed_at)}</span>` : '<span class="badge badge--pending" style="font-size:0.72rem">Pending</span>'}
-            ${signoffBadge}
-            ${t.photo_url ? `<a href="${t.photo_url}" target="_blank" class="btn btn--ghost btn--sm" style="padding:4px 8px;font-size:0.75rem">Photo</a>` : ''}
-          </div>
-        `;
-      }).join('');
-
+      const pill = `<span class="count-pill ${allDone?'done':''}">${done}/${total}</span>`;
       return `
-        <div class="staff-row">
-          <div class="staff-row__header" onclick="toggleStaff('s${sid}')">
-            <div class="staff-row__avatar">${data.name.charAt(0).toUpperCase()}</div>
-            <div class="staff-row__name">${data.name}</div>
-            <span class="badge ${done===total ? 'badge--done' : 'badge--pending'}">${done}/${total}</span>
-            <span style="color:var(--muted);font-size:0.8rem">${pct}%</span>
+        <div class="ac-staff">
+          <div class="ac-staff-header" id="ash-${sid}" onclick="togStaff('asb-${sid}','ash-${sid}','asc-${sid}')">
+            <div class="ac-staff-avatar">${initials}</div>
+            <div class="ac-staff-name">${data.name}</div>
+            ${hasFlagged ? '<span style="color:var(--danger);font-size:0.85rem">⚠</span>' : ''}
+            ${pill}
+            <span class="ac-chev" id="asc-${sid}">▼</span>
           </div>
-          <div class="progress-bar" style="margin-bottom:0">
-            <div class="progress-bar__fill" style="width:${pct}%"></div>
+          <div class="ac-staff-body" id="asb-${sid}">
+            <div class="progress-bar" style="margin:0;border-radius:0;height:4px">
+              <div class="progress-bar__fill" style="width:${total?Math.round((done/total)*100):0}%"></div>
+            </div>
+            ${tieredHtml}
           </div>
-          <div class="staff-row__tasks" id="s${sid}">${taskRows}</div>
-        </div>
-      `;
+        </div>`;
     }).join('');
 
     document.getElementById('statDone').textContent    = totalDone;
@@ -260,8 +331,40 @@
     document.getElementById('overallFill').style.width = totalAll ? `${(totalDone/totalAll)*100}%` : '0%';
   }
 
-  function toggleStaff(id) {
-    document.getElementById(id).classList.toggle('staff-row__tasks--open');
+  function miniTaskRow(t) {
+    let dotClass = 'mini-dot';
+    if (t.done) {
+      dotClass = t.signoff_status === 'approved' ? 'mini-dot mini-dot--approved'
+               : t.signoff_status === 'flagged'  ? 'mini-dot mini-dot--flagged'
+               : 'mini-dot mini-dot--done';
+    }
+    const signoffBadge = t.done
+      ? t.signoff_status === 'approved'
+        ? '<span class="signoff-badge signoff-badge--approved">Approved</span>'
+        : t.signoff_status === 'flagged'
+          ? '<span class="signoff-badge signoff-badge--flagged">Flagged</span>'
+          : '<span class="signoff-badge signoff-badge--pending">Awaiting</span>'
+      : '';
+    return `
+      <div class="mini-task">
+        <div class="${dotClass}"></div>
+        <div style="flex:1;font-size:0.85rem">${t.name}</div>
+        ${t.done ? `<span class="text-sm text-muted">${formatTime(t.completed_at)}</span>` : '<span class="badge badge--pending" style="font-size:0.7rem">Pending</span>'}
+        ${signoffBadge}
+        ${t.photo_url ? `<a href="${t.photo_url}" target="_blank" class="btn btn--ghost btn--sm" style="padding:3px 7px;font-size:0.72rem">Photo</a>` : ''}
+      </div>`;
+  }
+
+  function tog(bodyId, chevId) {
+    document.getElementById(bodyId)?.classList.toggle('open');
+    document.getElementById(chevId)?.classList.toggle('open');
+  }
+
+  function togStaff(bodyId, headerId, chevId) {
+    const opening = !document.getElementById(bodyId)?.classList.contains('open');
+    document.getElementById(bodyId)?.classList.toggle('open', opening);
+    document.getElementById(headerId)?.classList.toggle('open', opening);
+    document.getElementById(chevId)?.classList.toggle('open', opening);
   }
 
   loadDashboard();
