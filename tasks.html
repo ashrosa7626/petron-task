@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>My Tasks – Petron Tasks v2</title>
+  <title>My Tasks – Petron Tasks v3</title>
   <link rel="stylesheet" href="style.css">
   <style>
     /* ── Flag alerts ──────────────────────────── */
@@ -163,18 +163,16 @@
       const so  = c?.sign_offs?.[0]  || null;
       const tpl = a.task_templates;
       const raw = a.custom_task_name || '';
-      const isStock = a.is_adhoc && raw.startsWith('__STOCK__');
+      const isStock = a.is_adhoc && raw.startsWith('TOPUP:');
 
       let name, cat_id, cat_name, cat_order, sub_id, sub_name, sub_order, grp_id, grp_name, is_adhoc;
 
       if (isStock) {
-        // Parse: __STOCK__{subName}||{sectionLabel}||{itemName}
-        const inner = raw.replace('__STOCK__', '');
-        const parts = inner.split('||');
-        const subName     = parts[0] || 'Stocks';
-        const sectionLabel = parts[1] || subName;
-        name       = parts[2] || inner;
-        // Use a virtual stock category — fixed ID so all stock items group together
+        // Parse: TOPUP:{subName}:{section}:{itemName}
+        const parts       = raw.split(':');
+        const subName     = parts[1] || 'Stocks';
+        const sectionLabel = parts[2] || subName;
+        name       = parts.slice(3).join(':') || raw;
         cat_id     = '__stock_cat__';
         cat_name   = 'Stocks & Merchandise (Top-up)';
         cat_order  = 2;
@@ -183,7 +181,7 @@
         sub_order  = 1;
         grp_id     = '__stock_grp_' + sectionLabel + '__';
         grp_name   = sectionLabel;
-        is_adhoc   = false; // treat as categorised
+        is_adhoc   = false;
       } else {
         name       = a.is_adhoc ? raw : (tpl?.name || 'Unnamed Task');
         cat_id     = tpl?.category_id    || null;
