@@ -6,108 +6,118 @@
   <title>Dashboard – Petron Tasks</title>
   <link rel="stylesheet" href="style.css">
   <style>
-    /* ── Petron Brand Colours ─────────────────── */
+    /* ── Petron Professional Color System ────── */
     :root {
-      --petron-blue:     #003087;
-      --petron-blue-lt:  #0066CC;
-      --petron-red:      #E31837;
-      --petron-red-lt:   rgba(227,24,55,0.15);
-      --petron-blue-lt2: rgba(0,48,135,0.15);
+      --p-bg:       #0B0F1A;
+      --p-card:     #121826;
+      --p-border:   #1F2A44;
+      --p-header:   #0F1B3D;
+      --p-blue:     #3B82F6;
+      --p-blue-lt:  #60A5FA;
+      --p-green:    #22C55E;
+      --p-amber:    #F59E0B;
+      --p-red:      #FF4D4F;
+      --p-red-dk:   #DC2626;
+      --p-text:     #E6EDF7;
+      --p-text2:    #94A3B8;
+      --p-text3:    #64748B;
+      --p-avatar:   #1D4ED8;
+      --p-btn-sec:  #1F2A44;
+      --p-btn-sech: #2A3A5F;
     }
 
-    /* ── Topbar override ──────────────────────── */
-    .topbar {
-      background: var(--petron-blue) !important;
-      border-bottom: 3px solid var(--petron-red) !important;
-    }
-    .topbar select {
-      background: rgba(255,255,255,0.15) !important;
-      border-color: rgba(255,255,255,0.3) !important;
-      color: white !important;
-    }
-    #dashTitle { color: white !important; }
-    #dateDisplay { color: rgba(255,255,255,0.9) !important; }
-    #dateSubDisplay { color: var(--petron-red) !important; }
-    #clock { color: rgba(255,255,255,0.6) !important; }
-    .topbar button {
-      background: rgba(255,255,255,0.15) !important;
-      border-color: rgba(255,255,255,0.3) !important;
-      color: white !important;
-    }
-    .topbar button:hover { background: rgba(255,255,255,0.25) !important; }
+    /* ── Global overrides ─────────────────────── */
+    body { background:var(--p-bg) !important; color:var(--p-text) !important; }
+    .page { background:var(--p-bg) !important; }
+    .card, .stat-card, .so-pill { background:var(--p-card) !important; border-color:var(--p-border) !important; }
+    .section-title { color:var(--p-text2) !important; }
+    .text-muted, .empty-state { color:var(--p-text3) !important; }
+
+    /* ── Topbar ───────────────────────────────── */
+    .topbar { background:var(--p-header) !important; border-bottom:1px solid var(--p-border) !important; }
+    .topbar select { background:var(--p-btn-sec) !important; border:1px solid var(--p-border) !important; color:var(--p-text) !important; border-radius:8px; }
+    #dashTitle { color:var(--p-text) !important; font-size:1.4rem !important; }
+    #dateDisplay { color:var(--p-text) !important; }
+    #dateSubDisplay { color:var(--p-blue) !important; }
+    #clock { color:var(--p-text3) !important; }
+    .topbar button { background:var(--p-btn-sec) !important; border:1px solid var(--p-border) !important; color:var(--p-text) !important; }
+    .topbar button:hover { background:var(--p-btn-sech) !important; }
+
+    /* ── KPI cards ────────────────────────────── */
+    .stat-card__label { color:var(--p-text3) !important; }
+    .stat-card--green .stat-card__num { color:var(--p-green) !important; }
+    .stat-card--amber .stat-card__num { color:var(--p-amber) !important; }
+    .stat-card--blue  .stat-card__num { color:var(--p-blue)  !important; }
+
+    /* ── Progress bar ─────────────────────────── */
+    .progress-bar { background:var(--p-border) !important; }
+    .progress-bar__fill { background:linear-gradient(90deg,var(--p-blue),var(--p-blue-lt)) !important; }
+
+    /* ── Sign-off pills ───────────────────────── */
+    .signoff-summary { display:flex;gap:8px;margin-bottom:24px; }
+    .so-pill { flex:1;background:var(--p-card);border:1px solid var(--p-border);border-radius:var(--radius-sm);padding:12px 10px;text-align:center; }
+    .so-pill__num { font-size:1.4rem;font-weight:700;font-family:var(--mono); }
+    .so-pill__lbl { font-size:0.68rem;color:var(--p-text3);text-transform:uppercase;letter-spacing:0.5px;margin-top:2px; }
+    .so-pill.approved .so-pill__num { color:var(--p-green); }
+    .so-pill.flagged  .so-pill__num { color:var(--p-red); }
+    .so-pill.pending  .so-pill__num { color:var(--p-blue); }
 
     /* ── Staff accordion ──────────────────────── */
     .ac-staff { margin-bottom:10px; }
-    .ac-staff-hdr { display:flex;align-items:center;gap:12px;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--petron-blue);border-radius:var(--radius);cursor:pointer;user-select:none;transition:border-color 0.15s; }
-    .ac-staff-hdr:hover { border-color:var(--petron-blue-lt); }
+    .ac-staff-hdr { display:flex;align-items:center;gap:12px;padding:14px 16px;background:var(--p-card);border:1px solid var(--p-border);border-left:3px solid var(--p-blue);border-radius:var(--radius);cursor:pointer;user-select:none;transition:border-color 0.15s; }
+    .ac-staff-hdr:hover { border-color:var(--p-blue-lt); }
     .ac-staff-hdr.open { border-radius:var(--radius) var(--radius) 0 0;border-bottom-color:transparent; }
-    .ac-staff-av { width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--petron-blue),var(--petron-blue-lt));display:flex;align-items:center;justify-content:center;font-weight:700;color:white;font-size:1rem;flex-shrink:0; }
-    .ac-staff-nm { font-weight:700;flex:1;font-size:0.97rem;color:var(--petron-blue-lt); }
-    .ac-staff-bd { display:none;border:1px solid var(--border);border-top:none;border-radius:0 0 var(--radius) var(--radius);overflow:hidden; }
+    .ac-staff-av { width:38px;height:38px;border-radius:50%;background:var(--p-avatar);display:flex;align-items:center;justify-content:center;font-weight:700;color:white;font-size:1rem;flex-shrink:0; }
+    .ac-staff-nm { font-weight:700;flex:1;font-size:0.97rem;color:var(--p-text); }
+    .ac-staff-bd { display:none;border:1px solid var(--p-border);border-top:none;border-radius:0 0 var(--radius) var(--radius);overflow:hidden;background:var(--p-card); }
     .ac-staff-bd.open { display:block; }
 
     /* ── Category tier ────────────────────────── */
-    .ac-cat-hdr { display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:var(--surface2);cursor:pointer;border-bottom:1px solid var(--border); }
-    .ac-cat-hdr:hover { background:var(--surface); }
+    .ac-cat-hdr { display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:#0F1826;cursor:pointer;border-bottom:1px solid var(--p-border); }
+    .ac-cat-hdr:hover { background:#151F30; }
+    .ac-cat-hdr span[style*="font-weight:700"] { color:var(--p-text) !important; }
     .ac-cat-bd { display:none; }
     .ac-cat-bd.open { display:block; }
 
     /* ── Subcategory tier ─────────────────────── */
-    .ac-sub-hdr { display:flex;align-items:center;justify-content:space-between;padding:8px 20px;background:var(--surface);cursor:pointer;border-bottom:1px solid var(--border);border-left:3px solid var(--petron-blue); }
-    .ac-sub-hdr:hover { background:var(--surface2); }
+    .ac-sub-hdr { display:flex;align-items:center;justify-content:space-between;padding:8px 20px;background:var(--p-card);cursor:pointer;border-bottom:1px solid var(--p-border);border-left:3px solid var(--p-border); }
+    .ac-sub-hdr:hover { background:#0F1826; }
+    .ac-sub-hdr span { color:var(--p-text2) !important; }
     .ac-sub-bd { display:none; }
     .ac-sub-bd.open { display:block; }
 
     /* ── Subgroup tier ────────────────────────── */
-    .ac-grp-hdr { display:flex;align-items:center;justify-content:space-between;padding:7px 28px;background:var(--surface2);cursor:pointer;border-bottom:1px solid var(--border);border-left:3px solid var(--petron-red); }
-    .ac-grp-hdr:hover { background:var(--surface); }
-    .ac-grp-hdr span { color:var(--petron-red) !important; }
+    .ac-grp-hdr { display:flex;align-items:center;justify-content:space-between;padding:7px 28px;background:#0F1826;cursor:pointer;border-bottom:1px solid var(--p-border);border-left:3px solid var(--p-blue); }
+    .ac-grp-hdr:hover { background:#151F30; }
+    .ac-grp-hdr span { color:var(--p-blue) !important; }
     .ac-grp-bd { display:none; }
     .ac-grp-bd.open { display:block; }
 
     /* ── Chevron & pill ───────────────────────── */
-    .chev { font-size:0.7rem;color:var(--muted);transition:transform 0.2s;margin-left:6px; }
+    .chev { font-size:0.7rem;color:var(--p-text3);transition:transform 0.2s;margin-left:6px; }
     .chev.open { transform:rotate(180deg); }
-    .cpill { font-size:0.72rem;font-family:var(--mono);padding:2px 8px;border-radius:99px;background:var(--petron-blue-lt2);color:var(--petron-blue-lt);margin-right:4px; }
-    .cpill.done { background:rgba(34,197,94,0.15);color:var(--success); }
+    .cpill { font-size:0.72rem;font-family:var(--mono);padding:2px 8px;border-radius:99px;background:rgba(59,130,246,0.15);color:var(--p-blue);margin-right:4px; }
+    .cpill.done { background:rgba(34,197,94,0.15);color:var(--p-green); }
 
     /* ── Mini task row ────────────────────────── */
-    .mtask { display:flex;align-items:center;gap:10px;padding:9px 16px;border-bottom:1px solid var(--border); }
+    .mtask { display:flex;align-items:center;gap:10px;padding:9px 16px;border-bottom:1px solid var(--p-border); }
     .mtask:last-child { border-bottom:none; }
-    .mdot { width:10px;height:10px;border-radius:50%;background:var(--border);flex-shrink:0; }
-    .mdot.done { background:var(--petron-blue-lt); }
-    .mdot.approved { background:var(--success);box-shadow:0 0 0 2px rgba(34,197,94,0.25); }
-    .mdot.flagged { background:var(--petron-red); }
+    .mtask div[style*="flex:1"] { color:var(--p-text2) !important; }
+    .mdot { width:10px;height:10px;border-radius:50%;background:var(--p-border);flex-shrink:0; }
+    .mdot.done { background:var(--p-blue); }
+    .mdot.approved { background:var(--p-green);box-shadow:0 0 0 2px rgba(34,197,94,0.2); }
+    .mdot.flagged { background:var(--p-red); }
     .sbadge { font-size:0.68rem;font-weight:600;padding:2px 8px;border-radius:99px;font-family:var(--mono); }
-    .sbadge.approved { background:rgba(34,197,94,0.12);color:var(--success); }
-    .sbadge.flagged  { background:var(--petron-red-lt);color:var(--petron-red); }
-    .sbadge.pending  { background:var(--petron-blue-lt2);color:var(--petron-blue-lt); }
-
-    /* ── Stat cards Petron themed ─────────────── */
-    .stat-card--green .stat-card__num { color:var(--success); }
-    .stat-card--amber .stat-card__num { color:var(--petron-red); }
-    .stat-card--blue  .stat-card__num { color:var(--petron-blue-lt); }
-
-    /* ── Sign-off pills ───────────────────────── */
-    .signoff-summary { display:flex;gap:8px;margin-bottom:24px; }
-    .so-pill { flex:1;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 10px;text-align:center; }
-    .so-pill__num { font-size:1.4rem;font-weight:700;font-family:var(--mono); }
-    .so-pill__lbl { font-size:0.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-top:2px; }
-    .so-pill.approved .so-pill__num { color:var(--success); }
-    .so-pill.flagged  .so-pill__num { color:var(--petron-red); }
-    .so-pill.pending  .so-pill__num { color:var(--petron-blue-lt); }
-
-    /* ── Progress bar Petron blue ─────────────── */
-    .progress-bar__fill { background:linear-gradient(90deg, var(--petron-blue), var(--petron-blue-lt)) !important; }
+    .sbadge.approved { background:rgba(34,197,94,0.12);color:var(--p-green); }
+    .sbadge.flagged  { background:rgba(255,77,79,0.15);color:var(--p-red); }
+    .sbadge.pending  { background:rgba(59,130,246,0.12);color:var(--p-blue); }
+    .badge--pending  { background:rgba(245,158,11,0.15) !important;color:var(--p-amber) !important; }
 
     /* ── Buttons ──────────────────────────────── */
-    .refresh-btn { position:fixed;bottom:90px;right:24px;width:52px;height:52px;border-radius:50%;background:var(--petron-blue);border:none;color:white;font-size:1.3rem;cursor:pointer;box-shadow:var(--shadow);transition:transform 0.2s; }
-    .refresh-btn:hover { transform:rotate(30deg); background:var(--petron-blue-lt); }
-    .sup-btn { position:fixed;bottom:24px;right:24px;display:flex;align-items:center;gap:8px;padding:13px 20px;border-radius:99px;background:var(--petron-red);border:none;color:white;font-family:var(--font);font-size:0.9rem;font-weight:600;cursor:pointer;box-shadow:var(--shadow);text-decoration:none; }
-    .sup-btn:hover { background:#c0102c; }
-
-    /* ── Section title ────────────────────────── */
-    .section-title { color:var(--petron-blue-lt) !important; }
+    .refresh-btn { position:fixed;bottom:90px;right:24px;width:52px;height:52px;border-radius:50%;background:var(--p-btn-sec);border:1px solid var(--p-border);color:var(--p-text);font-size:1.3rem;cursor:pointer;box-shadow:var(--shadow);transition:all 0.2s; }
+    .refresh-btn:hover { transform:rotate(30deg);background:var(--p-btn-sech); }
+    .sup-btn { position:fixed;bottom:24px;right:24px;display:flex;align-items:center;gap:8px;padding:13px 20px;border-radius:99px;background:var(--p-red);border:none;color:white;font-family:var(--font);font-size:0.9rem;font-weight:600;cursor:pointer;box-shadow:var(--shadow);text-decoration:none;transition:background 0.15s; }
+    .sup-btn:hover { background:var(--p-red-dk); }
   </style>
 </head>
 <body>
@@ -121,7 +131,7 @@
     </select>
     <!-- Big centred title -->
     <div style="position:absolute;left:50%;transform:translateX(-50%);text-align:center;pointer-events:none">
-      <div style="font-size:1.5rem;font-weight:800;letter-spacing:-0.5px;color:white" id="dashTitle"><span style="color:#E31837">Safari</span> Dashboard</div>
+      <div style="font-size:1.5rem;font-weight:800;letter-spacing:-0.5px" id="dashTitle">Safari Dashboard</div>
     </div>
     <!-- Date navigator right -->
     <div style="display:flex;align-items:center;gap:8px;margin-left:auto">
@@ -227,7 +237,7 @@
   function switchBranch(branch) {
     currentBranch = branch;
     document.getElementById('branchSelect').value = branch;
-    document.getElementById('dashTitle').innerHTML = '<span style="color:#E31837">' + branch + '</span> Dashboard';
+    document.getElementById('dashTitle').textContent = branch + ' Dashboard';
     loadDashboard();
   }
 
