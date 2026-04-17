@@ -89,6 +89,41 @@
     }
     .lightbox-overlay--open { display: flex; }
     .lightbox-overlay img { max-width: 100%; max-height: 90vh; border-radius: var(--radius-sm); }
+    /* ── Tiered accordion for supervisor ─────── */
+    .ac-cat { border-bottom:1px solid var(--border); }
+    .ac-cat:last-child { border-bottom:none; }
+    .ac-cat-header { display:flex;align-items:center;justify-content:space-between;padding:11px 16px;background:var(--surface2);cursor:pointer;user-select:none;transition:background 0.1s; }
+    .ac-cat-header:hover { background:var(--surface); }
+    .ac-cat-name { font-size:0.88rem;font-weight:700;color:var(--text); }
+    .ac-cat-body { display:none; }
+    .ac-cat-body.open { display:block; }
+    .ac-sub { border-bottom:1px solid var(--border); }
+    .ac-sub:last-child { border-bottom:none; }
+    .ac-sub-header { display:flex;align-items:center;justify-content:space-between;padding:8px 20px;background:rgba(0,0,0,0.06);cursor:pointer;user-select:none; }
+    .ac-sub-header:hover { background:rgba(0,0,0,0.1); }
+    .ac-sub-name { font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted); }
+    .ac-sub-body { display:none; }
+    .ac-sub-body.open { display:block; }
+    .ac-grp { border-bottom:1px solid var(--border); }
+    .ac-grp:last-child { border-bottom:none; }
+    .ac-grp-header { display:flex;align-items:center;justify-content:space-between;padding:7px 28px;background:rgba(79,138,255,0.04);cursor:pointer;user-select:none;border-left:2px solid var(--accent); }
+    .ac-grp-header:hover { background:rgba(79,138,255,0.08); }
+    .ac-grp-name { font-size:0.78rem;font-weight:600;color:var(--accent); }
+    .ac-grp-body { display:none; }
+    .ac-grp-body.open { display:block; }
+    .ac-chev { font-size:0.7rem;color:var(--muted);transition:transform 0.2s; }
+    .ac-chev.open { transform:rotate(180deg); }
+    .count-pill { font-size:0.72rem;font-family:var(--mono);padding:2px 8px;border-radius:99px;background:rgba(79,138,255,0.1);color:var(--accent);margin-right:4px; }
+    .count-pill.done { background:rgba(34,197,94,0.12);color:var(--success); }
+    /* Group header for staff */
+    .sup-staff-block { margin-bottom:12px; }
+    .sup-staff-header { display:flex;align-items:center;gap:10px;padding:13px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;user-select:none;transition:border-color 0.15s; }
+    .sup-staff-header:hover { border-color:var(--accent); }
+    .sup-staff-header.open { border-radius:var(--radius) var(--radius) 0 0;border-bottom-color:transparent; }
+    .sup-staff-avatar { width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-weight:700;color:white;font-size:0.9rem;flex-shrink:0; }
+    .sup-staff-name { font-weight:700;flex:1; }
+    .sup-staff-body { display:none;border:1px solid var(--border);border-top:none;border-radius:0 0 var(--radius) var(--radius);overflow:hidden; }
+    .sup-staff-body.open { display:block; }
   </style>
 </head>
 <body>
@@ -314,6 +349,17 @@
     renderCompletions();
   }
 
+  function tog(bodyId, chevId) {
+    document.getElementById(bodyId)?.classList.toggle('open');
+    document.getElementById(chevId)?.classList.toggle('open');
+  }
+  function togBlock(bodyId, headerId, chevId) {
+    const opening = !document.getElementById(bodyId)?.classList.contains('open');
+    document.getElementById(bodyId)?.classList.toggle('open', opening);
+    document.getElementById(headerId)?.classList.toggle('open', opening);
+    document.getElementById(chevId)?.classList.toggle('open', opening);
+  }
+
   function renderCompletions() {
     const list = document.getElementById('completionList');
     const filtered = activeFilter === 'all'
@@ -325,57 +371,124 @@
       return;
     }
 
-    list.innerHTML = filtered.map(c => {
-      const statusBadge = c.status === 'approved'
-        ? '<span class="badge badge--done">Approved</span>'
-        : c.status === 'flagged'
-          ? '<span class="badge" style="background:rgba(239,68,68,0.1);color:var(--danger)">Flagged</span>'
-          : '<span class="badge badge--pending">Pending review</span>';
+    // Group by staff → category → subcategory → subgroup → tasks
+    const staffMap = {};
+    for (const c of filtered) {
+      const sname = c.staffName;
+      if (!staffMap[sname]) staffMap[sname] = { initial: c.staffInitial, cats: {} };
+      const cname = c.cat_name || 'Other';
+      if (!staffMap[sname].cats[cname]) staffMap[sname].cats[cname] = { order: c.cat_order || 99, subs: {} };
+      const subname = c.sub_name || '__none__';
+      if (!staffMap[sname].cats[cname].subs[subname]) staffMap[sname].cats[cname].subs[subname] = { order: c.sub_order || 99, grps: {}, direct: [] };
+      if (c.grp_name) {
+        if (!staffMap[sname].cats[cname].subs[subname].grps[c.grp_name]) staffMap[sname].cats[cname].subs[subname].grps[c.grp_name] = [];
+        staffMap[sname].cats[cname].subs[subname].grps[c.grp_name].push(c);
+      } else {
+        staffMap[sname].cats[cname].subs[subname].direct.push(c);
+      }
+    }
 
-      const shiftArea = [c.shift, c.area].filter(x => x && x !== 'any').join(' · ');
+    list.innerHTML = Object.entries(staffMap).map(([sname, sdata], si) => {
+      const sid = 'sup-s' + si;
+      let catHtml = '';
+      const sortedCats = Object.entries(sdata.cats).sort((a,b) => a[1].order - b[1].order);
 
-      const photoHtml = c.photoUrl
-        ? `<img class="photo-thumb" src="${c.photoUrl}" alt="Task photo"
-               onclick="openLightbox('${c.photoUrl}')">`
-        : '';
+      for (const [cname, cat] of sortedCats) {
+        const cid = sid + '-c' + cname.replace(/\W/g,'');
+        let subHtml = '';
+        const sortedSubs = Object.entries(cat.subs).sort((a,b) => a[1].order - b[1].order);
 
-      const actionHtml = c.status === 'pending' ? `
-        <div class="signoff-actions" id="actions-${c.id}">
-          <button class="btn btn--success btn--sm" onclick="signOff('${c.id}','approved')">Approve</button>
-          <button class="btn btn--danger btn--sm"  onclick="showFlagInput('${c.id}')">Flag Issue</button>
-        </div>
-        <textarea class="flag-notes" id="notes-${c.id}" rows="2"
-          placeholder="Describe the issue (required to flag)..."></textarea>
-        <button class="btn btn--danger btn--sm btn--full" id="submitFlag-${c.id}"
-          style="display:none;margin-top:8px" onclick="signOff('${c.id}','flagged')">
-          Submit Flag
-        </button>
-      ` : c.status === 'approved'
-        ? '<div class="text-sm" style="color:var(--success);font-weight:600">Approved</div>'
-        : `<div class="text-sm" style="color:var(--danger);font-weight:600">Flagged${c.signoffNotes ? ': ' + c.signoffNotes : ''}</div>`;
+        for (const [subname, sub] of sortedSubs) {
+          const subid = cid + '-s' + subname.replace(/\W/g,'');
+          let subContent = sub.direct.map(c => completionCard(c)).join('');
+
+          for (const [grpname, grpItems] of Object.entries(sub.grps)) {
+            const gid = subid + '-g' + grpname.replace(/\W/g,'');
+            subContent += `
+              <div class="ac-grp">
+                <div class="ac-grp-header" onclick="tog('${gid}-body','${gid}-chev')">
+                  <span class="ac-grp-name">${grpname}</span>
+                  <span class="ac-chev" id="${gid}-chev">▼</span>
+                </div>
+                <div class="ac-grp-body" id="${gid}-body">${grpItems.map(c => completionCard(c)).join('')}</div>
+              </div>`;
+          }
+
+          if (subname === '__none__') {
+            subHtml += subContent;
+          } else {
+            subHtml += `
+              <div class="ac-sub">
+                <div class="ac-sub-header" onclick="tog('${subid}-body','${subid}-chev')">
+                  <span class="ac-sub-name">${subname}</span>
+                  <span class="ac-chev" id="${subid}-chev">▼</span>
+                </div>
+                <div class="ac-sub-body" id="${subid}-body">${subContent}</div>
+              </div>`;
+          }
+        }
+
+        catHtml += `
+          <div class="ac-cat">
+            <div class="ac-cat-header" onclick="tog('${cid}-body','${cid}-chev')">
+              <span class="ac-cat-name">${cname}</span>
+              <span class="ac-chev" id="${cid}-chev">▼</span>
+            </div>
+            <div class="ac-cat-body" id="${cid}-body">${subHtml}</div>
+          </div>`;
+      }
 
       return `
-        <div class="completion-card completion-card--${c.status}" id="card-${c.id}">
-          <div class="completion-header">
-            <div class="completion-avatar">${c.staffInitial}</div>
-            <div class="completion-meta">
-              <div class="completion-task">
-                ${c.actionWord ? `<span style="font-size:0.72rem;font-weight:700;padding:2px 8px;border-radius:99px;background:rgba(79,138,255,0.12);color:var(--accent);font-family:var(--mono);margin-right:6px">${c.actionWord}</span>` : ''}${c.taskName}
-              </div>
-              <div class="completion-info">
-                <span>${c.staffName}</span>
-                <span>${formatTime(c.completedAt)}</span>
-                ${shiftArea ? `<span>${shiftArea}</span>` : ''}
-                ${statusBadge}
-              </div>
+        <div class="sup-staff-block">
+          <div class="sup-staff-header" id="${sid}-hdr" onclick="togBlock('${sid}-body','${sid}-hdr','${sid}-chev')">
+            <div class="sup-staff-avatar">${sdata.initial}</div>
+            <div class="sup-staff-name">${sname}</div>
+            <span class="ac-chev" id="${sid}-chev">▼</span>
+          </div>
+          <div class="sup-staff-body" id="${sid}-body">${catHtml}</div>
+        </div>`;
+    }).join('');
+  }
+
+  function completionCard(c) {
+    const statusBadge = c.status === 'approved'
+      ? '<span class="badge badge--done">Approved</span>'
+      : c.status === 'flagged'
+        ? '<span class="badge" style="background:rgba(239,68,68,0.1);color:var(--danger)">Flagged</span>'
+        : '<span class="badge badge--pending">Pending review</span>';
+
+    const photoHtml = c.photoUrl
+      ? `<img class="photo-thumb" src="${c.photoUrl}" alt="Task photo" onclick="openLightbox('${c.photoUrl}')">`
+      : '';
+
+    const actionHtml = c.status === 'pending' ? `
+      <div class="signoff-actions" id="actions-${c.id}">
+        <button class="btn btn--success btn--sm" onclick="signOff('${c.id}','approved')">Approve</button>
+        <button class="btn btn--danger btn--sm" onclick="showFlagInput('${c.id}')">Flag Issue</button>
+      </div>
+      <textarea class="flag-notes" id="notes-${c.id}" rows="2" placeholder="Describe the issue (required to flag)..."></textarea>
+      <button class="btn btn--danger btn--sm btn--full" id="submitFlag-${c.id}" style="display:none;margin-top:8px" onclick="signOff('${c.id}','flagged')">Submit Flag</button>
+    ` : c.status === 'approved'
+      ? '<div class="text-sm" style="color:var(--success);font-weight:600">Approved</div>'
+      : `<div class="text-sm" style="color:var(--danger);font-weight:600">Flagged${c.signoffNotes ? ': ' + c.signoffNotes : ''}</div>`;
+
+    return `
+      <div class="completion-card completion-card--${c.status}" id="card-${c.id}" style="margin:8px 16px;border-radius:var(--radius-sm)">
+        <div class="completion-header">
+          <div class="completion-meta" style="flex:1">
+            <div class="completion-task">
+              ${c.actionWord ? `<span style="font-size:0.72rem;font-weight:700;padding:2px 8px;border-radius:99px;background:rgba(79,138,255,0.12);color:var(--accent);font-family:var(--mono);margin-right:6px">${c.actionWord}</span>` : ''}${c.taskName}
+            </div>
+            <div class="completion-info">
+              <span>${formatTime(c.completedAt)}</span>
+              ${statusBadge}
             </div>
           </div>
-          ${photoHtml}
-          ${c.notes ? `<div class="text-sm text-muted" style="margin-bottom:10px">"${c.notes}"</div>` : ''}
-          ${actionHtml}
         </div>
-      `;
-    }).join('');
+        ${photoHtml}
+        ${c.notes ? `<div class="text-sm text-muted" style="margin-bottom:10px">"${c.notes}"</div>` : ''}
+        ${actionHtml}
+      </div>`;
   }
 
   function showFlagInput(completionId) {
