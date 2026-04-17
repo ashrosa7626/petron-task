@@ -3,193 +3,110 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Team Lead – Petron Tasks v5</title>
+  <title>My Tasks – Petron Tasks v2</title>
   <link rel="stylesheet" href="style.css">
   <style>
-    .login-wrap { max-width:360px; margin:60px auto 0; }
-    .login-title { font-size:1.4rem; font-weight:700; margin-bottom:6px; }
-    .login-sub   { color:var(--muted); font-size:0.9rem; margin-bottom:28px; }
+    /* ── Flag alerts ──────────────────────────── */
+    .flag-alert { background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.35); border-radius:var(--radius); padding:14px 16px; margin-bottom:10px; animation:alert-in 0.3s ease; }
+    @keyframes alert-in { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:translateY(0)} }
+    .flag-alert__header { display:flex; align-items:center; gap:10px; margin-bottom:6px; }
+    .flag-icon { width:28px;height:28px;border-radius:50%;background:rgba(239,68,68,0.15);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:0.9rem; }
+    .flag-alert__title { font-weight:700;font-size:0.92rem;color:var(--danger);flex:1; }
+    .flag-alert__reason { font-size:0.84rem;color:var(--text);background:rgba(239,68,68,0.05);border-radius:var(--radius-sm);padding:8px 10px;margin-bottom:10px;border-left:2px solid var(--danger); }
+    .flag-alert__task { font-size:0.78rem;color:var(--muted);margin-bottom:10px; }
 
-    .tab-bar { display:flex; gap:4px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm); padding:4px; margin-bottom:24px; }
-    .tab-btn { flex:1; padding:9px; border:none; background:transparent; border-radius:6px; font-family:var(--font); font-size:0.88rem; font-weight:600; color:var(--muted); cursor:pointer; transition:all 0.15s; }
-    .tab-btn--active { background:var(--accent); color:white; }
-
-    .nav-link { color:var(--muted); font-size:0.85rem; text-decoration:none; transition:color 0.15s; }
-    .nav-link:hover { color:var(--accent); }
-
-    /* ── Staff block ───────────────────────── */
-    .staff-assign-row { background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:16px; overflow:hidden; }
-    .staff-assign-row__header { display:flex; align-items:center; gap:12px; padding:14px 16px; cursor:pointer; user-select:none; }
-    .staff-assign-row__header:hover { background:var(--surface); }
-    .staff-assign-row__avatar { width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-weight:700;color:white;font-size:0.95rem;flex-shrink:0; }
-    .staff-assign-row__name { font-weight:700; flex:1; }
-    .staff-assign-row__body { border-top:1px solid var(--border); }
-
-    /* ── Category tier ─────────────────────── */
-    .ac-cat { border-bottom:1px solid var(--border); }
-    .ac-cat:last-child { border-bottom:none; }
-    .ac-cat-header { display:flex;align-items:center;justify-content:space-between; padding:10px 16px; background:var(--surface); cursor:pointer; user-select:none; transition:background 0.1s; }
-    .ac-cat-header:hover { background:var(--surface2); }
-    .ac-cat-name { font-size:0.88rem; font-weight:700; color:var(--text); }
-    .ac-cat-body { display:none; }
+    /* ── Category (Level 1) ───────────────────── */
+    .ac-cat { margin-bottom:10px; }
+    .ac-cat-header {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:14px 16px; background:var(--surface); border:1px solid var(--border);
+      border-radius:var(--radius); cursor:pointer; user-select:none;
+      transition:border-color 0.15s, background 0.15s;
+    }
+    .ac-cat-header:hover { border-color:var(--accent); background:var(--surface2); }
+    .ac-cat-header.open { border-radius:var(--radius) var(--radius) 0 0; border-bottom-color:transparent; }
+    .ac-cat-name { font-weight:700; font-size:1rem; }
+    .ac-cat-body { display:none; border:1px solid var(--border); border-top:none; border-radius:0 0 var(--radius) var(--radius); overflow:hidden; }
     .ac-cat-body.open { display:block; }
 
-    /* ── Subcategory tier ──────────────────── */
+    /* ── Subcategory (Level 2) ────────────────── */
     .ac-sub { border-bottom:1px solid var(--border); }
     .ac-sub:last-child { border-bottom:none; }
-    .ac-sub-header { display:flex;align-items:center;justify-content:space-between; padding:8px 20px; background:rgba(0,0,0,0.06); cursor:pointer; user-select:none; }
-    .ac-sub-header:hover { background:rgba(0,0,0,0.1); }
-    .ac-sub-name { font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted); }
+    .ac-sub-header { display:flex;align-items:center;justify-content:space-between; padding:10px 16px; background:var(--surface2); cursor:pointer; user-select:none; transition:background 0.1s; }
+    .ac-sub-header:hover { background:var(--surface); }
+    .ac-sub-name { font-size:0.82rem;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted); }
     .ac-sub-body { display:none; }
     .ac-sub-body.open { display:block; }
 
-    /* ── Subgroup tier ─────────────────────── */
+    /* ── Subgroup (Level 3) ───────────────────── */
     .ac-grp { border-bottom:1px solid var(--border); }
     .ac-grp:last-child { border-bottom:none; }
-    .ac-grp-header { display:flex;align-items:center;justify-content:space-between; padding:7px 28px; background:rgba(79,138,255,0.05); cursor:pointer; user-select:none; border-left:2px solid var(--accent); }
-    .ac-grp-header:hover { background:rgba(79,138,255,0.1); }
-    .ac-grp-name { font-size:0.78rem;font-weight:600;color:var(--accent); }
+    .ac-grp-header { display:flex;align-items:center;justify-content:space-between; padding:9px 20px; background:rgba(79,138,255,0.04); cursor:pointer; user-select:none; border-left:2px solid var(--accent); }
+    .ac-grp-header:hover { background:rgba(79,138,255,0.08); }
+    .ac-grp-name { font-size:0.82rem;font-weight:600;color:var(--accent); }
     .ac-grp-body { display:none; }
     .ac-grp-body.open { display:block; }
 
-    /* ── Chevron ───────────────────────────── */
-    .ac-chev { font-size:0.65rem;color:var(--muted);transition:transform 0.2s; }
+    /* ── Chevron ──────────────────────────────── */
+    .ac-chev { font-size:0.7rem;color:var(--muted);transition:transform 0.2s; }
     .ac-chev.open { transform:rotate(180deg); }
 
-    /* ── Task checkbox rows ────────────────── */
-    .task-checkbox { display:flex;align-items:center;gap:10px;cursor:pointer;padding:9px 16px;border-bottom:1px solid var(--border);transition:background 0.1s; }
-    .task-checkbox:last-child { border-bottom:none; }
-    .task-checkbox:hover { background:var(--surface); }
-    .task-checkbox--sub  { padding-left:28px; }
-    .task-checkbox--grp  { padding-left:40px; }
-    .task-checkbox input[type=checkbox] { accent-color:var(--accent);width:16px;height:16px;cursor:pointer;flex-shrink:0; }
-    .task-checkbox__label { font-size:0.88rem;flex:1; }
+    /* ── Count pill ───────────────────────────── */
+    .count-pill { font-size:0.72rem;font-family:var(--mono);padding:2px 8px;border-radius:99px;background:rgba(79,138,255,0.1);color:var(--accent);margin-right:4px; }
+    .count-pill.done { background:rgba(34,197,94,0.12);color:var(--success); }
 
-    /* Select all row */
-    .select-all-row { display:flex;align-items:center;gap:8px;padding:7px 16px;background:rgba(79,138,255,0.05);border-bottom:1px solid var(--border);cursor:pointer; }
-    .select-all-row:hover { background:rgba(79,138,255,0.1); }
-    .select-all-row input { accent-color:var(--accent);width:14px;height:14px;cursor:pointer; }
-    .select-all-row span { font-size:0.75rem;font-weight:600;color:var(--accent); }
-
-    /* ── Ad-hoc section ────────────────────── */
-    .adhoc-section { border-top:1px solid var(--border);padding:12px 16px; }
-    .adhoc-title { font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--muted);margin-bottom:10px; }
-    .adhoc-input-row { display:flex;gap:8px; }
-    .adhoc-input-row input { flex:1;padding:9px 12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--font);font-size:0.88rem;outline:none; }
-    .adhoc-input-row input:focus { border-color:var(--accent); }
-    .adhoc-tag { display:inline-flex;align-items:center;gap:6px;background:rgba(124,92,252,0.15);color:var(--accent2);border-radius:99px;padding:4px 12px;font-size:0.82rem;font-weight:600;margin:4px 4px 0 0;cursor:pointer; }
-    .adhoc-tag:hover { background:rgba(124,92,252,0.25); }
-
-    /* ── Stock manual input ────────────────── */
-    .stock-section { border-bottom:1px solid var(--border); }
-    .stock-section:last-child { border-bottom:none; }
-    .stock-section-header { padding:9px 20px; background:rgba(0,0,0,0.06); }
-    .stock-section-name { font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted); }
-    .stock-subgroup { border-top:1px solid var(--border); padding:10px 20px 12px; background:rgba(79,138,255,0.03); border-left:2px solid var(--accent); }
-    .stock-subgroup-name { font-size:0.78rem;font-weight:600;color:var(--accent);margin-bottom:8px; }
-    .stock-items { display:flex;flex-direction:column;gap:6px;margin-bottom:8px; }
-    .stock-item-row { display:flex;align-items:center;gap:6px; }
-    .stock-item-row input { flex:1;padding:7px 10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--font);font-size:0.85rem;outline:none; }
-    .stock-item-row input:focus { border-color:var(--accent); }
-    .stock-item-row .del-btn { background:transparent;border:none;color:var(--danger);cursor:pointer;font-size:1rem;padding:4px 6px;line-height:1; }
-    .stock-add-btn { font-size:0.78rem;padding:5px 12px; }
-    .stock-direct { padding:10px 20px 12px; }
-    .stock-direct-name { font-size:0.78rem;font-weight:600;color:var(--muted);margin-bottom:8px; }
+    /* ── Task rows ────────────────────────────── */
+    .task-item { border-radius:0;border-left:none;border-right:none;border-top:none;margin-bottom:0; }
+    .task-item:last-child { border-bottom:none; }
+    .task-item--flagged { background:rgba(239,68,68,0.04); }
+    .task-item--flagged .task-item__name { color:var(--danger); }
   </style>
 </head>
 <body>
 <div class="page">
   <div class="topbar">
-    <a href="index.html" class="btn btn--ghost btn--sm">← Staff View</a>
-    <div class="topbar__logo">Petron<span> Lead</span></div>
-    <div id="leadNav" style="display:none;gap:12px;align-items:center" class="flex">
-      <a href="dashboard.html" class="nav-link">Dashboard</a>
-      <button class="btn btn--ghost btn--sm" onclick="logout()">Logout</button>
-    </div>
+    <a href="index.html" class="btn btn--ghost btn--sm">← Done</a>
+    <div class="topbar__logo">Petron<span> Tasks</span></div>
+    <div class="text-sm text-muted" id="clock"></div>
   </div>
 
-  <!-- LOGIN -->
-  <div class="content" id="loginView">
-    <div class="login-wrap">
-      <div class="login-title">Team Lead Login</div>
-      <div class="login-sub">Enter your credentials to manage today's tasks.</div>
-      <div class="field"><label>Email</label><input type="email" id="email" placeholder="lead@petron.com"></div>
-      <div class="field"><label>Password</label><input type="password" id="password" placeholder="••••••••"></div>
-      <div style="color:var(--danger);font-size:0.85rem;min-height:20px;margin-bottom:12px" id="loginError"></div>
-      <button class="btn btn--primary btn--full" id="loginBtn" onclick="doLogin()">Login</button>
-    </div>
-  </div>
-
-  <!-- MAIN LEAD VIEW -->
-  <div class="content content--wide" id="leadView" style="display:none">
-    <div style="margin-bottom:24px">
-      <div style="font-size:1.3rem;font-weight:700">Morning Setup</div>
-      <div class="text-muted text-sm" id="leadDateLabel"></div>
+  <div class="content">
+    <div style="margin-bottom:20px">
+      <div style="font-size:1.3rem;font-weight:700" id="greeting">Hi 👋</div>
+      <div class="text-muted text-sm" id="dateLabel"></div>
     </div>
 
-    <div class="tab-bar">
-      <button class="tab-btn tab-btn--active" id="tab-assign"    onclick="showTab('assign')">Assign Tasks</button>
-      <button class="tab-btn"                 id="tab-templates" onclick="showTab('templates')">Task Templates</button>
-      <button class="tab-btn"                 id="tab-staff"     onclick="showTab('staff')">Manage Staff</button>
-    </div>
+    <div id="flagAlerts"></div>
 
-    <!-- ASSIGN TAB -->
-    <div id="view-assign">
-      <div class="flex flex--between" style="margin-bottom:16px">
-        <div class="section-title" style="margin:0">Assign to staff</div>
-        <button class="btn btn--primary btn--sm" id="saveAssignBtn" onclick="saveAssignments()">Save Day's Tasks</button>
+    <div class="card" style="margin-bottom:20px">
+      <div class="flex flex--between" style="margin-bottom:8px">
+        <span class="text-sm" style="font-weight:600">Today's Progress</span>
+        <span class="text-sm text-muted" id="progressLabel">0 / 0</span>
       </div>
-      <div id="assignList"><div class="empty-state">Loading...</div></div>
+      <div class="progress-bar">
+        <div class="progress-bar__fill" id="progressFill" style="width:0%"></div>
+      </div>
     </div>
 
-    <!-- TEMPLATES TAB -->
-    <div id="view-templates" style="display:none">
-      <div class="flex flex--between" style="margin-bottom:16px">
-        <div class="section-title" style="margin:0">Task Templates</div>
-        <button class="btn btn--primary btn--sm" onclick="openNewTemplate()">+ New Template</button>
-      </div>
-      <div id="templateList"><div class="empty-state">Loading...</div></div>
-    </div>
-
-    <!-- STAFF TAB -->
-    <div id="view-staff" style="display:none">
-      <div class="flex flex--between" style="margin-bottom:16px">
-        <div class="section-title" style="margin:0">Staff Members</div>
-        <button class="btn btn--primary btn--sm" onclick="openNewStaff()">+ Add Staff</button>
-      </div>
-      <div id="staffList"><div class="empty-state">Loading...</div></div>
-    </div>
+    <div class="section-title">Your Tasks</div>
+    <div id="taskList"><div class="empty-state">Loading tasks...</div></div>
   </div>
 </div>
 
-<!-- Template Modal -->
-<div class="modal-overlay" id="templateModal">
+<!-- Photo Modal -->
+<div class="modal-overlay" id="photoModal">
   <div class="modal">
-    <div class="modal__title" id="templateModalTitle">New Task Template</div>
-    <input type="hidden" id="editTemplateId">
-    <div class="field"><label>Task Name</label><input type="text" id="tplName" placeholder="e.g. Clean counter tops"></div>
-    <div class="field"><label>Description (optional)</label><textarea id="tplDesc" placeholder="Any extra details..."></textarea></div>
-    <div class="toggle-row">
-      <span style="font-size:0.9rem;font-weight:600">Requires Photo</span>
-      <label class="toggle"><input type="checkbox" id="tplPhoto"><span class="toggle__slider"></span></label>
+    <div class="modal__title" id="photoModalTitle">Upload Photo</div>
+    <p class="text-sm text-muted" style="margin-bottom:16px">This task requires a photo to be completed.</p>
+    <div class="photo-zone" onclick="document.getElementById('photoInput').click()">
+      <div class="photo-zone__icon">📷</div>
+      <div class="photo-zone__label">Tap to take a photo or choose from gallery</div>
     </div>
+    <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none">
+    <img id="photoPreview" class="photo-preview" alt="Preview">
     <div class="modal__actions">
-      <button class="btn btn--ghost" onclick="closeModal('templateModal')">Cancel</button>
-      <button class="btn btn--primary" onclick="saveTemplate()">Save Template</button>
-    </div>
-  </div>
-</div>
-
-<!-- Staff Modal -->
-<div class="modal-overlay" id="staffModal">
-  <div class="modal">
-    <div class="modal__title" id="staffModalTitle">Add Staff Member</div>
-    <input type="hidden" id="editStaffId">
-    <div class="field"><label>Full Name</label><input type="text" id="staffName" placeholder="e.g. Jane Smith"></div>
-    <div class="field"><label>4-Digit PIN</label><input type="text" id="staffPin" maxlength="4" placeholder="e.g. 1234" pattern="[0-9]{4}"></div>
-    <div class="modal__actions">
-      <button class="btn btn--ghost" onclick="closeModal('staffModal')">Cancel</button>
-      <button class="btn btn--primary" onclick="saveStaff()">Save</button>
+      <button class="btn btn--ghost" onclick="closePhotoModal()">Cancel</button>
+      <button class="btn btn--success" id="confirmPhotoBtn" onclick="confirmPhoto()" disabled>Mark Complete</button>
     </div>
   </div>
 </div>
@@ -199,607 +116,362 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="app.js"></script>
 <script>
-  let currentUser    = null;
-  let allStaff       = [];
-  let allTemplates   = [];
-  let allCategories  = [];
-  let allSubcats     = [];
-  let allSubgroups   = [];
-  let staffSelections = {};
+  const staffId   = sessionStorage.getItem('staff_id');
+  const staffName = sessionStorage.getItem('staff_name');
+  if (!staffId) window.location.href = 'index.html';
 
-  document.getElementById('leadDateLabel').textContent =
+  document.getElementById('greeting').textContent = `Hi, ${staffName} 👋`;
+  document.getElementById('dateLabel').textContent =
     new Date().toLocaleDateString([], { weekday:'long', month:'long', day:'numeric' });
 
-  (async () => {
-    const { data: { session } } = await db.auth.getSession();
-    if (session) enterLeadView(session.user);
-  })();
-
-  async function doLogin() {
-    const email = document.getElementById('email').value.trim();
-    const pass  = document.getElementById('password').value;
-    const btn   = document.getElementById('loginBtn');
-    document.getElementById('loginError').textContent = '';
-    setLoading(btn, true);
-    const { data, error } = await db.auth.signInWithPassword({ email, password: pass });
-    setLoading(btn, false);
-    if (error) { document.getElementById('loginError').textContent = error.message; return; }
-    const { data: user } = await db.from('users').select('role').eq('auth_id', data.user.id).single();
-    if (!user || user.role !== 'lead') {
-      await db.auth.signOut();
-      document.getElementById('loginError').textContent = 'Access denied. Team Lead accounts only.';
-      return;
-    }
-    enterLeadView(data.user);
+  function updateClock() {
+    document.getElementById('clock').textContent =
+      new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
   }
+  updateClock(); setInterval(updateClock, 1000);
 
-  function enterLeadView(user) {
-    currentUser = user;
-    document.getElementById('loginView').style.display  = 'none';
-    document.getElementById('leadView').style.display   = '';
-    document.getElementById('leadNav').style.display    = 'flex';
-    loadAssignView();
-  }
+  let tasks = [];
+  let currentAssignmentId = null;
+  let selectedFile = null;
 
-  async function logout() { await db.auth.signOut(); window.location.reload(); }
+  async function loadTasks() {
+    const { data, error } = await db
+      .from('daily_assignments')
+      .select(`
+        id, is_adhoc, custom_task_name,
+        task_templates(
+          name, description, photo_required, has_note, sort_order,
+          category_id, subcategory_id, subgroup_id,
+          categories(id, name, sort_order),
+          subcategories(id, name, sort_order),
+          subgroups(id, name, sort_order)
+        ),
+        completions(id, completed_at, signoff_status,
+          sign_offs(notes)
+        )
+      `)
+      .eq('date', today())
+      .eq('staff_id', staffId);
 
-  function showTab(tab) {
-    ['assign','templates','staff'].forEach(t => {
-      document.getElementById('view-' + t).style.display = t === tab ? '' : 'none';
-      document.getElementById('tab-'  + t).classList.toggle('tab-btn--active', t === tab);
-    });
-    if (tab === 'templates') loadTemplates();
-    if (tab === 'staff')     loadStaffList();
-  }
-
-  // ── ASSIGN TAB ──────────────────────────────────────────
-  async function loadAssignView() {
-    const [staffRes, tplRes, catRes, subRes, grpRes, existingRes] = await Promise.all([
-      db.from('users').select('id,name').eq('role','staff').order('name'),
-      db.from('task_templates').select('*').eq('is_active',true).order('sort_order'),
-      db.from('categories').select('*').order('sort_order'),
-      db.from('subcategories').select('*').order('sort_order'),
-      db.from('subgroups').select('*').order('sort_order'),
-      db.from('daily_assignments').select('*').eq('date', today()),
-    ]);
-
-    allStaff      = staffRes.data || [];
-    allTemplates  = tplRes.data   || [];
-    allCategories = catRes.data   || [];
-    allSubcats    = subRes.data   || [];
-    allSubgroups  = grpRes.data   || [];
-    const existing = existingRes.data || [];
-
-    staffSelections = {};
-    for (const s of allStaff) {
-      const mine = existing.filter(a => a.staff_id === s.id);
-      staffSelections[s.id] = {
-        templateIds: new Set(mine.filter(a => !a.is_adhoc).map(a => a.task_template_id)),
-        adhocTasks:  mine.filter(a => a.is_adhoc).map(a => ({ name: a.custom_task_name, photoRequired: a.photo_required || false })),
-      };
-    }
-
-    renderAssignView();
-  }
-
-  function renderAssignView() {
-    const list = document.getElementById('assignList');
-    if (!allStaff.length) {
-      list.innerHTML = '<div class="empty-state">No staff found. Add staff in the Manage Staff tab first.</div>';
+    if (error) {
+      document.getElementById('taskList').innerHTML = '<div class="empty-state">Error loading tasks.</div>';
       return;
     }
 
-    // Build category → subcat → subgroup → tasks tree
-    const tree = buildTree();
+    tasks = (data || []).map(a => {
+      const c   = a.completions?.[0] || null;
+      const so  = c?.sign_offs?.[0]  || null;
+      const tpl = a.task_templates;
+      const raw = a.custom_task_name || '';
+      const isStock = a.is_adhoc && raw.startsWith('__STOCK__');
 
-    list.innerHTML = allStaff.map(s => {
-      const tieredHtml = renderTieredCheckboxes(s.id, tree);
-      const adhocTags  = renderAdhocTagsHtml(s.id);
-      const initials   = s.name.split(' ').map(w => w[0]).join('').substring(0,2).toUpperCase();
+      let name, cat_id, cat_name, cat_order, sub_id, sub_name, sub_order, grp_id, grp_name, is_adhoc;
 
-      return `
-        <div class="staff-assign-row">
-          <div class="staff-assign-row__header" onclick="togStaff('sb-${s.id}')">
-            <div class="staff-assign-row__avatar">${initials}</div>
-            <div class="staff-assign-row__name">${s.name}</div>
-            <span class="ac-chev" id="sc-${s.id}">▼</span>
-          </div>
-          <div class="staff-assign-row__body" id="sb-${s.id}" style="display:none">
-            ${tieredHtml}
-            <div class="adhoc-section">
-              <div class="adhoc-title">Ad-hoc Tasks</div>
-              <div id="adhoc-tags-${s.id}">${adhocTags}</div>
-              <div class="adhoc-input-row" style="margin-top:8px">
-                <input type="text" id="adhoc-input-${s.id}" placeholder="Type ad-hoc task name..." onkeydown="adhocKeydown(event,'${s.id}')">
-                <button class="btn btn--ghost btn--sm" onclick="addAdhoc('${s.id}')">Add</button>
-              </div>
-            </div>
-          </div>
-        </div>`;
-    }).join('');
-  }
-
-  function buildTree() {
-    const tree = [];
-    for (const cat of allCategories) {
-      const subcats = allSubcats.filter(s => s.category_id === cat.id);
-      const catNode = { ...cat, subcats: [] };
-      for (const sub of subcats) {
-        const subgroups = allSubgroups.filter(g => g.subcategory_id === sub.id);
-        const subNode = { ...sub, subgroups: [], directTasks: [] };
-        // Tasks directly under this subcategory (no subgroup)
-        subNode.directTasks = allTemplates.filter(t => t.subcategory_id === sub.id && !t.subgroup_id);
-        for (const grp of subgroups) {
-          subNode.subgroups.push({
-            ...grp,
-            tasks: allTemplates.filter(t => t.subgroup_id === grp.id)
-          });
-        }
-        catNode.subcats.push(subNode);
+      if (isStock) {
+        // Parse: __STOCK__{subName}||{sectionLabel}||{itemName}
+        const inner = raw.replace('__STOCK__', '');
+        const parts = inner.split('||');
+        const subName     = parts[0] || 'Stocks';
+        const sectionLabel = parts[1] || subName;
+        name       = parts[2] || inner;
+        // Use a virtual stock category — fixed ID so all stock items group together
+        cat_id     = '__stock_cat__';
+        cat_name   = 'Stocks & Merchandise (Top-up)';
+        cat_order  = 2;
+        sub_id     = '__stock_' + subName + '__';
+        sub_name   = subName;
+        sub_order  = 1;
+        grp_id     = '__stock_grp_' + sectionLabel + '__';
+        grp_name   = sectionLabel;
+        is_adhoc   = false; // treat as categorised
+      } else {
+        name       = a.is_adhoc ? raw : (tpl?.name || 'Unnamed Task');
+        cat_id     = tpl?.category_id    || null;
+        cat_name   = tpl?.categories?.name || null;
+        cat_order  = tpl?.categories?.sort_order ?? 99;
+        sub_id     = tpl?.subcategory_id || null;
+        sub_name   = tpl?.subcategories?.name || null;
+        sub_order  = tpl?.subcategories?.sort_order ?? 99;
+        grp_id     = tpl?.subgroup_id    || null;
+        grp_name   = tpl?.subgroups?.name || null;
+        is_adhoc   = a.is_adhoc;
       }
-      // Tasks directly under category (no subcategory)
-      catNode.directTasks = allTemplates.filter(t => t.category_id === cat.id && !t.subcategory_id);
-      tree.push(catNode);
-    }
-    // Uncategorised templates
-    const uncatTasks = allTemplates.filter(t => !t.category_id);
-    if (uncatTasks.length) tree.push({ id:'__uncat__', name:'Other', directTasks: uncatTasks, subcats: [] });
-    return tree;
+
+      return {
+        id:             a.id,
+        name,
+        description:    tpl?.description || '',
+        photo_required: tpl?.photo_required || false,
+        is_adhoc,
+        cat_id, cat_name, cat_order,
+        sub_id, sub_name, sub_order,
+        grp_id,
+        grp_name,
+        grp_order:      99,
+        task_order:     tpl?.sort_order ?? 99,
+        done:           !!c,
+        completed_at:   c?.completed_at    || null,
+        signoff_status: c?.signoff_status  || null,
+        flag_reason:    so?.notes          || null,
+        completion_id:  c?.id              || null,
+      };
+    });
+
+    renderFlagAlerts();
+    renderTasks();
   }
 
-  // IDs of categories that use manual stock input
-  let stockCategoryIds = [];
+  function renderFlagAlerts() {
+    const flagged = tasks.filter(t => t.signoff_status === 'flagged');
+    const el = document.getElementById('flagAlerts');
+    if (!flagged.length) { el.innerHTML = ''; return; }
+    el.innerHTML = flagged.map(t => `
+      <div class="flag-alert">
+        <div class="flag-alert__header">
+          <div class="flag-icon">⚠️</div>
+          <div class="flag-alert__title">Task flagged by supervisor</div>
+        </div>
+        <div class="flag-alert__task">${t.name}</div>
+        ${t.flag_reason
+          ? `<div class="flag-alert__reason">"${t.flag_reason}"</div>`
+          : '<div class="flag-alert__reason">No reason given — check with your supervisor.</div>'}
+        <button class="btn btn--danger btn--sm btn--full" onclick="redoTask('${t.id}')">Redo this task</button>
+      </div>`).join('');
+  }
 
-  function renderTieredCheckboxes(staffId, tree) {
+  function pill(done, total) {
+    const all = done === total && total > 0;
+    return `<span class="count-pill ${all?'done':''}">${done}/${total}</span>`;
+  }
+
+  function renderTasks() {
+    const list  = document.getElementById('taskList');
+    const done  = tasks.filter(t => t.done && t.signoff_status !== 'flagged').length;
+    const total = tasks.length;
+    document.getElementById('progressLabel').textContent = `${done} / ${total}`;
+    document.getElementById('progressFill').style.width  = total ? `${(done/total)*100}%` : '0%';
+
+    if (!tasks.length) { list.innerHTML = '<div class="empty-state">No tasks assigned for today.</div>'; return; }
+
+    const categorised = tasks.filter(t => !t.is_adhoc && t.cat_id);
+    const adhoc       = tasks.filter(t =>  t.is_adhoc || !t.cat_id);
+
+    // Build cat → sub → grp → tasks
+    const catMap = {};
+    for (const t of categorised) {
+      if (!catMap[t.cat_id]) catMap[t.cat_id] = { name:t.cat_name, order:t.cat_order, subs:{} };
+      const sid = t.sub_id || '__none__';
+      if (!catMap[t.cat_id].subs[sid]) catMap[t.cat_id].subs[sid] = { name:t.sub_name, order:t.sub_order, grps:{}, direct:[] };
+      if (t.grp_id) {
+        if (!catMap[t.cat_id].subs[sid].grps[t.grp_id]) catMap[t.cat_id].subs[sid].grps[t.grp_id] = { name:t.grp_name, order:t.grp_order, tasks:[] };
+        catMap[t.cat_id].subs[sid].grps[t.grp_id].tasks.push(t);
+      } else {
+        catMap[t.cat_id].subs[sid].direct.push(t);
+      }
+    }
+
     let html = '';
-    for (const cat of tree) {
-      const isStockCat = cat.name && cat.name.toLowerCase().includes('stock');
-      if (isStockCat && !stockCategoryIds.includes(cat.id)) stockCategoryIds.push(cat.id);
+    const sortedCats = Object.entries(catMap).sort((a,b) => a[1].order - b[1].order);
+
+    for (const [cid, cat] of sortedCats) {
+      const allCatTasks = Object.values(cat.subs).flatMap(s =>
+        [...s.direct, ...Object.values(s.grps).flatMap(g => g.tasks)]
+      );
+      const catDone    = allCatTasks.filter(t => t.done && t.signoff_status !== 'flagged').length;
+      const hasFlagged = allCatTasks.some(t => t.signoff_status === 'flagged');
+      const autoOpen   = hasFlagged;
 
       let subcatHtml = '';
+      const sortedSubs = Object.entries(cat.subs).sort((a,b) => a[1].order - b[1].order);
 
-      if (isStockCat) {
-        // STOCK CATEGORY — render manual input sections
-        subcatHtml += cat.directTasks.map(t => checkboxRow(staffId, t, 'task-checkbox')).join('');
-        for (const sub of cat.subcats) {
-          let subContent = '';
-          // Direct tasks under sub become manual input sections
-          if (sub.directTasks.length > 0) {
-            subContent += sub.directTasks.map(t => stockInputSection(staffId, sub.id, t, null)).join('');
-          }
-          // Subgroups become manual input sections
-          for (const grp of sub.subgroups) {
-            subContent += stockInputSection(staffId, sub.id, null, grp);
-          }
-          subcatHtml += `
-            <div class="ac-sub">
-              <div class="ac-sub-header" onclick="togAc('as-${staffId}-${sub.id}','asc-${staffId}-${sub.id}')">
-                <span class="ac-sub-name">${sub.name}</span>
-                <span class="ac-chev" id="asc-${staffId}-${sub.id}">▼</span>
+      for (const [sid, sub] of sortedSubs) {
+        const allSubTasks = [...sub.direct, ...Object.values(sub.grps).flatMap(g => g.tasks)];
+        const subDone = allSubTasks.filter(t => t.done && t.signoff_status !== 'flagged').length;
+
+        let subContent = sub.direct.sort((a,b) => a.task_order - b.task_order).map(t => taskRow(t)).join('');
+
+        const sortedGrps = Object.entries(sub.grps).sort((a,b) => a[1].order - b[1].order);
+        for (const [gid, grp] of sortedGrps) {
+          const grpDone = grp.tasks.filter(t => t.done && t.signoff_status !== 'flagged').length;
+          const rows    = grp.tasks.sort((a,b) => a.task_order - b.task_order).map(t => taskRow(t)).join('');
+          subContent += `
+            <div class="ac-grp">
+              <div class="ac-grp-header" onclick="tog('ag-${gid}','agc-${gid}')">
+                <span class="ac-grp-name">${grp.name}</span>
+                <div style="display:flex;align-items:center">
+                  ${pill(grpDone, grp.tasks.length)}
+                  <span class="ac-chev" id="agc-${gid}">▼</span>
+                </div>
               </div>
-              <div class="ac-sub-body" id="as-${staffId}-${sub.id}">${subContent}</div>
+              <div class="ac-grp-body" id="ag-${gid}">${rows}</div>
             </div>`;
         }
-      } else {
-        // NORMAL CATEGORY — render checkboxes
-        const catTasks = getAllCatTasks(cat);
-        subcatHtml += cat.directTasks.map(t => checkboxRow(staffId, t, 'task-checkbox')).join('');
-        for (const sub of cat.subcats) {
-          const subTasks = getAllSubTasks(sub);
-          const subAllChecked = subTasks.length > 0 && subTasks.every(t => staffSelections[staffId].templateIds.has(t.id));
-          let subContent = '';
-          subContent += `<div class="select-all-row" onclick="selectAllSub('${staffId}','${sub.id}')">
-            <input type="checkbox" id="sall-${staffId}-${sub.id}" ${subAllChecked?'checked':''} onclick="event.stopPropagation();selectAllSub('${staffId}','${sub.id}')">
-            <span>Select all</span></div>`;
-          subContent += sub.directTasks.map(t => checkboxRow(staffId, t, 'task-checkbox task-checkbox--sub')).join('');
-          for (const grp of sub.subgroups) {
-            const grpAllChecked = grp.tasks.length > 0 && grp.tasks.every(t => staffSelections[staffId].templateIds.has(t.id));
-            let grpContent = `<div class="select-all-row" style="padding-left:40px" onclick="selectAllGrp('${staffId}','${grp.id}')">
-              <input type="checkbox" id="gall-${staffId}-${grp.id}" ${grpAllChecked?'checked':''} onclick="event.stopPropagation();selectAllGrp('${staffId}','${grp.id}')">
-              <span>Select all</span></div>`;
-            grpContent += grp.tasks.map(t => checkboxRow(staffId, t, 'task-checkbox task-checkbox--grp')).join('');
-            subContent += `
-              <div class="ac-grp">
-                <div class="ac-grp-header" onclick="togAc('ag-${staffId}-${grp.id}','agc-${staffId}-${grp.id}')">
-                  <span class="ac-grp-name">${grp.name}</span>
-                  <span class="ac-chev" id="agc-${staffId}-${grp.id}">▼</span>
-                </div>
-                <div class="ac-grp-body" id="ag-${staffId}-${grp.id}">${grpContent}</div>
-              </div>`;
-          }
+
+        if (sid === '__none__') {
+          subcatHtml += subContent;
+        } else {
           subcatHtml += `
             <div class="ac-sub">
-              <div class="ac-sub-header" onclick="togAc('as-${staffId}-${sub.id}','asc-${staffId}-${sub.id}')">
-                <span class="ac-sub-name">${sub.name}</span>
-                <span class="ac-chev" id="asc-${staffId}-${sub.id}">▼</span>
+              <div class="ac-sub-header" onclick="tog('as-${sid}','asc-${sid}')">
+                <span class="ac-sub-name">${sub.name || ''}</span>
+                <div style="display:flex;align-items:center">
+                  ${pill(subDone, allSubTasks.length)}
+                  <span class="ac-chev" id="asc-${sid}">▼</span>
+                </div>
               </div>
-              <div class="ac-sub-body" id="as-${staffId}-${sub.id}">${subContent}</div>
+              <div class="ac-sub-body" id="as-${sid}">${subContent}</div>
             </div>`;
         }
       }
 
       html += `
         <div class="ac-cat">
-          <div class="ac-cat-header" onclick="togAc('ac-${staffId}-${cat.id}','acc-${staffId}-${cat.id}')">
-            <span class="ac-cat-name">${cat.name}</span>
-            <span class="ac-chev" id="acc-${staffId}-${cat.id}">▼</span>
+          <div class="ac-cat-header ${autoOpen?'open':''}" id="ach-${cid}" onclick="togCat('acb-${cid}','ach-${cid}','acc-${cid}')">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="ac-cat-name">${cat.name}</span>
+              ${hasFlagged ? '<span style="color:var(--danger);font-size:0.85rem">⚠</span>' : ''}
+            </div>
+            <div style="display:flex;align-items:center">
+              ${pill(catDone, allCatTasks.length)}
+              <span class="ac-chev ${autoOpen?'open':''}" id="acc-${cid}">▼</span>
+            </div>
           </div>
-          <div class="ac-cat-body" id="ac-${staffId}-${cat.id}">${subcatHtml}</div>
+          <div class="ac-cat-body ${autoOpen?'open':''}" id="acb-${cid}">${subcatHtml}</div>
         </div>`;
     }
-    return html;
+
+    // Ad-hoc tasks
+    if (adhoc.length) {
+      const adhocDone = adhoc.filter(t => t.done && t.signoff_status !== 'flagged').length;
+      const rows = adhoc.map(t => taskRow(t)).join('');
+      html += `
+        <div class="ac-cat">
+          <div class="ac-cat-header" id="ach-adhoc" onclick="togCat('acb-adhoc','ach-adhoc','acc-adhoc')">
+            <span class="ac-cat-name">Ad-hoc Tasks</span>
+            <div style="display:flex;align-items:center">
+              ${pill(adhocDone, adhoc.length)}
+              <span class="ac-chev" id="acc-adhoc">▼</span>
+            </div>
+          </div>
+          <div class="ac-cat-body" id="acb-adhoc">${rows}</div>
+        </div>`;
+    }
+
+    list.innerHTML = html;
   }
 
-  // stockItems: { staffId: { sectionKey: ['item1','item2'] } }
-  let stockItems = {};
+  function taskRow(t) {
+    const isFlagged  = t.signoff_status === 'flagged';
+    const isApproved = t.signoff_status === 'approved';
+    const canDo = !t.done || isFlagged;
 
-  function stockKey(subId, taskOrGrp) {
-    const label = taskOrGrp ? (taskOrGrp.name || taskOrGrp.id) : 'direct';
-    return subId + '||' + label;
-  }
+    const status = isFlagged
+      ? '<span class="badge" style="background:rgba(239,68,68,0.1);color:var(--danger)">⚠ Flagged</span>'
+      : isApproved
+        ? '<span class="badge badge--done">✓ Approved</span>'
+        : t.done
+          ? `<span class="badge badge--done">✓ ${formatTime(t.completed_at)}</span>`
+          : '<span class="badge badge--pending">Pending</span>';
 
-  function ensureStock(staffId, key) {
-    if (!stockItems[staffId]) stockItems[staffId] = {};
-    if (!stockItems[staffId][key]) stockItems[staffId][key] = [''];
-  }
-
-  function stockInputSection(staffId, subId, task, grp) {
-    const label = grp ? grp.name : task.name;
-    const key   = stockKey(subId, grp || task);
-    ensureStock(staffId, key);
-    const safeKey = encodeURIComponent(key);
-    const bodyId  = 'stk-' + staffId + '-' + safeKey;
-    const chevId  = 'stkc-' + staffId + '-' + safeKey;
-    const rows = stockItems[staffId][key].map((val, i) => `
-      <div class="stock-item-row">
-        <input type="text" value="${val.replace(/"/g,'&quot;')}" placeholder="e.g. Milo 3in1, 100Plus..."
-          oninput="updateStockItem('${staffId}','${safeKey}',${i},this.value)"
-          onkeydown="stockKeydown(event,'${staffId}','${safeKey}')">
-        <button class="del-btn" onclick="removeStockItem('${staffId}','${safeKey}',${i})" title="Remove">✕</button>
-      </div>`).join('');
     return `
-      <div class="stock-subgroup-wrap">
-        <div class="ac-grp-header" style="padding-left:28px" onclick="togAc('${bodyId}','${chevId}')">
-          <span class="ac-grp-name">${label}</span>
-          <span class="ac-chev" id="${chevId}">▼</span>
+      <div class="task-item ${t.done&&!isFlagged?'task-item--done':''} ${isFlagged?'task-item--flagged':''}">
+        <div class="task-check ${t.done&&!isFlagged?'task-check--done':''}"
+             onclick="${canDo?`completeTask('${t.id}')`:'null'}"
+             style="${!canDo?'cursor:default':''}">
+          ${t.done&&!isFlagged
+            ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>'
+            : isFlagged ? '<span style="color:var(--danger);font-size:0.8rem">↺</span>' : ''}
         </div>
-        <div class="ac-grp-body" id="${bodyId}">
-          <div class="stock-subgroup">
-            <div class="stock-items" id="si-${staffId}-${safeKey}">${rows}</div>
-            <button class="btn btn--ghost btn--sm stock-add-btn" onclick="addStockItem('${staffId}','${safeKey}')">+ Add item</button>
+        <div class="task-item__body">
+          <div class="task-item__name">${t.name}</div>
+          <div class="task-item__meta">
+            ${t.photo_required ? '<span class="badge badge--photo">📷 Photo</span>' : ''}
+            ${status}
           </div>
         </div>
       </div>`;
   }
 
-  function updateStockItem(staffId, safeKey, index, value) {
-    const key = decodeURIComponent(safeKey);
-    ensureStock(staffId, key);
-    stockItems[staffId][key][index] = value;
+  function tog(bodyId, chevId) {
+    document.getElementById(bodyId)?.classList.toggle('open');
+    document.getElementById(chevId)?.classList.toggle('open');
   }
 
-  function addStockItem(staffId, safeKey) {
-    const key = decodeURIComponent(safeKey);
-    ensureStock(staffId, key);
-    // Save current input values first
-    const container = document.getElementById('si-' + staffId + '-' + safeKey);
-    if (container) {
-      container.querySelectorAll('input').forEach((inp, i) => {
-        stockItems[staffId][key][i] = inp.value;
-      });
+  function togCat(bodyId, headerId, chevId) {
+    const opening = !document.getElementById(bodyId)?.classList.contains('open');
+    document.getElementById(bodyId)?.classList.toggle('open', opening);
+    document.getElementById(headerId)?.classList.toggle('open', opening);
+    document.getElementById(chevId)?.classList.toggle('open', opening);
+  }
+
+  async function redoTask(assignmentId) {
+    const t = tasks.find(x => x.id === assignmentId);
+    if (!t) return;
+    if (t.completion_id) await db.from('completions').delete().eq('id', t.completion_id);
+    t.done=false; t.signoff_status=null; t.flag_reason=null; t.completion_id=null; t.completed_at=null;
+    renderFlagAlerts(); renderTasks();
+    showToast('Task reset — please complete it again.');
+  }
+
+  function completeTask(assignmentId) {
+    const t = tasks.find(x => x.id === assignmentId);
+    if (!t || (t.done && t.signoff_status !== 'flagged')) return;
+    currentAssignmentId = assignmentId;
+    if (t.photo_required) {
+      document.getElementById('photoModalTitle').textContent = `📷 ${t.name}`;
+      document.getElementById('photoModal').classList.add('modal-overlay--open');
+      selectedFile = null;
+      document.getElementById('photoPreview').style.display = 'none';
+      document.getElementById('confirmPhotoBtn').disabled = true;
+    } else {
+      markComplete(assignmentId, null);
     }
-    stockItems[staffId][key].push('');
-    rerenderStockSection(staffId, safeKey, key);
   }
 
-  function removeStockItem(staffId, safeKey, index) {
-    const key = decodeURIComponent(safeKey);
-    // Save current values before splice
-    const container = document.getElementById('si-' + staffId + '-' + safeKey);
-    if (container) {
-      container.querySelectorAll('input').forEach((inp, i) => {
-        stockItems[staffId][key][i] = inp.value;
-      });
+  async function markComplete(assignmentId, photoUrl) {
+    const { error } = await db.from('completions').insert({
+      assignment_id: assignmentId, staff_id: staffId,
+      completed_at:  new Date().toISOString(), photo_url: photoUrl || null,
+    });
+    if (error) { showToast('Error saving. Try again.', 'error'); return; }
+    const t = tasks.find(x => x.id === assignmentId);
+    if (t) { t.done=true; t.completed_at=new Date().toISOString(); t.signoff_status='pending'; }
+    closePhotoModal(); renderFlagAlerts(); renderTasks();
+    showToast('Task marked complete!');
+    if (tasks.every(t => t.done && t.signoff_status !== 'flagged')) {
+      showToast('All tasks complete! Great work 🎉');
+      setTimeout(() => window.location.href = 'index.html', 2500);
     }
-    stockItems[staffId][key].splice(index, 1);
-    if (stockItems[staffId][key].length === 0) stockItems[staffId][key] = [''];
-    rerenderStockSection(staffId, safeKey, key);
   }
 
-  function stockKeydown(e, staffId, safeKey) {
-    if (e.key === 'Enter') { e.preventDefault(); addStockItem(staffId, safeKey); }
-  }
+  document.getElementById('photoInput').addEventListener('change', e => {
+    const file = e.target.files[0]; if (!file) return;
+    selectedFile = file;
+    const r = new FileReader();
+    r.onload = ev => { const img=document.getElementById('photoPreview'); img.src=ev.target.result; img.style.display='block'; };
+    r.readAsDataURL(file);
+    document.getElementById('confirmPhotoBtn').disabled = false;
+  });
 
-  function rerenderStockSection(staffId, safeKey, key) {
-    const container = document.getElementById('si-' + staffId + '-' + safeKey);
-    if (!container) return;
-    const rows = stockItems[staffId][key].map((val, i) => `
-      <div class="stock-item-row">
-        <input type="text" value="${val.replace(/"/g,'&quot;')}" placeholder="e.g. Milo 3in1, 100Plus..."
-          oninput="updateStockItem('${staffId}','${safeKey}',${i},this.value)"
-          onkeydown="stockKeydown(event,'${staffId}','${safeKey}')">
-        <button class="del-btn" onclick="removeStockItem('${staffId}','${safeKey}',${i})" title="Remove">✕</button>
-      </div>`).join('');
-    container.innerHTML = rows;
-    // Focus last input
-    const inputs = container.querySelectorAll('input');
-    if (inputs.length) inputs[inputs.length-1].focus();
-  }
-
-  function checkboxRow(staffId, t, cls) {
-    const checked = staffSelections[staffId].templateIds.has(t.id);
-    return `<label class="${cls}">
-      <input type="checkbox" ${checked?'checked':''}
-        onchange="toggleTemplate('${staffId}','${t.id}',this.checked)">
-      <span class="task-checkbox__label">${t.name}</span>
-      ${t.photo_required ? '<span style="font-size:0.75rem;color:var(--warning)">📷</span>' : ''}
-      ${t.has_note       ? '<span style="font-size:0.75rem;color:var(--warning)">📝</span>' : ''}
-    </label>`;
-  }
-
-  function getAllCatTasks(cat) {
-    return [
-      ...cat.directTasks,
-      ...cat.subcats.flatMap(s => getAllSubTasks(s))
-    ];
-  }
-
-  function getAllSubTasks(sub) {
-    return [...sub.directTasks, ...sub.subgroups.flatMap(g => g.tasks)];
-  }
-
-  function togStaff(bodyId) {
-    const b = document.getElementById(bodyId);
-    const c = document.getElementById('sc-' + bodyId.replace('sb-',''));
-    const open = b.style.display === 'block';
-    b.style.display = open ? 'none' : 'block';
-    c.classList.toggle('open', !open);
-  }
-
-  function togAc(bodyId, chevId) {
-    // Save any typed stock input values before toggling
-    saveAllStockInputs();
-    const b = document.getElementById(bodyId);
-    const c = document.getElementById(chevId);
-    b.classList.toggle('open');
-    c.classList.toggle('open');
-  }
-
-  function saveAllStockInputs() {
-    document.querySelectorAll('[id^="si-"]').forEach(container => {
-      const parts = container.id.split('-');
-      // id format: si-{staffId}-{safeKey}
-      const staffId  = parts[1];
-      const safeKey  = parts.slice(2).join('-');
-      const key      = decodeURIComponent(safeKey);
-      if (!stockItems[staffId]) stockItems[staffId] = {};
-      const inputs = container.querySelectorAll('input');
-      if (inputs.length > 0) {
-        stockItems[staffId][key] = Array.from(inputs).map(i => i.value);
-      }
-    });
-  }
-
-  function toggleTemplate(staffId, tplId, checked) {
-    if (checked) staffSelections[staffId].templateIds.add(tplId);
-    else staffSelections[staffId].templateIds.delete(tplId);
-  }
-
-  function selectAllSub(staffId, subId) {
-    const sub = allSubcats.find(s => s.id === subId);
-    if (!sub) return;
-    const tasks = getAllSubTasks({
-      directTasks: allTemplates.filter(t => t.subcategory_id === subId && !t.subgroup_id),
-      subgroups: allSubgroups.filter(g => g.subcategory_id === subId).map(g => ({
-        ...g, tasks: allTemplates.filter(t => t.subgroup_id === g.id)
-      }))
-    });
-    const allChecked = tasks.every(t => staffSelections[staffId].templateIds.has(t.id));
-    tasks.forEach(t => {
-      if (allChecked) staffSelections[staffId].templateIds.delete(t.id);
-      else staffSelections[staffId].templateIds.add(t.id);
-    });
-    const cb = document.getElementById(`sall-${staffId}-${subId}`);
-    if (cb) cb.checked = !allChecked;
-    // Re-render checkboxes for this staff
-    renderStaffCheckboxes(staffId);
-  }
-
-  function selectAllGrp(staffId, grpId) {
-    const tasks = allTemplates.filter(t => t.subgroup_id === grpId);
-    const allChecked = tasks.every(t => staffSelections[staffId].templateIds.has(t.id));
-    tasks.forEach(t => {
-      if (allChecked) staffSelections[staffId].templateIds.delete(t.id);
-      else staffSelections[staffId].templateIds.add(t.id);
-    });
-    const cb = document.getElementById(`gall-${staffId}-${grpId}`);
-    if (cb) cb.checked = !allChecked;
-    renderStaffCheckboxes(staffId);
-  }
-
-  function renderStaffCheckboxes(staffId) {
-    const tree = buildTree();
-    const body = document.getElementById('sb-' + staffId);
-    if (!body) return;
-    const adhocSection = body.querySelector('.adhoc-section');
-    const newHtml = renderTieredCheckboxes(staffId, tree);
-    // Replace everything before adhoc section
-    const temp = document.createElement('div');
-    temp.innerHTML = newHtml;
-    while (body.firstChild && body.firstChild !== adhocSection) body.removeChild(body.firstChild);
-    body.insertBefore(temp, adhocSection);
-  }
-
-  function addAdhoc(staffId) {
-    const inp  = document.getElementById('adhoc-input-' + staffId);
-    const name = inp.value.trim();
-    if (!name) return;
-    staffSelections[staffId].adhocTasks.push({ name, photoRequired: false });
-    inp.value = '';
-    document.getElementById('adhoc-tags-' + staffId).innerHTML = renderAdhocTagsHtml(staffId);
-  }
-
-  function adhocKeydown(e, staffId) { if (e.key === 'Enter') addAdhoc(staffId); }
-
-  function removeAdhoc(staffId, index) {
-    staffSelections[staffId].adhocTasks.splice(index, 1);
-    document.getElementById('adhoc-tags-' + staffId).innerHTML = renderAdhocTagsHtml(staffId);
-  }
-
-  function renderAdhocTagsHtml(staffId) {
-    return (staffSelections[staffId]?.adhocTasks || []).map((a, i) => `
-      <span class="adhoc-tag" onclick="removeAdhoc('${staffId}',${i})">
-        ${a.name} <span style="opacity:0.6">✕</span>
-      </span>`).join('');
-  }
-
-  async function saveAssignments() {
-    const btn = document.getElementById('saveAssignBtn');
+  async function confirmPhoto() {
+    if (!selectedFile || !currentAssignmentId) return;
+    const btn = document.getElementById('confirmPhotoBtn');
     setLoading(btn, true);
-    await db.from('daily_assignments').delete().eq('date', today());
-    saveAllStockInputs();
-    const rows = [];
-    for (const s of allStaff) {
-      const sel = staffSelections[s.id];
-      for (const tplId of sel.templateIds) {
-        rows.push({ date: today(), staff_id: s.id, task_template_id: tplId, is_adhoc: false, created_by: currentUser?.id });
-      }
-      for (const adhoc of sel.adhocTasks) {
-        rows.push({ date: today(), staff_id: s.id, is_adhoc: true, custom_task_name: adhoc.name, photo_required: adhoc.photoRequired, created_by: currentUser?.id });
-      }
-      // Stock manual items
-      if (stockItems[s.id]) {
-        for (const [key, items] of Object.entries(stockItems[s.id])) {
-          const sectionLabel = key.split('||')[1] || 'Stock';
-          for (const item of items) {
-            const trimmed = item.trim();
-            if (!trimmed) continue;
-            rows.push({ date: today(), staff_id: s.id, is_adhoc: true, custom_task_name: `[${sectionLabel}] ${trimmed}`, photo_required: false, created_by: currentUser?.id });
-          }
-        }
-      }
-    }
-    if (rows.length > 0) {
-      const { error } = await db.from('daily_assignments').insert(rows);
-      if (error) { showToast('Error saving assignments.', 'error'); setLoading(btn, false); return; }
-    }
-    showToast("Today's tasks saved successfully!");
+    const ext  = selectedFile.name.split('.').pop();
+    const path = `completions/${currentAssignmentId}_${Date.now()}.${ext}`;
+    const { error: ue } = await db.storage.from('task-photos').upload(path, selectedFile);
+    if (ue) { showToast('Photo upload failed.', 'error'); setLoading(btn, false); return; }
+    const { data: ud } = db.storage.from('task-photos').getPublicUrl(path);
+    await markComplete(currentAssignmentId, ud?.publicUrl || path);
     setLoading(btn, false);
   }
 
-  // ── TEMPLATES TAB ────────────────────────────────────────
-  async function loadTemplates() {
-    const { data } = await db.from('task_templates')
-      .select('*, categories(name), subcategories(name)')
-      .order('sort_order');
-    const list = document.getElementById('templateList');
-    if (!data?.length) { list.innerHTML = '<div class="empty-state">No templates yet.</div>'; return; }
-    list.innerHTML = data.map(t => `
-      <div class="task-item">
-        <div class="task-item__body">
-          <div class="task-item__name">${t.name}</div>
-          <div class="task-item__meta">
-            ${t.categories?.name ? `<span>${t.categories.name}${t.subcategories?.name ? ' › ' + t.subcategories.name : ''}</span>` : ''}
-            ${t.photo_required ? '<span class="badge badge--photo">📷 Photo</span>' : ''}
-            ${t.has_note ? '<span class="badge" style="background:rgba(245,158,11,0.1);color:var(--warning)">📝 Note</span>' : ''}
-            ${!t.is_active ? '<span class="badge" style="background:rgba(239,68,68,0.1);color:var(--danger)">Inactive</span>' : ''}
-          </div>
-        </div>
-        <div style="display:flex;gap:8px;flex-shrink:0">
-          <button class="btn btn--ghost btn--sm" onclick='editTemplate(${JSON.stringify(t)})'>Edit</button>
-          <button class="btn btn--ghost btn--sm" style="color:var(--danger)" onclick="toggleTemplateActive('${t.id}',${t.is_active})">${t.is_active ? 'Disable' : 'Enable'}</button>
-        </div>
-      </div>`).join('');
+  function closePhotoModal() {
+    document.getElementById('photoModal').classList.remove('modal-overlay--open');
+    currentAssignmentId = null; selectedFile = null;
   }
 
-  function openNewTemplate() {
-    document.getElementById('templateModalTitle').textContent = 'New Task Template';
-    document.getElementById('editTemplateId').value = '';
-    document.getElementById('tplName').value  = '';
-    document.getElementById('tplDesc').value  = '';
-    document.getElementById('tplPhoto').checked = false;
-    document.getElementById('templateModal').classList.add('modal-overlay--open');
-  }
-
-  function editTemplate(t) {
-    document.getElementById('templateModalTitle').textContent = 'Edit Template';
-    document.getElementById('editTemplateId').value  = t.id;
-    document.getElementById('tplName').value         = t.name;
-    document.getElementById('tplDesc').value         = t.description || '';
-    document.getElementById('tplPhoto').checked      = t.photo_required;
-    document.getElementById('templateModal').classList.add('modal-overlay--open');
-  }
-
-  async function saveTemplate() {
-    const id   = document.getElementById('editTemplateId').value;
-    const name = document.getElementById('tplName').value.trim();
-    if (!name) { showToast('Task name is required.', 'error'); return; }
-    const payload = { name, description: document.getElementById('tplDesc').value.trim(), photo_required: document.getElementById('tplPhoto').checked, is_active: true };
-    const { error } = id
-      ? await db.from('task_templates').update(payload).eq('id', id)
-      : await db.from('task_templates').insert(payload);
-    if (error) { showToast('Error saving template.', 'error'); return; }
-    showToast('Template saved!'); closeModal('templateModal'); loadTemplates();
-  }
-
-  async function toggleTemplateActive(id, current) {
-    await db.from('task_templates').update({ is_active: !current }).eq('id', id);
-    loadTemplates();
-  }
-
-  // ── STAFF TAB ────────────────────────────────────────────
-  async function loadStaffList() {
-    const { data } = await db.from('users').select('*').eq('role','staff').order('name');
-    const list = document.getElementById('staffList');
-    if (!data?.length) { list.innerHTML = '<div class="empty-state">No staff added yet.</div>'; return; }
-    list.innerHTML = data.map(s => `
-      <div class="task-item">
-        <div style="width:38px;height:38px;font-size:1rem;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-weight:700;color:white;flex-shrink:0">
-          ${s.name.charAt(0).toUpperCase()}
-        </div>
-        <div class="task-item__body">
-          <div class="task-item__name">${s.name}</div>
-          <div class="task-item__meta"><span>PIN: ****</span></div>
-        </div>
-        <button class="btn btn--ghost btn--sm" onclick='editStaff(${JSON.stringify(s)})'>Edit PIN</button>
-      </div>`).join('');
-  }
-
-  function openNewStaff() {
-    document.getElementById('staffModalTitle').textContent = 'Add Staff Member';
-    document.getElementById('editStaffId').value = '';
-    document.getElementById('staffName').value   = '';
-    document.getElementById('staffPin').value    = '';
-    document.getElementById('staffModal').classList.add('modal-overlay--open');
-  }
-
-  function editStaff(s) {
-    document.getElementById('staffModalTitle').textContent = 'Edit Staff Member';
-    document.getElementById('editStaffId').value = s.id;
-    document.getElementById('staffName').value   = s.name;
-    document.getElementById('staffPin').value    = '';
-    document.getElementById('staffModal').classList.add('modal-overlay--open');
-  }
-
-  async function saveStaff() {
-    const id   = document.getElementById('editStaffId').value;
-    const name = document.getElementById('staffName').value.trim();
-    const pin  = document.getElementById('staffPin').value.trim();
-    if (!name) { showToast('Name is required.', 'error'); return; }
-    if (!id && pin.length !== 4) { showToast('PIN must be exactly 4 digits.', 'error'); return; }
-    if (pin && !/^\d{4}$/.test(pin)) { showToast('PIN must be 4 digits.', 'error'); return; }
-    const payload = { name, role:'staff' };
-    if (pin) payload.pin_hash = pin;
-    const { error } = id
-      ? await db.from('users').update(payload).eq('id', id)
-      : await db.from('users').insert(payload);
-    if (error) { showToast('Error saving staff.', 'error'); return; }
-    showToast('Staff member saved!'); closeModal('staffModal'); loadStaffList();
-  }
-
-  function closeModal(id) { document.getElementById(id).classList.remove('modal-overlay--open'); }
-
-  document.getElementById('password').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+  loadTasks();
 </script>
 </body>
 </html>
