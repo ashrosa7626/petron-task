@@ -64,6 +64,7 @@
       <option value="Safari">Safari</option>
       <option value="Nilai Desa Jati">Nilai Desa Jati</option>
     </select>
+    <span class="text-sm text-muted" id="branchIndicator" style="font-weight:600;color:var(--accent)">Safari</span>
   </div>
 
   <div class="content content--wide">
@@ -139,7 +140,17 @@
   setInterval(loadDashboard, 30000);
 
   async function loadDashboard() {
-    const branch = document.getElementById('dashBranch')?.value || 'Safari';
+    document.getElementById('staffRows').innerHTML = '<div class="empty-state">Loading...</div>';
+    document.getElementById('statDone').textContent    = '–';
+    document.getElementById('statPending').textContent = '–';
+    document.getElementById('statTotal').textContent   = '–';
+    document.getElementById('soApproved').textContent  = '–';
+    document.getElementById('soFlagged').textContent   = '–';
+    document.getElementById('soPending').textContent   = '–';
+    const branchEl = document.getElementById('dashBranch');
+    const branch = branchEl?.value || 'Safari';
+    const indicator = document.getElementById('branchIndicator');
+    if (indicator) indicator.textContent = branch;
     const { data: assignments, error } = await db
       .from('daily_assignments')
       .select(`
