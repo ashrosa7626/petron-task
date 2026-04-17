@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Team Lead – Petron Tasks v3</title>
+  <title>Team Lead – Petron Tasks v4</title>
   <link rel="stylesheet" href="style.css">
   <style>
     .login-wrap { max-width:360px; margin:60px auto 0; }
@@ -453,7 +453,7 @@
     const rows = stockItems[staffId][key].map((val, i) => `
       <div class="stock-item-row">
         <input type="text" value="${val.replace(/"/g,'&quot;')}" placeholder="e.g. Milo 3in1, 100Plus..."
-          onchange="updateStockItem('${staffId}','${safeKey}',${i},this.value)"
+          oninput="updateStockItem('${staffId}','${safeKey}',${i},this.value)"
           onkeydown="stockKeydown(event,'${staffId}','${safeKey}')">
         <button class="del-btn" onclick="removeStockItem('${staffId}','${safeKey}',${i})" title="Remove">✕</button>
       </div>`).join('');
@@ -481,12 +481,26 @@
   function addStockItem(staffId, safeKey) {
     const key = decodeURIComponent(safeKey);
     ensureStock(staffId, key);
+    // Save current input values first
+    const container = document.getElementById('si-' + staffId + '-' + safeKey);
+    if (container) {
+      container.querySelectorAll('input').forEach((inp, i) => {
+        stockItems[staffId][key][i] = inp.value;
+      });
+    }
     stockItems[staffId][key].push('');
     rerenderStockSection(staffId, safeKey, key);
   }
 
   function removeStockItem(staffId, safeKey, index) {
     const key = decodeURIComponent(safeKey);
+    // Save current values before splice
+    const container = document.getElementById('si-' + staffId + '-' + safeKey);
+    if (container) {
+      container.querySelectorAll('input').forEach((inp, i) => {
+        stockItems[staffId][key][i] = inp.value;
+      });
+    }
     stockItems[staffId][key].splice(index, 1);
     if (stockItems[staffId][key].length === 0) stockItems[staffId][key] = [''];
     rerenderStockSection(staffId, safeKey, key);
@@ -502,7 +516,7 @@
     const rows = stockItems[staffId][key].map((val, i) => `
       <div class="stock-item-row">
         <input type="text" value="${val.replace(/"/g,'&quot;')}" placeholder="e.g. Milo 3in1, 100Plus..."
-          onchange="updateStockItem('${staffId}','${safeKey}',${i},this.value)"
+          oninput="updateStockItem('${staffId}','${safeKey}',${i},this.value)"
           onkeydown="stockKeydown(event,'${staffId}','${safeKey}')">
         <button class="del-btn" onclick="removeStockItem('${staffId}','${safeKey}',${i})" title="Remove">✕</button>
       </div>`).join('');
