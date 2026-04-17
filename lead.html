@@ -79,6 +79,22 @@
     .adhoc-input-row input:focus { border-color:var(--accent); }
     .adhoc-tag { display:inline-flex;align-items:center;gap:6px;background:rgba(124,92,252,0.15);color:var(--accent2);border-radius:99px;padding:4px 12px;font-size:0.82rem;font-weight:600;margin:4px 4px 0 0;cursor:pointer; }
     .adhoc-tag:hover { background:rgba(124,92,252,0.25); }
+
+    /* ── Stock manual input ────────────────── */
+    .stock-section { border-bottom:1px solid var(--border); }
+    .stock-section:last-child { border-bottom:none; }
+    .stock-section-header { padding:9px 20px; background:rgba(0,0,0,0.06); }
+    .stock-section-name { font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted); }
+    .stock-subgroup { border-top:1px solid var(--border); padding:10px 20px 12px; background:rgba(79,138,255,0.03); border-left:2px solid var(--accent); }
+    .stock-subgroup-name { font-size:0.78rem;font-weight:600;color:var(--accent);margin-bottom:8px; }
+    .stock-items { display:flex;flex-direction:column;gap:6px;margin-bottom:8px; }
+    .stock-item-row { display:flex;align-items:center;gap:6px; }
+    .stock-item-row input { flex:1;padding:7px 10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--font);font-size:0.85rem;outline:none; }
+    .stock-item-row input:focus { border-color:var(--accent); }
+    .stock-item-row .del-btn { background:transparent;border:none;color:var(--danger);cursor:pointer;font-size:1rem;padding:4px 6px;line-height:1; }
+    .stock-add-btn { font-size:0.78rem;padding:5px 12px; }
+    .stock-direct { padding:10px 20px 12px; }
+    .stock-direct-name { font-size:0.78rem;font-weight:600;color:var(--muted);margin-bottom:8px; }
   </style>
 </head>
 <body>
@@ -331,54 +347,75 @@
     return tree;
   }
 
+  // IDs of categories that use manual stock input
+  let stockCategoryIds = [];
+
   function renderTieredCheckboxes(staffId, tree) {
     let html = '';
     for (const cat of tree) {
-      const catTasks = getAllCatTasks(cat);
-      const allChecked = catTasks.length > 0 && catTasks.every(t => staffSelections[staffId].templateIds.has(t.id));
+      const isStockCat = cat.name && cat.name.toLowerCase().includes('stock');
+      if (isStockCat && !stockCategoryIds.includes(cat.id)) stockCategoryIds.push(cat.id);
+
       let subcatHtml = '';
 
-      // Direct tasks under category
-      subcatHtml += cat.directTasks.map(t => checkboxRow(staffId, t, 'task-checkbox')).join('');
-
-      for (const sub of cat.subcats) {
-        const subTasks = getAllSubTasks(sub);
-        const subAllChecked = subTasks.length > 0 && subTasks.every(t => staffSelections[staffId].templateIds.has(t.id));
-        let subContent = '';
-
-        // Select all for subcategory
-        subContent += `<div class="select-all-row" onclick="selectAllSub('${staffId}','${sub.id}')">
-          <input type="checkbox" id="sall-${staffId}-${sub.id}" ${subAllChecked?'checked':''} onclick="event.stopPropagation();selectAllSub('${staffId}','${sub.id}')">
-          <span>Select all</span></div>`;
-
-        // Direct tasks under subcategory
-        subContent += sub.directTasks.map(t => checkboxRow(staffId, t, 'task-checkbox task-checkbox--sub')).join('');
-
-        // Subgroups
-        for (const grp of sub.subgroups) {
-          const grpAllChecked = grp.tasks.length > 0 && grp.tasks.every(t => staffSelections[staffId].templateIds.has(t.id));
-          let grpContent = `<div class="select-all-row" style="padding-left:40px" onclick="selectAllGrp('${staffId}','${grp.id}')">
-            <input type="checkbox" id="gall-${staffId}-${grp.id}" ${grpAllChecked?'checked':''} onclick="event.stopPropagation();selectAllGrp('${staffId}','${grp.id}')">
-            <span>Select all</span></div>`;
-          grpContent += grp.tasks.map(t => checkboxRow(staffId, t, 'task-checkbox task-checkbox--grp')).join('');
-          subContent += `
-            <div class="ac-grp">
-              <div class="ac-grp-header" onclick="togAc('ag-${staffId}-${grp.id}','agc-${staffId}-${grp.id}')">
-                <span class="ac-grp-name">${grp.name}</span>
-                <span class="ac-chev" id="agc-${staffId}-${grp.id}">▼</span>
+      if (isStockCat) {
+        // STOCK CATEGORY — render manual input sections
+        subcatHtml += cat.directTasks.map(t => checkboxRow(staffId, t, 'task-checkbox')).join('');
+        for (const sub of cat.subcats) {
+          let subContent = '';
+          // Direct tasks under sub become manual input sections
+          if (sub.directTasks.length > 0) {
+            subContent += sub.directTasks.map(t => stockInputSection(staffId, sub.id, t, null)).join('');
+          }
+          // Subgroups become manual input sections
+          for (const grp of sub.subgroups) {
+            subContent += stockInputSection(staffId, sub.id, null, grp);
+          }
+          subcatHtml += `
+            <div class="ac-sub">
+              <div class="ac-sub-header" onclick="togAc('as-${staffId}-${sub.id}','asc-${staffId}-${sub.id}')">
+                <span class="ac-sub-name">${sub.name}</span>
+                <span class="ac-chev" id="asc-${staffId}-${sub.id}">▼</span>
               </div>
-              <div class="ac-grp-body" id="ag-${staffId}-${grp.id}">${grpContent}</div>
+              <div class="ac-sub-body" id="as-${staffId}-${sub.id}">${subContent}</div>
             </div>`;
         }
-
-        subcatHtml += `
-          <div class="ac-sub">
-            <div class="ac-sub-header" onclick="togAc('as-${staffId}-${sub.id}','asc-${staffId}-${sub.id}')">
-              <span class="ac-sub-name">${sub.name}</span>
-              <span class="ac-chev" id="asc-${staffId}-${sub.id}">▼</span>
-            </div>
-            <div class="ac-sub-body" id="as-${staffId}-${sub.id}">${subContent}</div>
-          </div>`;
+      } else {
+        // NORMAL CATEGORY — render checkboxes
+        const catTasks = getAllCatTasks(cat);
+        subcatHtml += cat.directTasks.map(t => checkboxRow(staffId, t, 'task-checkbox')).join('');
+        for (const sub of cat.subcats) {
+          const subTasks = getAllSubTasks(sub);
+          const subAllChecked = subTasks.length > 0 && subTasks.every(t => staffSelections[staffId].templateIds.has(t.id));
+          let subContent = '';
+          subContent += `<div class="select-all-row" onclick="selectAllSub('${staffId}','${sub.id}')">
+            <input type="checkbox" id="sall-${staffId}-${sub.id}" ${subAllChecked?'checked':''} onclick="event.stopPropagation();selectAllSub('${staffId}','${sub.id}')">
+            <span>Select all</span></div>`;
+          subContent += sub.directTasks.map(t => checkboxRow(staffId, t, 'task-checkbox task-checkbox--sub')).join('');
+          for (const grp of sub.subgroups) {
+            const grpAllChecked = grp.tasks.length > 0 && grp.tasks.every(t => staffSelections[staffId].templateIds.has(t.id));
+            let grpContent = `<div class="select-all-row" style="padding-left:40px" onclick="selectAllGrp('${staffId}','${grp.id}')">
+              <input type="checkbox" id="gall-${staffId}-${grp.id}" ${grpAllChecked?'checked':''} onclick="event.stopPropagation();selectAllGrp('${staffId}','${grp.id}')">
+              <span>Select all</span></div>`;
+            grpContent += grp.tasks.map(t => checkboxRow(staffId, t, 'task-checkbox task-checkbox--grp')).join('');
+            subContent += `
+              <div class="ac-grp">
+                <div class="ac-grp-header" onclick="togAc('ag-${staffId}-${grp.id}','agc-${staffId}-${grp.id}')">
+                  <span class="ac-grp-name">${grp.name}</span>
+                  <span class="ac-chev" id="agc-${staffId}-${grp.id}">▼</span>
+                </div>
+                <div class="ac-grp-body" id="ag-${staffId}-${grp.id}">${grpContent}</div>
+              </div>`;
+          }
+          subcatHtml += `
+            <div class="ac-sub">
+              <div class="ac-sub-header" onclick="togAc('as-${staffId}-${sub.id}','asc-${staffId}-${sub.id}')">
+                <span class="ac-sub-name">${sub.name}</span>
+                <span class="ac-chev" id="asc-${staffId}-${sub.id}">▼</span>
+              </div>
+              <div class="ac-sub-body" id="as-${staffId}-${sub.id}">${subContent}</div>
+            </div>`;
+        }
       }
 
       html += `
@@ -391,6 +428,79 @@
         </div>`;
     }
     return html;
+  }
+
+  // stockItems: { staffId: { sectionKey: ['item1','item2'] } }
+  let stockItems = {};
+
+  function stockKey(subId, taskOrGrp) {
+    const label = taskOrGrp ? (taskOrGrp.name || taskOrGrp.id) : 'direct';
+    return subId + '||' + label;
+  }
+
+  function ensureStock(staffId, key) {
+    if (!stockItems[staffId]) stockItems[staffId] = {};
+    if (!stockItems[staffId][key]) stockItems[staffId][key] = [''];
+  }
+
+  function stockInputSection(staffId, subId, task, grp) {
+    const label = grp ? grp.name : task.name;
+    const key   = stockKey(subId, grp || task);
+    ensureStock(staffId, key);
+    const safeKey = encodeURIComponent(key);
+    const rows = stockItems[staffId][key].map((val, i) => `
+      <div class="stock-item-row">
+        <input type="text" value="${val.replace(/"/g,'&quot;')}" placeholder="e.g. Milo 3in1, 100Plus..."
+          onchange="updateStockItem('${staffId}','${safeKey}',${i},this.value)"
+          onkeydown="stockKeydown(event,'${staffId}','${safeKey}')">
+        <button class="del-btn" onclick="removeStockItem('${staffId}','${safeKey}',${i})" title="Remove">✕</button>
+      </div>`).join('');
+    return `
+      <div class="stock-subgroup">
+        <div class="stock-subgroup-name">${label}</div>
+        <div class="stock-items" id="si-${staffId}-${safeKey}">${rows}</div>
+        <button class="btn btn--ghost btn--sm stock-add-btn" onclick="addStockItem('${staffId}','${safeKey}')">+ Add item</button>
+      </div>`;
+  }
+
+  function updateStockItem(staffId, safeKey, index, value) {
+    const key = decodeURIComponent(safeKey);
+    ensureStock(staffId, key);
+    stockItems[staffId][key][index] = value;
+  }
+
+  function addStockItem(staffId, safeKey) {
+    const key = decodeURIComponent(safeKey);
+    ensureStock(staffId, key);
+    stockItems[staffId][key].push('');
+    rerenderStockSection(staffId, safeKey, key);
+  }
+
+  function removeStockItem(staffId, safeKey, index) {
+    const key = decodeURIComponent(safeKey);
+    stockItems[staffId][key].splice(index, 1);
+    if (stockItems[staffId][key].length === 0) stockItems[staffId][key] = [''];
+    rerenderStockSection(staffId, safeKey, key);
+  }
+
+  function stockKeydown(e, staffId, safeKey) {
+    if (e.key === 'Enter') { e.preventDefault(); addStockItem(staffId, safeKey); }
+  }
+
+  function rerenderStockSection(staffId, safeKey, key) {
+    const container = document.getElementById('si-' + staffId + '-' + safeKey);
+    if (!container) return;
+    const rows = stockItems[staffId][key].map((val, i) => `
+      <div class="stock-item-row">
+        <input type="text" value="${val.replace(/"/g,'&quot;')}" placeholder="e.g. Milo 3in1, 100Plus..."
+          onchange="updateStockItem('${staffId}','${safeKey}',${i},this.value)"
+          onkeydown="stockKeydown(event,'${staffId}','${safeKey}')">
+        <button class="del-btn" onclick="removeStockItem('${staffId}','${safeKey}',${i})" title="Remove">✕</button>
+      </div>`).join('');
+    container.innerHTML = rows;
+    // Focus last input
+    const inputs = container.querySelectorAll('input');
+    if (inputs.length) inputs[inputs.length-1].focus();
   }
 
   function checkboxRow(staffId, t, cls) {
@@ -515,6 +625,17 @@
       }
       for (const adhoc of sel.adhocTasks) {
         rows.push({ date: today(), staff_id: s.id, is_adhoc: true, custom_task_name: adhoc.name, photo_required: adhoc.photoRequired, created_by: currentUser?.id });
+      }
+      // Stock manual items
+      if (stockItems[s.id]) {
+        for (const [key, items] of Object.entries(stockItems[s.id])) {
+          const sectionLabel = key.split('||')[1] || 'Stock';
+          for (const item of items) {
+            const trimmed = item.trim();
+            if (!trimmed) continue;
+            rows.push({ date: today(), staff_id: s.id, is_adhoc: true, custom_task_name: `[${sectionLabel}] ${trimmed}`, photo_required: false, created_by: currentUser?.id });
+          }
+        }
       }
     }
     if (rows.length > 0) {
