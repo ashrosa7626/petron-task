@@ -117,7 +117,13 @@
   <!-- MAIN SIGN-OFF VIEW -->
   <div class="content content--wide" id="mainView" style="display:none">
     <div style="margin-bottom:20px">
-      <div style="font-size:1.3rem;font-weight:700">Task Sign-Off</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+        <div style="font-size:1.3rem;font-weight:700">Task Sign-Off</div>
+        <select id="supBranch" onchange="loadCompletions()" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--font);font-size:0.85rem;outline:none">
+          <option value="Safari">Safari</option>
+          <option value="Nilai Desa Jati">Nilai Desa Jati</option>
+        </select>
+      </div>
       <div class="text-muted text-sm" id="dateLabel"></div>
     </div>
 
@@ -254,14 +260,28 @@
 
     allCompletions = (data || []).map(c => {
       const assign = c.daily_assignments;
-      const taskName = assign?.is_adhoc
-        ? assign.custom_task_name
+      const rawTaskName = assign?.is_adhoc
+        ? (assign.custom_task_name?.startsWith('TOPUP:')
+            ? assign.custom_task_name.split(':').slice(3).join(':')
+            : assign.custom_task_name)
         : (assign?.task_templates?.name || 'Task');
+
+      const catName = assign?.task_templates?.categories?.name || '';
+      let actionWord = '';
+      if (assign?.custom_task_name?.startsWith('TOPUP:')) {
+        actionWord = 'TOP-UP';
+      } else if (catName.toLowerCase().includes('housekeeping') || catName.toLowerCase().includes('bersihkan')) {
+        actionWord = 'BERSIHKAN';
+      } else if (catName.toLowerCase().includes('stock')) {
+        actionWord = 'TOP-UP';
+      }
+      const taskName = rawTaskName;
       const staffName = assign?.users?.name || 'Unknown';
       const existingSignoff = c.sign_offs?.[0];
       return {
         id: c.id,
         taskName,
+        actionWord,
         staffName,
         staffInitial: staffName.charAt(0).toUpperCase(),
         completedAt: c.completed_at,
@@ -339,7 +359,9 @@
           <div class="completion-header">
             <div class="completion-avatar">${c.staffInitial}</div>
             <div class="completion-meta">
-              <div class="completion-task">${c.taskName}</div>
+              <div class="completion-task">
+                ${c.actionWord ? `<span style="font-size:0.72rem;font-weight:700;padding:2px 8px;border-radius:99px;background:rgba(79,138,255,0.12);color:var(--accent);font-family:var(--mono);margin-right:6px">${c.actionWord}</span>` : ''}${c.taskName}
+              </div>
               <div class="completion-info">
                 <span>${c.staffName}</span>
                 <span>${formatTime(c.completedAt)}</span>
