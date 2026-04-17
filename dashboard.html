@@ -68,11 +68,18 @@
     <span class="text-sm text-muted" style="font-weight:600">Branch:</span>
     <button class="br-btn active" id="br-Safari" onclick="switchBranch('Safari')">Safari</button>
     <button class="br-btn inactive" id="br-NDJ" onclick="switchBranch('Nilai Desa Jati')">Nilai Desa Jati</button>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+      <span class="text-sm text-muted" style="font-weight:600">Date:</span>
+      <input type="date" id="dashDate"
+        style="padding:5px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--font);font-size:0.85rem;outline:none;cursor:pointer"
+        onchange="loadDashboard()">
+      <button class="br-btn inactive" onclick="goToday()" id="todayBtn" style="padding:5px 12px;font-size:0.78rem">Today</button>
+    </div>
   </div>
 
   <div class="content content--wide">
     <div style="margin-bottom:20px">
-      <div style="font-size:1.3rem;font-weight:700">Live Overview</div>
+      <div style="font-size:1.3rem;font-weight:700">Overview</div>
       <div class="text-muted text-sm" id="dateLabel"></div>
     </div>
 
@@ -109,9 +116,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="app.js"></script>
 <script>
-  document.getElementById('dateLabel').textContent =
-    new Date().toLocaleDateString([], { weekday:'long', month:'long', day:'numeric' });
-
   function updateClock() {
     document.getElementById('clock').textContent =
       new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
@@ -120,6 +124,22 @@
   setInterval(loadDashboard, 30000);
 
   let currentBranch = 'Safari';
+
+  function getSelectedDate() {
+    return document.getElementById('dashDate')?.value || today();
+  }
+
+  function goToday() {
+    document.getElementById('dashDate').value = today();
+    document.getElementById('todayBtn').className = 'br-btn inactive';
+    loadDashboard();
+  }
+
+  // Set date picker to today on load
+  window.addEventListener('load', () => {
+    const dp = document.getElementById('dashDate');
+    if (dp) dp.value = today();
+  });
 
   function switchBranch(branch) {
     currentBranch = branch;
@@ -163,6 +183,11 @@
 
   async function loadDashboard() {
     document.getElementById('staffRows').innerHTML = '<div class="empty-state">Loading...</div>';
+    const selectedDate = getSelectedDate();
+    const isToday = selectedDate === today();
+    document.getElementById('dateLabel').textContent = isToday
+      ? new Date().toLocaleDateString([], { weekday:'long', month:'long', day:'numeric' })
+      : new Date(selectedDate + 'T00:00:00').toLocaleDateString([], { weekday:'long', month:'long', day:'numeric' });
 
     const { data: assignments, error } = await db
       .from('daily_assignments')
@@ -177,7 +202,7 @@
         completions(id, completed_at, photo_url, signoff_status),
         users(id, name)
       `)
-      .eq('date', today())
+      .eq('date', getSelectedDate())
       .eq('branch', currentBranch);
 
     if (error || !assignments) { document.getElementById('staffRows').innerHTML = '<div class="empty-state">Error loading.</div>'; return; }
