@@ -679,7 +679,7 @@
     const inp  = document.getElementById('adhoc-input-' + staffId);
     const name = inp.value.trim();
     if (!name) return;
-    staffSelections[staffId].adhocTasks.push({ name, photoRequired: false });
+    staffSelections[staffId].adhocTasks.push({ name, photoRequired: true });
     inp.value = '';
     document.getElementById('adhoc-tags-' + staffId).innerHTML = renderAdhocTagsHtml(staffId);
   }
@@ -694,7 +694,7 @@
   function renderAdhocTagsHtml(staffId) {
     return (staffSelections[staffId]?.adhocTasks || []).map((a, i) => `
       <span class="adhoc-tag" onclick="removeAdhoc('${staffId}',${i})">
-        ${a.name} <span style="opacity:0.6">✕</span>
+        📷 ${a.name} <span style="opacity:0.6">✕</span>
       </span>`).join('');
   }
 
