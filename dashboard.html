@@ -164,11 +164,7 @@
     }
   }
 
-  // Set date to today on load
-  window.addEventListener('load', () => {
-    const dp = document.getElementById('dashDate');
-    if (dp) { dp.value = today(); updateDateDisplay(); }
-  });
+
 
   function switchBranch(branch) {
     currentBranch = branch;
@@ -358,6 +354,9 @@
     document.getElementById('soPending').textContent   = soPending;
   }
 
+  // Initialise date and load
+  document.getElementById('dashDate').value = today();
+  updateDateDisplay();
   loadDashboard();
 </script>
 </body>
