@@ -6,47 +6,54 @@
   <title>Dashboard – Petron Tasks</title>
   <link rel="stylesheet" href="style.css">
   <style>
-    .staff-row { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 12px; }
-    .staff-row__header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; cursor: pointer; }
-    .staff-row__avatar { width: 38px; height: 38px; border-radius: 50%; background: linear-gradient(135deg,var(--accent),var(--accent2)); display:flex;align-items:center;justify-content:center;font-weight:700;color:white;font-size:1rem;flex-shrink:0; }
-    .staff-row__name { font-weight: 700; flex: 1; }
-    .staff-row__tasks { display: none; border-top: 1px solid var(--border); margin-top: 10px; padding-top: 10px; }
-    .staff-row__tasks--open { display: block; }
-
-    .mini-task { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
-    .mini-task:last-child { border-bottom: none; }
-    .mini-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--border); flex-shrink: 0; }
-    .mini-dot--done     { background: var(--success); }
-    .mini-dot--approved { background: var(--success); box-shadow: 0 0 0 2px rgba(34,197,94,0.25); }
-    .mini-dot--flagged  { background: var(--danger); }
-
-    .signoff-badge {
-      display: inline-flex; align-items: center; gap: 4px;
-      font-size: 0.68rem; font-weight: 600; padding: 2px 8px;
-      border-radius: 99px; font-family: var(--mono);
-    }
-    .signoff-badge--approved { background: rgba(34,197,94,0.12); color: var(--success); }
-    .signoff-badge--flagged  { background: rgba(239,68,68,0.12);  color: var(--danger); }
-    .signoff-badge--pending  { background: rgba(79,138,255,0.10); color: var(--muted); }
-
-    .refresh-btn { position: fixed; bottom: 90px; right: 24px; width: 52px; height: 52px; border-radius: 50%; background: var(--accent); border: none; color: white; font-size: 1.3rem; cursor: pointer; box-shadow: var(--shadow); transition: transform 0.2s; }
-    .refresh-btn:hover { transform: rotate(30deg); }
-
-    .supervisor-btn { position: fixed; bottom: 24px; right: 24px; display: flex; align-items: center; gap: 8px; padding: 13px 20px; border-radius: 99px; background: var(--accent2); border: none; color: white; font-family: var(--font); font-size: 0.9rem; font-weight: 600; cursor: pointer; box-shadow: var(--shadow); text-decoration: none; }
-    .supervisor-btn:hover { background: #9d7dff; }
-
-    .signoff-summary {
-      display: flex; gap: 8px; margin-bottom: 24px;
-    }
-    .signoff-pill {
-      flex: 1; background: var(--surface); border: 1px solid var(--border);
-      border-radius: var(--radius-sm); padding: 12px 10px; text-align: center;
-    }
-    .signoff-pill__num { font-size: 1.4rem; font-weight: 700; font-family: var(--mono); }
-    .signoff-pill__label { font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
-    .signoff-pill--approved .signoff-pill__num { color: var(--success); }
-    .signoff-pill--flagged  .signoff-pill__num { color: var(--danger); }
-    .signoff-pill--pending  .signoff-pill__num { color: var(--accent); }
+    .ac-staff { margin-bottom:10px; }
+    .ac-staff-hdr { display:flex;align-items:center;gap:12px;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;user-select:none; }
+    .ac-staff-hdr:hover { border-color:var(--accent); }
+    .ac-staff-hdr.open { border-radius:var(--radius) var(--radius) 0 0;border-bottom-color:transparent; }
+    .ac-staff-av { width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-weight:700;color:white;font-size:1rem;flex-shrink:0; }
+    .ac-staff-nm { font-weight:700;flex:1;font-size:0.97rem; }
+    .ac-staff-bd { display:none;border:1px solid var(--border);border-top:none;border-radius:0 0 var(--radius) var(--radius);overflow:hidden; }
+    .ac-staff-bd.open { display:block; }
+    .ac-cat-hdr { display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:var(--surface2);cursor:pointer;border-bottom:1px solid var(--border); }
+    .ac-cat-hdr:hover { background:var(--surface); }
+    .ac-cat-bd { display:none; }
+    .ac-cat-bd.open { display:block; }
+    .ac-sub-hdr { display:flex;align-items:center;justify-content:space-between;padding:8px 20px;background:var(--surface);cursor:pointer;border-bottom:1px solid var(--border);border-left:3px solid var(--border); }
+    .ac-sub-hdr:hover { background:var(--surface2); }
+    .ac-sub-bd { display:none; }
+    .ac-sub-bd.open { display:block; }
+    .ac-grp-hdr { display:flex;align-items:center;justify-content:space-between;padding:7px 28px;background:var(--surface2);cursor:pointer;border-bottom:1px solid var(--border);border-left:3px solid var(--accent); }
+    .ac-grp-hdr:hover { background:var(--surface); }
+    .ac-grp-bd { display:none; }
+    .ac-grp-bd.open { display:block; }
+    .chev { font-size:0.7rem;color:var(--muted);transition:transform 0.2s;margin-left:6px; }
+    .chev.open { transform:rotate(180deg); }
+    .cpill { font-size:0.72rem;font-family:var(--mono);padding:2px 8px;border-radius:99px;background:rgba(79,138,255,0.15);color:var(--accent);margin-right:4px; }
+    .cpill.done { background:rgba(34,197,94,0.15);color:var(--success); }
+    .mtask { display:flex;align-items:center;gap:10px;padding:9px 16px;border-bottom:1px solid var(--border); }
+    .mtask:last-child { border-bottom:none; }
+    .mdot { width:10px;height:10px;border-radius:50%;background:var(--border);flex-shrink:0; }
+    .mdot.done { background:var(--success); }
+    .mdot.approved { background:var(--success);box-shadow:0 0 0 2px rgba(34,197,94,0.25); }
+    .mdot.flagged { background:var(--danger); }
+    .sbadge { font-size:0.68rem;font-weight:600;padding:2px 8px;border-radius:99px;font-family:var(--mono); }
+    .sbadge.approved { background:rgba(34,197,94,0.12);color:var(--success); }
+    .sbadge.flagged  { background:rgba(239,68,68,0.12);color:var(--danger); }
+    .sbadge.pending  { background:rgba(79,138,255,0.10);color:var(--muted); }
+    .refresh-btn { position:fixed;bottom:90px;right:24px;width:52px;height:52px;border-radius:50%;background:var(--accent);border:none;color:white;font-size:1.3rem;cursor:pointer;box-shadow:var(--shadow);transition:transform 0.2s; }
+    .refresh-btn:hover { transform:rotate(30deg); }
+    .sup-btn { position:fixed;bottom:24px;right:24px;display:flex;align-items:center;gap:8px;padding:13px 20px;border-radius:99px;background:var(--accent2);border:none;color:white;font-family:var(--font);font-size:0.9rem;font-weight:600;cursor:pointer;box-shadow:var(--shadow);text-decoration:none; }
+    .signoff-summary { display:flex;gap:8px;margin-bottom:24px; }
+    .so-pill { flex:1;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 10px;text-align:center; }
+    .so-pill__num { font-size:1.4rem;font-weight:700;font-family:var(--mono); }
+    .so-pill__lbl { font-size:0.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-top:2px; }
+    .so-pill.approved .so-pill__num { color:var(--success); }
+    .so-pill.flagged  .so-pill__num { color:var(--danger); }
+    .so-pill.pending  .so-pill__num { color:var(--accent); }
+    .branch-bar { padding:12px 24px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px; }
+    .br-btn { padding:6px 16px;border-radius:99px;font-family:var(--font);font-size:0.85rem;font-weight:600;cursor:pointer;transition:all 0.15s; }
+    .br-btn.active { background:var(--accent);border:1px solid var(--accent);color:white; }
+    .br-btn.inactive { background:transparent;border:1px solid var(--border);color:var(--muted); }
   </style>
 </head>
 <body>
@@ -57,17 +64,10 @@
     <div class="text-sm text-muted" id="clock"></div>
   </div>
 
-  <!-- Branch selector -->
-  <div style="padding:12px 24px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+  <div class="branch-bar">
     <span class="text-sm text-muted" style="font-weight:600">Branch:</span>
-    <button onclick="switchBranch('Safari')" id="btn-Safari"
-      style="padding:6px 16px;border-radius:99px;border:1px solid var(--accent);background:var(--accent);color:white;font-family:var(--font);font-size:0.85rem;font-weight:600;cursor:pointer">
-      Safari
-    </button>
-    <button onclick="switchBranch('Nilai Desa Jati')" id="btn-Nilai Desa Jati"
-      style="padding:6px 16px;border-radius:99px;border:1px solid var(--border);background:transparent;color:var(--muted);font-family:var(--font);font-size:0.85rem;font-weight:600;cursor:pointer">
-      Nilai Desa Jati
-    </button>
+    <button class="br-btn active" id="br-Safari" onclick="switchBranch('Safari')">Safari</button>
+    <button class="br-btn inactive" id="br-NDJ" onclick="switchBranch('Nilai Desa Jati')">Nilai Desa Jati</button>
   </div>
 
   <div class="content content--wide">
@@ -76,20 +76,10 @@
       <div class="text-muted text-sm" id="dateLabel"></div>
     </div>
 
-    <!-- Task completion stats -->
     <div class="stats-row">
-      <div class="stat-card stat-card--green">
-        <div class="stat-card__num" id="statDone">–</div>
-        <div class="stat-card__label">Completed</div>
-      </div>
-      <div class="stat-card stat-card--amber">
-        <div class="stat-card__num" id="statPending">–</div>
-        <div class="stat-card__label">Pending</div>
-      </div>
-      <div class="stat-card stat-card--blue">
-        <div class="stat-card__num" id="statTotal">–</div>
-        <div class="stat-card__label">Total Tasks</div>
-      </div>
+      <div class="stat-card stat-card--green"><div class="stat-card__num" id="statDone">–</div><div class="stat-card__label">Completed</div></div>
+      <div class="stat-card stat-card--amber"><div class="stat-card__num" id="statPending">–</div><div class="stat-card__label">Pending</div></div>
+      <div class="stat-card stat-card--blue"><div class="stat-card__num" id="statTotal">–</div><div class="stat-card__label">Total Tasks</div></div>
     </div>
 
     <div class="card" style="margin-bottom:24px">
@@ -97,26 +87,14 @@
         <span class="text-sm" style="font-weight:600">Overall Progress</span>
         <span class="text-sm text-muted" id="overallLabel">–</span>
       </div>
-      <div class="progress-bar">
-        <div class="progress-bar__fill" id="overallFill" style="width:0%"></div>
-      </div>
+      <div class="progress-bar"><div class="progress-bar__fill" id="overallFill" style="width:0%"></div></div>
     </div>
 
-    <!-- Sign-off summary -->
     <div class="section-title">Supervisor Sign-Off Status</div>
     <div class="signoff-summary">
-      <div class="signoff-pill signoff-pill--approved">
-        <div class="signoff-pill__num" id="soApproved">–</div>
-        <div class="signoff-pill__label">Approved</div>
-      </div>
-      <div class="signoff-pill signoff-pill--flagged">
-        <div class="signoff-pill__num" id="soFlagged">–</div>
-        <div class="signoff-pill__label">Flagged</div>
-      </div>
-      <div class="signoff-pill signoff-pill--pending">
-        <div class="signoff-pill__num" id="soPending">–</div>
-        <div class="signoff-pill__label">Awaiting review</div>
-      </div>
+      <div class="so-pill approved"><div class="so-pill__num" id="soApproved">–</div><div class="so-pill__lbl">Approved</div></div>
+      <div class="so-pill flagged"><div class="so-pill__num" id="soFlagged">–</div><div class="so-pill__lbl">Flagged</div></div>
+      <div class="so-pill pending"><div class="so-pill__num" id="soPending">–</div><div class="so-pill__lbl">Awaiting Review</div></div>
     </div>
 
     <div class="section-title">Staff Progress</div>
@@ -125,58 +103,73 @@
 </div>
 
 <button class="refresh-btn" onclick="loadDashboard()" title="Refresh">↻</button>
-<a href="supervisor.html" class="supervisor-btn">Sign-Off Review</a>
-
+<a href="supervisor.html" class="sup-btn">Sign-Off Review</a>
 <div id="toast" class="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="app.js"></script>
 <script>
   document.getElementById('dateLabel').textContent =
-    new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
-
-  window.currentBranch = 'Safari';
-
-  function switchBranch(branch) {
-    window.currentBranch = branch;
-    // Update button styles
-    ['Safari', 'Nilai Desa Jati'].forEach(b => {
-      const btn = document.getElementById('btn-' + b);
-      if (!btn) return;
-      if (b === branch) {
-        btn.style.background = 'var(--accent)';
-        btn.style.borderColor = 'var(--accent)';
-        btn.style.color = 'white';
-      } else {
-        btn.style.background = 'transparent';
-        btn.style.borderColor = 'var(--border)';
-        btn.style.color = 'var(--muted)';
-      }
-    });
-    loadDashboard();
-  }
+    new Date().toLocaleDateString([], { weekday:'long', month:'long', day:'numeric' });
 
   function updateClock() {
     document.getElementById('clock').textContent =
-      new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
   }
   updateClock(); setInterval(updateClock, 1000);
   setInterval(loadDashboard, 30000);
 
+  let currentBranch = 'Safari';
+
+  function switchBranch(branch) {
+    currentBranch = branch;
+    document.getElementById('br-Safari').className = 'br-btn ' + (branch==='Safari'?'active':'inactive');
+    document.getElementById('br-NDJ').className    = 'br-btn ' + (branch==='Nilai Desa Jati'?'active':'inactive');
+    loadDashboard();
+  }
+
+  function tog(bId, cId) {
+    const b=document.getElementById(bId), c=document.getElementById(cId);
+    if(!b||!c) return;
+    b.classList.toggle('open'); c.classList.toggle('open');
+  }
+  function togStaff(bId, hId, cId) {
+    const opening = !document.getElementById(bId)?.classList.contains('open');
+    document.getElementById(bId)?.classList.toggle('open', opening);
+    document.getElementById(hId)?.classList.toggle('open', opening);
+    document.getElementById(cId)?.classList.toggle('open', opening);
+  }
+
+  function pill(done, total) {
+    const cls = (done===total && total>0) ? 'cpill done' : 'cpill';
+    return `<span class="${cls}">${done}/${total}</span>`;
+  }
+
+  function mtask(t) {
+    const dotCls = !t.done ? 'mdot' : t.signoff_status==='approved' ? 'mdot approved' : t.signoff_status==='flagged' ? 'mdot flagged' : 'mdot done';
+    const badge  = t.done
+      ? t.signoff_status==='approved' ? '<span class="sbadge approved">Approved</span>'
+      : t.signoff_status==='flagged'  ? '<span class="sbadge flagged">Flagged</span>'
+      : '<span class="sbadge pending">Awaiting</span>'
+      : '';
+    return `<div class="mtask">
+      <div class="${dotCls}"></div>
+      <div style="flex:1;font-size:0.85rem">${t.name}</div>
+      ${t.done ? `<span class="text-sm text-muted">${formatTime(t.completed_at)}</span>` : '<span class="badge badge--pending" style="font-size:0.7rem">Pending</span>'}
+      ${badge}
+      ${t.photo_url ? `<a href="${t.photo_url}" target="_blank" class="btn btn--ghost btn--sm" style="padding:3px 7px;font-size:0.7rem">Photo</a>` : ''}
+    </div>`;
+  }
+
   async function loadDashboard() {
     document.getElementById('staffRows').innerHTML = '<div class="empty-state">Loading...</div>';
-    document.getElementById('statDone').textContent    = '–';
-    document.getElementById('statPending').textContent = '–';
-    document.getElementById('statTotal').textContent   = '–';
-    document.getElementById('soApproved').textContent  = '–';
-    document.getElementById('soFlagged').textContent   = '–';
-    document.getElementById('soPending').textContent   = '–';
-    const branch = window.currentBranch || 'Safari';
+
     const { data: assignments, error } = await db
       .from('daily_assignments')
       .select(`
         id, is_adhoc, custom_task_name, staff_id,
-        task_templates(name, photo_required, category_id, subcategory_id, subgroup_id, sort_order,
+        task_templates(
+          name, photo_required, category_id, subcategory_id, subgroup_id, sort_order,
           categories(id, name, sort_order),
           subcategories(id, name, sort_order),
           subgroups(id, name, sort_order)
@@ -185,207 +178,134 @@
         users(id, name)
       `)
       .eq('date', today())
-      .eq('branch', branch);
+      .eq('branch', currentBranch);
 
-    if (error || !assignments) return;
+    if (error || !assignments) { document.getElementById('staffRows').innerHTML = '<div class="empty-state">Error loading.</div>'; return; }
 
-    // Group by staff
     const byStaff = {};
-    let soApproved = 0, soFlagged = 0, soPending = 0;
+    let soApproved=0, soFlagged=0, soPending=0;
 
     for (const a of assignments) {
       const sid = a.staff_id;
       if (!byStaff[sid]) byStaff[sid] = { name: a.users?.name || 'Unknown', tasks: [] };
-      const completion    = a.completions?.[0] || null;
-      const signoffStatus = completion?.signoff_status || null;
-      const tpl           = a.task_templates;
-      const rawName       = a.is_adhoc ? a.custom_task_name : (tpl?.name || 'Task');
-      const isStock       = a.is_adhoc && rawName?.startsWith('TOPUP:');
-      const taskName      = isStock ? rawName.split(':').slice(3).join(':') : rawName;
+      const comp = a.completions?.[0] || null;
+      const ss   = comp?.signoff_status || null;
+      const tpl  = a.task_templates;
+      const raw  = a.custom_task_name || '';
+      const isStock = a.is_adhoc && raw.startsWith('TOPUP:');
+      const name = isStock ? raw.split(':').slice(3).join(':') : (a.is_adhoc ? raw : (tpl?.name || 'Task'));
 
-      if (completion) {
-        if (signoffStatus === 'approved') soApproved++;
-        else if (signoffStatus === 'flagged') soFlagged++;
+      if (comp) {
+        if (ss==='approved') soApproved++;
+        else if (ss==='flagged') soFlagged++;
         else soPending++;
       }
 
       byStaff[sid].tasks.push({
-        name:           taskName,
-        done:           !!completion,
-        completed_at:   completion?.completed_at,
-        photo_url:      completion?.photo_url,
-        signoff_status: signoffStatus,
-        is_adhoc:       a.is_adhoc && !isStock,
-        cat_id:         isStock ? '__stock_cat__' : (tpl?.category_id || null),
-        cat_name:       isStock ? 'Stocks & Merchandise (Top-up)' : (tpl?.categories?.name || null),
-        cat_order:      isStock ? 2 : (tpl?.categories?.sort_order ?? 99),
-        sub_id:         isStock ? '__stock_' + rawName.split(':')[1] + '__' : (tpl?.subcategory_id || null),
-        sub_name:       isStock ? rawName.split(':')[1] : (tpl?.subcategories?.name || null),
-        sub_order:      isStock ? 1 : (tpl?.subcategories?.sort_order ?? 99),
-        grp_id:         isStock ? '__stock_grp_' + rawName.split(':')[2] + '__' : (tpl?.subgroup_id || null),
-        grp_name:       isStock ? rawName.split(':')[2] : (tpl?.subgroups?.name || null),
-        grp_order:      99,
+        name, done:!!comp,
+        completed_at: comp?.completed_at, photo_url: comp?.photo_url,
+        signoff_status: ss,
+        cat_id:    isStock?'__stk__':(tpl?.category_id||null),
+        cat_name:  isStock?'Stocks & Merchandise (Top-up)':(tpl?.categories?.name||null),
+        cat_order: isStock?2:(tpl?.categories?.sort_order??99),
+        sub_id:    isStock?('__s_'+raw.split(':')[1]):(tpl?.subcategory_id||null),
+        sub_name:  isStock?raw.split(':')[1]:(tpl?.subcategories?.name||null),
+        sub_order: isStock?1:(tpl?.subcategories?.sort_order??99),
+        grp_id:    isStock?('__g_'+raw.split(':')[2]):(tpl?.subgroup_id||null),
+        grp_name:  isStock?raw.split(':')[2]:(tpl?.subgroups?.name||null),
       });
     }
 
-    document.getElementById('soApproved').textContent = soApproved;
-    document.getElementById('soFlagged').textContent  = soFlagged;
-    document.getElementById('soPending').textContent  = soPending;
-
-    let totalDone = 0, totalAll = 0;
+    let totalDone=0, totalAll=0;
     const container = document.getElementById('staffRows');
     const entries = Object.entries(byStaff);
 
-    if (entries.length === 0) {
-      container.innerHTML = '<div class="empty-state">No tasks assigned today.</div>';
-      return;
-    }
+    if (!entries.length) { container.innerHTML='<div class="empty-state">No tasks assigned today.</div>'; return; }
 
     container.innerHTML = entries.map(([sid, data]) => {
-      const done  = data.tasks.filter(t => t.done).length;
+      const done  = data.tasks.filter(t=>t.done).length;
       const total = data.tasks.length;
-      totalDone += done; totalAll += total;
-      const allDone = done === total && total > 0;
-      const hasFlagged = data.tasks.some(t => t.signoff_status === 'flagged');
+      totalDone+=done; totalAll+=total;
+      const hasFlagged = data.tasks.some(t=>t.signoff_status==='flagged');
       const initials = data.name.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
 
-      // Group tasks by category → subcategory → subgroup
-      const catMap = {};
+      // Build cat→sub→grp tree
+      const catMap={};
       for (const t of data.tasks) {
-        const cid = t.cat_id || '__none__';
-        if (!catMap[cid]) catMap[cid] = { name: t.cat_name || 'Other', order: t.cat_order || 99, subs: {} };
-        const sid2 = t.sub_id || '__none__';
-        if (!catMap[cid].subs[sid2]) catMap[cid].subs[sid2] = { name: t.sub_name, order: t.sub_order || 99, grps: {}, direct: [] };
-        if (t.grp_id) {
-          if (!catMap[cid].subs[sid2].grps[t.grp_id]) catMap[cid].subs[sid2].grps[t.grp_id] = { name: t.grp_name, order: t.grp_order || 99, tasks: [] };
-          catMap[cid].subs[sid2].grps[t.grp_id].tasks.push(t);
+        const cid=t.cat_id||'__none__';
+        if(!catMap[cid]) catMap[cid]={name:t.cat_name||'Other',order:t.cat_order||99,subs:{}};
+        const subid=t.sub_id||'__none__';
+        if(!catMap[cid].subs[subid]) catMap[cid].subs[subid]={name:t.sub_name,order:t.sub_order||99,grps:{},direct:[]};
+        if(t.grp_id) {
+          if(!catMap[cid].subs[subid].grps[t.grp_id]) catMap[cid].subs[subid].grps[t.grp_id]={name:t.grp_name,tasks:[]};
+          catMap[cid].subs[subid].grps[t.grp_id].tasks.push(t);
         } else {
-          catMap[cid].subs[sid2].direct.push(t);
+          catMap[cid].subs[subid].direct.push(t);
         }
       }
 
-      let tieredHtml = '';
-      const sortedCats = Object.entries(catMap).sort((a,b) => a[1].order - b[1].order);
-
-      for (const [cid2, cat] of sortedCats) {
-        const catTasks = Object.values(cat.subs).flatMap(s => [...s.direct, ...Object.values(s.grps).flatMap(g => g.tasks)]);
-        const catDone  = catTasks.filter(t => t.done).length;
-        const catAll   = catTasks.length === catDone && catDone > 0;
-        let subcatHtml = '';
-
-        const sortedSubs = Object.entries(cat.subs).sort((a,b) => a[1].order - b[1].order);
-        for (const [sid2, sub] of sortedSubs) {
-          const allSubTasks = [...sub.direct, ...Object.values(sub.grps).flatMap(g => g.tasks)];
-          const subDone = allSubTasks.filter(t => t.done).length;
-          let subContent = sub.direct.map(t => miniTaskRow(t)).join('');
-
-          const sortedGrps = Object.entries(sub.grps).sort((a,b) => a[1].order - b[1].order);
-          for (const [gid, grp] of sortedGrps) {
-            const grpDone = grp.tasks.filter(t => t.done).length;
-            const grpRows = grp.tasks.map(t => miniTaskRow(t)).join('');
-            subContent += `
-              <div class="ac-grp">
-                <div class="ac-grp-header" onclick="tog('dg-${sid}-${gid}','dgc-${sid}-${gid}')">
-                  <span class="ac-grp-name">${grp.name}</span>
-                  <div style="display:flex;align-items:center">
-                    <span class="count-pill ${grpDone===grp.tasks.length&&grp.tasks.length>0?'done':''}">${grpDone}/${grp.tasks.length}</span>
-                    <span class="ac-chev" id="dgc-${sid}-${gid}">▼</span>
-                  </div>
-                </div>
-                <div class="ac-grp-body" id="dg-${sid}-${gid}">${grpRows}</div>
-              </div>`;
+      let tiered='';
+      for (const [cid,cat] of Object.entries(catMap).sort((a,b)=>a[1].order-b[1].order)) {
+        const catTasks = Object.values(cat.subs).flatMap(s=>[...s.direct,...Object.values(s.grps).flatMap(g=>g.tasks)]);
+        const cd=catTasks.filter(t=>t.done).length;
+        let subHtml='';
+        for (const [subid,sub] of Object.entries(cat.subs).sort((a,b)=>a[1].order-b[1].order)) {
+          const subTasks=[...sub.direct,...Object.values(sub.grps).flatMap(g=>g.tasks)];
+          const sd=subTasks.filter(t=>t.done).length;
+          let sc=sub.direct.map(t=>mtask(t)).join('');
+          for (const [gid,grp] of Object.entries(sub.grps)) {
+            const gd=grp.tasks.filter(t=>t.done).length;
+            const gr=grp.tasks.map(t=>mtask(t)).join('');
+            sc+=`<div class="ac-grp-hdr" onclick="tog('gb-${sid}-${gid}','gc-${sid}-${gid}')">
+              <span style="font-size:0.78rem;font-weight:600;color:var(--accent)">${grp.name}</span>
+              <div style="display:flex;align-items:center">${pill(gd,grp.tasks.length)}<span class="chev" id="gc-${sid}-${gid}">▼</span></div>
+            </div>
+            <div class="ac-grp-bd" id="gb-${sid}-${gid}">${gr}</div>`;
           }
-
-          if (sid2 === '__none__') {
-            subcatHtml += subContent;
-          } else {
-            subcatHtml += `
-              <div class="ac-sub">
-                <div class="ac-sub-header" onclick="tog('ds-${sid}-${sid2}','dsc-${sid}-${sid2}')">
-                  <span class="ac-sub-name">${sub.name || ''}</span>
-                  <div style="display:flex;align-items:center">
-                    <span class="count-pill ${subDone===allSubTasks.length&&allSubTasks.length>0?'done':''}">${subDone}/${allSubTasks.length}</span>
-                    <span class="ac-chev" id="dsc-${sid}-${sid2}">▼</span>
-                  </div>
-                </div>
-                <div class="ac-sub-body" id="ds-${sid}-${sid2}">${subContent}</div>
-              </div>`;
+          if(subid==='__none__') { subHtml+=sc; }
+          else {
+            subHtml+=`<div class="ac-sub-hdr" onclick="tog('sb-${sid}-${subid}','sc-${sid}-${subid}')">
+              <span style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted)">${sub.name||''}</span>
+              <div style="display:flex;align-items:center">${pill(sd,subTasks.length)}<span class="chev" id="sc-${sid}-${subid}">▼</span></div>
+            </div>
+            <div class="ac-sub-bd" id="sb-${sid}-${subid}">${sc}</div>`;
           }
         }
-
-        tieredHtml += `
-          <div class="ac-cat">
-            <div class="ac-cat-header" onclick="tog('dc-${sid}-${cid2}','dcc-${sid}-${cid2}')">
-              <span class="ac-cat-name">${cat.name}</span>
-              <div style="display:flex;align-items:center">
-                <span class="count-pill ${catAll?'done':''}">${catDone}/${catTasks.length}</span>
-                <span class="ac-chev" id="dcc-${sid}-${cid2}">▼</span>
-              </div>
-            </div>
-            <div class="ac-cat-body" id="dc-${sid}-${cid2}">${subcatHtml}</div>
-          </div>`;
+        if(cid==='__none__') { tiered+=subHtml; }
+        else {
+          tiered+=`<div class="ac-cat-hdr" onclick="tog('cb-${sid}-${cid}','cc-${sid}-${cid}')">
+            <span style="font-size:0.88rem;font-weight:700;color:var(--text)">${cat.name}</span>
+            <div style="display:flex;align-items:center">${pill(cd,catTasks.length)}<span class="chev" id="cc-${sid}-${cid}">▼</span></div>
+          </div>
+          <div class="ac-cat-bd" id="cb-${sid}-${cid}">${subHtml}</div>`;
+        }
       }
 
-      const pill = `<span class="count-pill ${allDone?'done':''}">${done}/${total}</span>`;
-      return `
-        <div class="ac-staff">
-          <div class="ac-staff-header" id="ash-${sid}" onclick="togStaff('asb-${sid}','ash-${sid}','asc-${sid}')">
-            <div class="ac-staff-avatar">${initials}</div>
-            <div class="ac-staff-name">${data.name}</div>
-            ${hasFlagged ? '<span style="color:var(--danger);font-size:0.85rem">⚠</span>' : ''}
-            ${pill}
-            <span class="ac-chev" id="asc-${sid}">▼</span>
+      return `<div class="ac-staff">
+        <div class="ac-staff-hdr ${hasFlagged?'':''}\" id="ah-${sid}" onclick="togStaff('ab-${sid}','ah-${sid}','ac-${sid}')">
+          <div class="ac-staff-av">${initials}</div>
+          <div class="ac-staff-nm">${data.name}</div>
+          ${hasFlagged?'<span style="color:var(--danger)">⚠</span>':''}
+          ${pill(done,total)}
+          <span class="chev" id="ac-${sid}">▼</span>
+        </div>
+        <div class="ac-staff-bd" id="ab-${sid}">
+          <div class="progress-bar" style="margin:0;border-radius:0;height:3px">
+            <div class="progress-bar__fill" style="width:${total?Math.round((done/total)*100):0}%"></div>
           </div>
-          <div class="ac-staff-body" id="asb-${sid}">
-            <div class="progress-bar" style="margin:0;border-radius:0;height:4px">
-              <div class="progress-bar__fill" style="width:${total?Math.round((done/total)*100):0}%"></div>
-            </div>
-            ${tieredHtml}
-          </div>
-        </div>`;
+          ${tiered}
+        </div>
+      </div>`;
     }).join('');
 
     document.getElementById('statDone').textContent    = totalDone;
-    document.getElementById('statPending').textContent = totalAll - totalDone;
+    document.getElementById('statPending').textContent = totalAll-totalDone;
     document.getElementById('statTotal').textContent   = totalAll;
-    document.getElementById('overallLabel').textContent = `${totalDone} / ${totalAll}`;
-    document.getElementById('overallFill').style.width = totalAll ? `${(totalDone/totalAll)*100}%` : '0%';
-  }
-
-  function miniTaskRow(t) {
-    let dotClass = 'mini-dot';
-    if (t.done) {
-      dotClass = t.signoff_status === 'approved' ? 'mini-dot mini-dot--approved'
-               : t.signoff_status === 'flagged'  ? 'mini-dot mini-dot--flagged'
-               : 'mini-dot mini-dot--done';
-    }
-    const signoffBadge = t.done
-      ? t.signoff_status === 'approved'
-        ? '<span class="signoff-badge signoff-badge--approved">Approved</span>'
-        : t.signoff_status === 'flagged'
-          ? '<span class="signoff-badge signoff-badge--flagged">Flagged</span>'
-          : '<span class="signoff-badge signoff-badge--pending">Awaiting</span>'
-      : '';
-    return `
-      <div class="mini-task">
-        <div class="${dotClass}"></div>
-        <div style="flex:1;font-size:0.85rem">${t.name}</div>
-        ${t.done ? `<span class="text-sm text-muted">${formatTime(t.completed_at)}</span>` : '<span class="badge badge--pending" style="font-size:0.7rem">Pending</span>'}
-        ${signoffBadge}
-        ${t.photo_url ? `<a href="${t.photo_url}" target="_blank" class="btn btn--ghost btn--sm" style="padding:3px 7px;font-size:0.72rem">Photo</a>` : ''}
-      </div>`;
-  }
-
-  function tog(bodyId, chevId) {
-    document.getElementById(bodyId)?.classList.toggle('open');
-    document.getElementById(chevId)?.classList.toggle('open');
-  }
-
-  function togStaff(bodyId, headerId, chevId) {
-    const opening = !document.getElementById(bodyId)?.classList.contains('open');
-    document.getElementById(bodyId)?.classList.toggle('open', opening);
-    document.getElementById(headerId)?.classList.toggle('open', opening);
-    document.getElementById(chevId)?.classList.toggle('open', opening);
+    document.getElementById('overallLabel').textContent= `${totalDone} / ${totalAll}`;
+    document.getElementById('overallFill').style.width = totalAll?`${(totalDone/totalAll)*100}%`:'0%';
+    document.getElementById('soApproved').textContent  = soApproved;
+    document.getElementById('soFlagged').textContent   = soFlagged;
+    document.getElementById('soPending').textContent   = soPending;
   }
 
   loadDashboard();
