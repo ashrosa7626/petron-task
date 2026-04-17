@@ -15,54 +15,45 @@
     .flag-alert__reason { font-size:0.84rem;color:var(--text);background:rgba(239,68,68,0.05);border-radius:var(--radius-sm);padding:8px 10px;margin-bottom:10px;border-left:2px solid var(--danger); }
     .flag-alert__task { font-size:0.78rem;color:var(--muted);margin-bottom:10px; }
 
-    /* ── Level 1: Category ────────────────────── */
-    .cat-block { margin-bottom:10px; }
-    .cat-header {
+    /* ── Category (Level 1) ───────────────────── */
+    .ac-cat { margin-bottom:10px; }
+    .ac-cat-header {
       display:flex; align-items:center; justify-content:space-between;
       padding:14px 16px; background:var(--surface); border:1px solid var(--border);
       border-radius:var(--radius); cursor:pointer; user-select:none;
       transition:border-color 0.15s, background 0.15s;
     }
-    .cat-header:hover { border-color:var(--accent); background:var(--surface2); }
-    .cat-header.open { border-radius:var(--radius) var(--radius) 0 0; border-bottom-color:transparent; }
-    .cat-header__name { font-weight:700; font-size:1rem; }
-    .cat-body { display:none; border:1px solid var(--border); border-top:none; border-radius:0 0 var(--radius) var(--radius); overflow:hidden; margin-bottom:0; }
-    .cat-body.open { display:block; }
+    .ac-cat-header:hover { border-color:var(--accent); background:var(--surface2); }
+    .ac-cat-header.open { border-radius:var(--radius) var(--radius) 0 0; border-bottom-color:transparent; }
+    .ac-cat-name { font-weight:700; font-size:1rem; }
+    .ac-cat-body { display:none; border:1px solid var(--border); border-top:none; border-radius:0 0 var(--radius) var(--radius); overflow:hidden; }
+    .ac-cat-body.open { display:block; }
 
-    /* ── Level 2: Subcategory ─────────────────── */
-    .subcat-block { border-bottom:1px solid var(--border); }
-    .subcat-block:last-child { border-bottom:none; }
-    .subcat-header {
-      display:flex; align-items:center; justify-content:space-between;
-      padding:11px 16px; background:var(--surface2);
-      cursor:pointer; user-select:none; transition:background 0.1s;
-    }
-    .subcat-header:hover { background:var(--surface); }
-    .subcat-header__name { font-size:0.82rem;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted); }
-    .subcat-body { display:none; }
-    .subcat-body.open { display:block; }
+    /* ── Subcategory (Level 2) ────────────────── */
+    .ac-sub { border-bottom:1px solid var(--border); }
+    .ac-sub:last-child { border-bottom:none; }
+    .ac-sub-header { display:flex;align-items:center;justify-content:space-between; padding:10px 16px; background:var(--surface2); cursor:pointer; user-select:none; transition:background 0.1s; }
+    .ac-sub-header:hover { background:var(--surface); }
+    .ac-sub-name { font-size:0.82rem;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted); }
+    .ac-sub-body { display:none; }
+    .ac-sub-body.open { display:block; }
 
-    /* ── Level 3: Subgroup (e.g. Lap Gondola) ─── */
-    .subgrp-block { border-bottom:1px solid var(--border); }
-    .subgrp-block:last-child { border-bottom:none; }
-    .subgrp-header {
-      display:flex; align-items:center; justify-content:space-between;
-      padding:9px 20px; background:rgba(79,138,255,0.04);
-      cursor:pointer; user-select:none; transition:background 0.1s;
-      border-left:2px solid var(--accent);
-    }
-    .subgrp-header:hover { background:rgba(79,138,255,0.08); }
-    .subgrp-header__name { font-size:0.82rem;font-weight:600;color:var(--accent); }
-    .subgrp-body { display:none; }
-    .subgrp-body.open { display:block; }
-
-    /* ── Count pill ───────────────────────────── */
-    .count-pill { font-size:0.72rem;font-family:var(--mono);padding:2px 8px;border-radius:99px;background:rgba(79,138,255,0.1);color:var(--accent); }
-    .count-pill.done { background:rgba(34,197,94,0.12);color:var(--success); }
+    /* ── Subgroup (Level 3) ───────────────────── */
+    .ac-grp { border-bottom:1px solid var(--border); }
+    .ac-grp:last-child { border-bottom:none; }
+    .ac-grp-header { display:flex;align-items:center;justify-content:space-between; padding:9px 20px; background:rgba(79,138,255,0.04); cursor:pointer; user-select:none; border-left:2px solid var(--accent); }
+    .ac-grp-header:hover { background:rgba(79,138,255,0.08); }
+    .ac-grp-name { font-size:0.82rem;font-weight:600;color:var(--accent); }
+    .ac-grp-body { display:none; }
+    .ac-grp-body.open { display:block; }
 
     /* ── Chevron ──────────────────────────────── */
-    .chev { font-size:0.7rem;color:var(--muted);transition:transform 0.2s;margin-left:8px; }
-    .chev.open { transform:rotate(180deg); }
+    .ac-chev { font-size:0.7rem;color:var(--muted);transition:transform 0.2s; }
+    .ac-chev.open { transform:rotate(180deg); }
+
+    /* ── Count pill ───────────────────────────── */
+    .count-pill { font-size:0.72rem;font-family:var(--mono);padding:2px 8px;border-radius:99px;background:rgba(79,138,255,0.1);color:var(--accent);margin-right:4px; }
+    .count-pill.done { background:rgba(34,197,94,0.12);color:var(--success); }
 
     /* ── Task rows ────────────────────────────── */
     .task-item { border-radius:0;border-left:none;border-right:none;border-top:none;margin-bottom:0; }
@@ -169,30 +160,29 @@
 
     tasks = (data || []).map(a => {
       const c   = a.completions?.[0] || null;
-      const so  = c?.sign_offs?.[0] || null;
+      const so  = c?.sign_offs?.[0]  || null;
       const tpl = a.task_templates;
       return {
-        id: a.id,
-        name: a.is_adhoc ? a.custom_task_name : (tpl?.name || 'Unnamed Task'),
+        id:             a.id,
+        name:           a.is_adhoc ? a.custom_task_name : (tpl?.name || 'Unnamed Task'),
         description:    tpl?.description || '',
         photo_required: tpl?.photo_required || false,
-        has_note:       tpl?.has_note || false,
         is_adhoc:       a.is_adhoc,
-        cat_id:    tpl?.category_id    || null,
-        cat_name:  tpl?.categories?.name || null,
-        cat_order: tpl?.categories?.sort_order ?? 99,
-        sub_id:    tpl?.subcategory_id || null,
-        sub_name:  tpl?.subcategories?.name || null,
-        sub_order: tpl?.subcategories?.sort_order ?? 99,
-        grp_id:    tpl?.subgroup_id    || null,
-        grp_name:  tpl?.subgroups?.name || null,
-        grp_order: tpl?.subgroups?.sort_order ?? 99,
-        task_order: tpl?.sort_order ?? 99,
+        cat_id:         tpl?.category_id    || null,
+        cat_name:       tpl?.categories?.name || null,
+        cat_order:      tpl?.categories?.sort_order ?? 99,
+        sub_id:         tpl?.subcategory_id || null,
+        sub_name:       tpl?.subcategories?.name || null,
+        sub_order:      tpl?.subcategories?.sort_order ?? 99,
+        grp_id:         tpl?.subgroup_id    || null,
+        grp_name:       tpl?.subgroups?.name || null,
+        grp_order:      tpl?.subgroups?.sort_order ?? 99,
+        task_order:     tpl?.sort_order ?? 99,
         done:           !!c,
-        completed_at:   c?.completed_at || null,
-        signoff_status: c?.signoff_status || null,
-        flag_reason:    so?.notes || null,
-        completion_id:  c?.id || null,
+        completed_at:   c?.completed_at    || null,
+        signoff_status: c?.signoff_status  || null,
+        flag_reason:    so?.notes          || null,
+        completion_id:  c?.id              || null,
       };
     });
 
@@ -218,11 +208,9 @@
       </div>`).join('');
   }
 
-  function counts(list) {
-    const done  = list.filter(t => t.done && t.signoff_status !== 'flagged').length;
-    const total = list.length;
-    const all   = done === total && total > 0;
-    return { done, total, all, pill: `<span class="count-pill ${all?'done':''}">${done}/${total}</span>` };
+  function pill(done, total) {
+    const all = done === total && total > 0;
+    return `<span class="count-pill ${all?'done':''}">${done}/${total}</span>`;
   }
 
   function renderTasks() {
@@ -234,22 +222,20 @@
 
     if (!tasks.length) { list.innerHTML = '<div class="empty-state">No tasks assigned for today.</div>'; return; }
 
-    // Split categorised vs ad-hoc
     const categorised = tasks.filter(t => !t.is_adhoc && t.cat_id);
     const adhoc       = tasks.filter(t =>  t.is_adhoc || !t.cat_id);
 
-    // Build: cat → sub → grp → tasks
+    // Build cat → sub → grp → tasks
     const catMap = {};
     for (const t of categorised) {
       if (!catMap[t.cat_id]) catMap[t.cat_id] = { name:t.cat_name, order:t.cat_order, subs:{} };
-      const sub = catMap[t.cat_id].subs;
-      if (!sub[t.sub_id||'__none__']) sub[t.sub_id||'__none__'] = { name:t.sub_name, order:t.sub_order, grps:{}, direct:[] };
+      const sid = t.sub_id || '__none__';
+      if (!catMap[t.cat_id].subs[sid]) catMap[t.cat_id].subs[sid] = { name:t.sub_name, order:t.sub_order, grps:{}, direct:[] };
       if (t.grp_id) {
-        const grps = sub[t.sub_id].grps;
-        if (!grps[t.grp_id]) grps[t.grp_id] = { name:t.grp_name, order:t.grp_order, tasks:[] };
-        grps[t.grp_id].tasks.push(t);
+        if (!catMap[t.cat_id].subs[sid].grps[t.grp_id]) catMap[t.cat_id].subs[sid].grps[t.grp_id] = { name:t.grp_name, order:t.grp_order, tasks:[] };
+        catMap[t.cat_id].subs[sid].grps[t.grp_id].tasks.push(t);
       } else {
-        sub[t.sub_id||'__none__'].direct.push(t);
+        catMap[t.cat_id].subs[sid].direct.push(t);
       }
     }
 
@@ -260,88 +246,83 @@
       const allCatTasks = Object.values(cat.subs).flatMap(s =>
         [...s.direct, ...Object.values(s.grps).flatMap(g => g.tasks)]
       );
-      const cc = counts(allCatTasks);
+      const catDone    = allCatTasks.filter(t => t.done && t.signoff_status !== 'flagged').length;
       const hasFlagged = allCatTasks.some(t => t.signoff_status === 'flagged');
-      const catOpen = hasFlagged; // auto-open if flagged
+      const autoOpen   = hasFlagged;
 
       let subcatHtml = '';
       const sortedSubs = Object.entries(cat.subs).sort((a,b) => a[1].order - b[1].order);
 
       for (const [sid, sub] of sortedSubs) {
         const allSubTasks = [...sub.direct, ...Object.values(sub.grps).flatMap(g => g.tasks)];
-        const sc = counts(allSubTasks);
+        const subDone = allSubTasks.filter(t => t.done && t.signoff_status !== 'flagged').length;
 
-        // Direct tasks (no subgroup)
-        let directHtml = sub.direct
-          .sort((a,b) => a.task_order - b.task_order)
-          .map(t => taskRow(t)).join('');
+        let subContent = sub.direct.sort((a,b) => a.task_order - b.task_order).map(t => taskRow(t)).join('');
 
-        // Subgroups
-        let grpHtml = '';
         const sortedGrps = Object.entries(sub.grps).sort((a,b) => a[1].order - b[1].order);
         for (const [gid, grp] of sortedGrps) {
-          const gc = counts(grp.tasks);
-          const rows = grp.tasks.sort((a,b) => a.task_order - b.task_order).map(t => taskRow(t)).join('');
-          grpHtml += `
-            <div class="subgrp-block">
-              <div class="subgrp-header" onclick="tog('sg-${gid}','sgc-${gid}')">
-                <span class="subgrp-header__name">${grp.name}</span>
+          const grpDone = grp.tasks.filter(t => t.done && t.signoff_status !== 'flagged').length;
+          const rows    = grp.tasks.sort((a,b) => a.task_order - b.task_order).map(t => taskRow(t)).join('');
+          subContent += `
+            <div class="ac-grp">
+              <div class="ac-grp-header" onclick="tog('ag-${gid}','agc-${gid}')">
+                <span class="ac-grp-name">${grp.name}</span>
                 <div style="display:flex;align-items:center">
-                  ${gc.pill}
-                  <span class="chev" id="sgc-${gid}">▼</span>
+                  ${pill(grpDone, grp.tasks.length)}
+                  <span class="ac-chev" id="agc-${gid}">▼</span>
                 </div>
               </div>
-              <div class="subgrp-body" id="sg-${gid}">${rows}</div>
+              <div class="ac-grp-body" id="ag-${gid}">${rows}</div>
             </div>`;
         }
 
         if (sid === '__none__') {
-          subcatHtml += directHtml + grpHtml;
+          subcatHtml += subContent;
         } else {
           subcatHtml += `
-            <div class="subcat-block">
-              <div class="subcat-header" onclick="tog('sc-${sid}','scc-${sid}')">
-                <span class="subcat-header__name">${sub.name || ''}</span>
+            <div class="ac-sub">
+              <div class="ac-sub-header" onclick="tog('as-${sid}','asc-${sid}')">
+                <span class="ac-sub-name">${sub.name || ''}</span>
                 <div style="display:flex;align-items:center">
-                  ${sc.pill}
-                  <span class="chev" id="scc-${sid}">▼</span>
+                  ${pill(subDone, allSubTasks.length)}
+                  <span class="ac-chev" id="asc-${sid}">▼</span>
                 </div>
               </div>
-              <div class="subcat-body" id="sc-${sid}">${directHtml}${grpHtml}</div>
+              <div class="ac-sub-body" id="as-${sid}">${subContent}</div>
             </div>`;
         }
       }
 
       html += `
-        <div class="cat-block">
-          <div class="cat-header ${catOpen?'open':''}" id="ch-${cid}" onclick="togCat('cb-${cid}','ch-${cid}','cc-${cid}')">
+        <div class="ac-cat">
+          <div class="ac-cat-header ${autoOpen?'open':''}" id="ach-${cid}" onclick="togCat('acb-${cid}','ach-${cid}','acc-${cid}')">
             <div style="display:flex;align-items:center;gap:8px">
-              <span class="cat-header__name">${cat.name}</span>
+              <span class="ac-cat-name">${cat.name}</span>
               ${hasFlagged ? '<span style="color:var(--danger);font-size:0.85rem">⚠</span>' : ''}
             </div>
             <div style="display:flex;align-items:center">
-              ${cc.pill}
-              <span class="chev ${catOpen?'open':''}" id="cc-${cid}">▼</span>
+              ${pill(catDone, allCatTasks.length)}
+              <span class="ac-chev ${autoOpen?'open':''}" id="acc-${cid}">▼</span>
             </div>
           </div>
-          <div class="cat-body ${catOpen?'open':''}" id="cb-${cid}">${subcatHtml}</div>
+          <div class="ac-cat-body ${autoOpen?'open':''}" id="acb-${cid}">${subcatHtml}</div>
         </div>`;
     }
 
-    // Ad-hoc group
+    // Ad-hoc tasks
     if (adhoc.length) {
-      const ac = counts(adhoc);
+      const adhocDone = adhoc.filter(t => t.done && t.signoff_status !== 'flagged').length;
       const rows = adhoc.map(t => taskRow(t)).join('');
       html += `
-        <div class="cat-block">
-          <div class="cat-header" id="ch-adhoc" onclick="togCat('cb-adhoc','ch-adhoc','cc-adhoc')">
-            <span class="cat-header__name">Ad-hoc Tasks</span>
+        <div class="ac-cat">
+          <div class="ac-cat-header" id="ach-adhoc" onclick="togCat('acb-adhoc','ach-adhoc','acc-adhoc')">
+            <span class="ac-cat-name">Ad-hoc Tasks</span>
             <div style="display:flex;align-items:center">
-              ${ac.pill}
-              <span class="chev" id="cc-adhoc">▼</span>
+              ${pill(adhocDone, adhoc.length)}
+              <span class="ac-chev" id="acc-adhoc">▼</span>
             </div>
           </div>
-          <div class="cat-body" id="cb-adhoc">${rows}</div>
+          <div class="ac-cat-body" id="acb-adhoc">${rows}</div>
         </div>`;
     }
 
@@ -352,6 +333,7 @@
     const isFlagged  = t.signoff_status === 'flagged';
     const isApproved = t.signoff_status === 'approved';
     const canDo = !t.done || isFlagged;
+
     const status = isFlagged
       ? '<span class="badge" style="background:rgba(239,68,68,0.1);color:var(--danger)">⚠ Flagged</span>'
       : isApproved
@@ -359,6 +341,7 @@
         : t.done
           ? `<span class="badge badge--done">✓ ${formatTime(t.completed_at)}</span>`
           : '<span class="badge badge--pending">Pending</span>';
+
     return `
       <div class="task-item ${t.done&&!isFlagged?'task-item--done':''} ${isFlagged?'task-item--flagged':''}">
         <div class="task-check ${t.done&&!isFlagged?'task-check--done':''}"
@@ -372,28 +355,22 @@
           <div class="task-item__name">${t.name}</div>
           <div class="task-item__meta">
             ${t.photo_required ? '<span class="badge badge--photo">📷 Photo</span>' : ''}
-            ${t.has_note ? '<span class="badge" style="background:rgba(245,158,11,0.1);color:var(--warning)">📝 Note</span>' : ''}
             ${status}
           </div>
         </div>
       </div>`;
   }
 
-  // Toggle helpers
   function tog(bodyId, chevId) {
-    const b = document.getElementById(bodyId);
-    const c = document.getElementById(chevId);
-    b.classList.toggle('open');
-    c.classList.toggle('open');
+    document.getElementById(bodyId)?.classList.toggle('open');
+    document.getElementById(chevId)?.classList.toggle('open');
   }
+
   function togCat(bodyId, headerId, chevId) {
-    const b = document.getElementById(bodyId);
-    const h = document.getElementById(headerId);
-    const c = document.getElementById(chevId);
-    const opening = !b.classList.contains('open');
-    b.classList.toggle('open', opening);
-    h.classList.toggle('open', opening);
-    c.classList.toggle('open', opening);
+    const opening = !document.getElementById(bodyId)?.classList.contains('open');
+    document.getElementById(bodyId)?.classList.toggle('open', opening);
+    document.getElementById(headerId)?.classList.toggle('open', opening);
+    document.getElementById(chevId)?.classList.toggle('open', opening);
   }
 
   async function redoTask(assignmentId) {
@@ -423,7 +400,7 @@
   async function markComplete(assignmentId, photoUrl) {
     const { error } = await db.from('completions').insert({
       assignment_id: assignmentId, staff_id: staffId,
-      completed_at: new Date().toISOString(), photo_url: photoUrl || null,
+      completed_at:  new Date().toISOString(), photo_url: photoUrl || null,
     });
     if (error) { showToast('Error saving. Try again.', 'error'); return; }
     const t = tasks.find(x => x.id === assignmentId);
