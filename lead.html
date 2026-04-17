@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Team Lead – Petron Tasks v7</title>
+  <title>Team Lead – Petron Tasks v8</title>
   <link rel="stylesheet" href="style.css">
   <style>
     .login-wrap { max-width:360px; margin:60px auto 0; }
@@ -102,6 +102,7 @@
   <div class="topbar">
     <a href="index.html" class="btn btn--ghost btn--sm">← Staff View</a>
     <div class="topbar__logo">Petron<span> Lead</span></div>
+    <div style="font-size:0.82rem;font-weight:700;color:var(--accent)" id="leadBranchLabel"></div>
     <div id="leadNav" style="display:none;gap:12px;align-items:center" class="flex">
       <a href="dashboard.html" class="nav-link">Dashboard</a>
       <button class="btn btn--ghost btn--sm" onclick="logout()">Logout</button>
@@ -113,6 +114,13 @@
     <div class="login-wrap">
       <div class="login-title">Team Lead Login</div>
       <div class="login-sub">Enter your credentials to manage today's tasks.</div>
+      <div class="field"><label>Branch</label>
+        <select id="branchSelect">
+          <option value="">Select branch...</option>
+          <option value="Safari">Safari</option>
+          <option value="Nilai Desa Jati">Nilai Desa Jati</option>
+        </select>
+      </div>
       <div class="field"><label>Email</label><input type="email" id="email" placeholder="lead@petron.com"></div>
       <div class="field"><label>Password</label><input type="password" id="password" placeholder="••••••••"></div>
       <div style="color:var(--danger);font-size:0.85rem;min-height:20px;margin-bottom:12px" id="loginError"></div>
@@ -186,6 +194,12 @@
     <div class="modal__title" id="staffModalTitle">Add Staff Member</div>
     <input type="hidden" id="editStaffId">
     <div class="field"><label>Full Name</label><input type="text" id="staffName" placeholder="e.g. Jane Smith"></div>
+    <div class="field"><label>Branch</label>
+      <select id="staffBranch">
+        <option value="Safari">Safari</option>
+        <option value="Nilai Desa Jati">Nilai Desa Jati</option>
+      </select>
+    </div>
     <div class="field"><label>4-Digit PIN</label><input type="text" id="staffPin" maxlength="4" placeholder="e.g. 1234" pattern="[0-9]{4}"></div>
     <div class="modal__actions">
       <button class="btn btn--ghost" onclick="closeModal('staffModal')">Cancel</button>
@@ -212,7 +226,14 @@
 
   (async () => {
     const { data: { session } } = await db.auth.getSession();
-    if (session) enterLeadView(session.user);
+    if (session) {
+      const savedBranch = sessionStorage.getItem('lead_branch');
+      if (savedBranch) {
+        enterLeadView(session.user);
+      } else {
+        // Session exists but no branch — show login to pick branch
+      }
+    }
   })();
 
   async function doLogin() {
@@ -224,12 +245,16 @@
     const { data, error } = await db.auth.signInWithPassword({ email, password: pass });
     setLoading(btn, false);
     if (error) { document.getElementById('loginError').textContent = error.message; return; }
+    const branch = document.getElementById('branchSelect').value;
+    if (!branch) { document.getElementById('loginError').textContent = 'Please select a branch.'; setLoading(btn, false); return; }
+
     const { data: user } = await db.from('users').select('role').eq('auth_id', data.user.id).single();
     if (!user || user.role !== 'lead') {
       await db.auth.signOut();
       document.getElementById('loginError').textContent = 'Access denied. Team Lead accounts only.';
       return;
     }
+    sessionStorage.setItem('lead_branch', branch);
     enterLeadView(data.user);
   }
 
@@ -238,6 +263,8 @@
     document.getElementById('loginView').style.display  = 'none';
     document.getElementById('leadView').style.display   = '';
     document.getElementById('leadNav').style.display    = 'flex';
+    const b = sessionStorage.getItem('lead_branch') || '';
+    document.getElementById('leadBranchLabel').textContent = b;
     loadAssignView();
   }
 
@@ -255,12 +282,12 @@
   // ── ASSIGN TAB ──────────────────────────────────────────
   async function loadAssignView() {
     const [staffRes, tplRes, catRes, subRes, grpRes, existingRes] = await Promise.all([
-      db.from('users').select('id,name').eq('role','staff').order('name'),
+      db.from('users').select('id,name,branch').eq('role','staff').eq('branch', sessionStorage.getItem('lead_branch') || '').order('name'),
       db.from('task_templates').select('*').eq('is_active',true).order('sort_order'),
       db.from('categories').select('*').order('sort_order'),
       db.from('subcategories').select('*').order('sort_order'),
       db.from('subgroups').select('*').order('sort_order'),
-      db.from('daily_assignments').select('*').eq('date', today()),
+      db.from('daily_assignments').select('*').eq('date', today()).eq('branch', sessionStorage.getItem('lead_branch') || ''),
     ]);
 
     allStaff      = staffRes.data || [];
@@ -680,10 +707,10 @@
     for (const s of allStaff) {
       const sel = staffSelections[s.id];
       for (const tplId of sel.templateIds) {
-        rows.push({ date: today(), staff_id: s.id, task_template_id: tplId, is_adhoc: false, created_by: currentUser?.id });
+        rows.push({ date: today(), staff_id: s.id, task_template_id: tplId, is_adhoc: false, created_by: currentUser?.id, branch: sessionStorage.getItem('lead_branch') || null });
       }
       for (const adhoc of sel.adhocTasks) {
-        rows.push({ date: today(), staff_id: s.id, is_adhoc: true, custom_task_name: adhoc.name, photo_required: adhoc.photoRequired, created_by: currentUser?.id });
+        rows.push({ date: today(), staff_id: s.id, is_adhoc: true, custom_task_name: adhoc.name, photo_required: adhoc.photoRequired, created_by: currentUser?.id, branch: sessionStorage.getItem('lead_branch') || null });
       }
       // Stock manual items — saved with TOPUP: prefix for clean grouping
       if (stockItems[s.id]) {
@@ -702,7 +729,8 @@
               is_adhoc: true,
               custom_task_name: `TOPUP:${subName}:${section}:${trimmed}`,
               photo_required: false,
-              created_by: currentUser?.id
+              created_by: currentUser?.id,
+              branch: sessionStorage.getItem('lead_branch') || null
             });
           }
         }
@@ -788,7 +816,7 @@
         </div>
         <div class="task-item__body">
           <div class="task-item__name">${s.name}</div>
-          <div class="task-item__meta"><span>PIN: ****</span></div>
+          <div class="task-item__meta"><span>PIN: ****</span><span style="color:var(--accent);font-size:0.78rem">${s.branch || 'No branch'}</span></div>
         </div>
         <button class="btn btn--ghost btn--sm" onclick='editStaff(${JSON.stringify(s)})'>Edit PIN</button>
       </div>`).join('');
@@ -804,9 +832,10 @@
 
   function editStaff(s) {
     document.getElementById('staffModalTitle').textContent = 'Edit Staff Member';
-    document.getElementById('editStaffId').value = s.id;
-    document.getElementById('staffName').value   = s.name;
-    document.getElementById('staffPin').value    = '';
+    document.getElementById('editStaffId').value   = s.id;
+    document.getElementById('staffName').value     = s.name;
+    document.getElementById('staffBranch').value   = s.branch || 'Safari';
+    document.getElementById('staffPin').value      = '';
     document.getElementById('staffModal').classList.add('modal-overlay--open');
   }
 
@@ -817,7 +846,8 @@
     if (!name) { showToast('Name is required.', 'error'); return; }
     if (!id && pin.length !== 4) { showToast('PIN must be exactly 4 digits.', 'error'); return; }
     if (pin && !/^\d{4}$/.test(pin)) { showToast('PIN must be 4 digits.', 'error'); return; }
-    const payload = { name, role:'staff' };
+    const branch = document.getElementById('staffBranch').value;
+    const payload = { name, role:'staff', branch };
     if (pin) payload.pin_hash = pin;
     const { error } = id
       ? await db.from('users').update(payload).eq('id', id)
