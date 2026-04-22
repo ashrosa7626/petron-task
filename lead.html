@@ -442,9 +442,18 @@
       const line = document.getElementById('sline-' + i);
       if (line) line.className = 'step-line' + (i < n ? ' done' : '');
     });
+    // Use visibility+height instead of display:none to preserve DOM for stock inputs
     [1,2,3].forEach(i => {
       const el = document.getElementById('step-' + i);
-      if (el) el.style.display = i === n ? '' : 'none';
+      if (!el) return;
+      if (i === n) {
+        el.style.display = '';
+        el.style.visibility = 'visible';
+        el.style.height = '';
+        el.style.overflow = '';
+      } else {
+        el.style.display = 'none';
+      }
     });
   }
 
@@ -454,8 +463,10 @@
   }
 
   function goToStep2() {
-    // Save any stock inputs before moving on
+    // MUST save stock inputs while step-1 DOM is still visible
     saveAllStockInputs();
+    // Debug: log what was saved
+    console.log('stockItems after save:', JSON.stringify(stockItems));
     // Validate at least one task selected
     if (selectedTaskIds.size === 0 && selectedAdhocTasks.length === 0 && !hasStockItems()) {
       showToast('Please select at least one task.', 'error'); return;
