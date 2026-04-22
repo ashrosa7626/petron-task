@@ -1074,7 +1074,6 @@
   function saveAllStockInputs() {
     if (!stockItems['s1']) stockItems['s1'] = {};
     document.querySelectorAll('[id^="si-s1-"]').forEach(container => {
-      const parts   = container.id.split('-');
       const safeKey = container.id.slice('si-s1-'.length);
       const key     = decodeURIComponent(safeKey);
       const inputs  = container.querySelectorAll('input');
