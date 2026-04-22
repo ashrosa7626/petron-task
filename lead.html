@@ -465,8 +465,6 @@
   function goToStep2() {
     // MUST save stock inputs while step-1 DOM is still visible
     saveAllStockInputs();
-    // Debug: log what was saved
-    console.log('stockItems after save:', JSON.stringify(stockItems));
     // Validate at least one task selected
     if (selectedTaskIds.size === 0 && selectedAdhocTasks.length === 0 && !hasStockItems()) {
       showToast('Please select at least one task.', 'error'); return;
@@ -691,8 +689,10 @@
           const sections = grps.length ? grps : [{ id: sub.id, name: sub.name }];
           for (const sec of sections) {
             const key = sub.id + '||' + sec.name;
-            // Check if there are items for this section (step1 uses 's1' as the store key)
-            const hasItems = (stockItems['s1']?.[key] || []).some(i=>i.trim());
+            // Check across ALL stockItems stores for this key
+            const hasItems = Object.entries(stockItems)
+              .filter(([k]) => k !== '__assign__')
+              .some(([, si]) => (si[key] || []).some(i => i.trim()));
             if (!hasItems) continue;
             const assignedStaff = stockItems['__assign__']?.[key] || '';
             html += `<div class="task-assign-row">
@@ -745,9 +745,11 @@
       if (!staffId) continue;
       const sectionName = key.split('||')[1] || key;
       const subName = key.split('||')[0];
-      // Collect items from step1 store
+      // Collect items from ALL stockItems stores
       const allItems = [];
-      (stockItems['s1']?.[key] || []).forEach(i => { if(i.trim()) allItems.push(i.trim()); });
+      Object.entries(stockItems).filter(([k]) => k !== '__assign__').forEach(([, si]) => {
+        (si[key] || []).forEach(i => { if(i.trim()) allItems.push(i.trim()); });
+      });
       if (allItems.length && byStaff[staffId]) {
         allItems.forEach(item => {
           byStaff[staffId].tasks.push({ name: `[${sectionName}] ${item}`, photo: false, type: 'stock' });
