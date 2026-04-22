@@ -340,7 +340,7 @@ const MORNING_CHECKLIST = [
   { section:"4. SALES BOOSTER & PROMOTIONS", icon:"📈", items:[
     "Maklumkan pelanggan tentang promosi semasa",
     "Cadangkan barangan tambahan (minuman, snek, essentials)",
-    "Amalkan upselling ringkas ("Tambah air/minuman?")",
+    "Amalkan upselling ringkas (Tambah air/minuman?)",
     "Pastikan promosi jelas & kemas",
     "Promosikan pakej kombo / jimat",
     "Galakkan pelanggan datang semula"
@@ -1077,7 +1077,11 @@ function showToast(msg) {
 
 // ─── BOOT ─────────────────────────────────────────────────────────────────────
 
-init();
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
 </script>
 </body>
 </html>
