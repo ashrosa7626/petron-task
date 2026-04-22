@@ -318,21 +318,23 @@ async function init() {
 
 async function loadAllUnresolvedIssues() {
   const keys = await dbList('briefing:');
-  const seen = new Set();
-  const unresolved = [];
-  // Go through newest first so we get the latest update for each issue
+  // Map of issue id -> latest state (from newest briefing that contains it)
+  const issueMap = {};
   const sorted = [...keys].sort((a,b) => b.localeCompare(a));
   for (const key of sorted) {
     const b = await dbGet(key);
     if (!b) continue;
     for (const issue of (b.issues || [])) {
-      if (!seen.has(issue.id) && (issue.resolved === false || issue.resolved === null)) {
-        seen.add(issue.id);
-        unresolved.push({ ...issue, isCarried: true, carriedFrom: b.timestamp });
+      // Only record the FIRST (newest) occurrence of each issue id
+      if (!(issue.id in issueMap)) {
+        issueMap[issue.id] = { ...issue, carriedFrom: b.timestamp };
       }
     }
   }
-  return unresolved;
+  // Return only issues whose latest state is unresolved
+  return Object.values(issueMap)
+    .filter(i => i.resolved !== true)
+    .map(i => ({ ...i, isCarried: true }));
 }
 
 function showLoading(show) {
