@@ -678,8 +678,8 @@
           const sections = grps.length ? grps : [{ id: sub.id, name: sub.name }];
           for (const sec of sections) {
             const key = sub.id + '||' + sec.name;
-            // Check if there are items for this section
-            const hasItems = Object.values(stockItems).some(si => si[key]?.some(i=>i.trim()));
+            // Check if there are items for this section (step1 uses 's1' as the store key)
+            const hasItems = (stockItems['s1']?.[key] || []).some(i=>i.trim());
             if (!hasItems) continue;
             const assignedStaff = stockItems['__assign__']?.[key] || '';
             html += `<div class="task-assign-row">
@@ -732,12 +732,9 @@
       if (!staffId) continue;
       const sectionName = key.split('||')[1] || key;
       const subName = key.split('||')[0];
-      // Collect items across all staff stockItems for this key
+      // Collect items from step1 store
       const allItems = [];
-      for (const [sid, si] of Object.entries(stockItems)) {
-        if (sid === '__assign__') continue;
-        (si[key] || []).forEach(i => { if(i.trim()) allItems.push(i.trim()); });
-      }
+      (stockItems['s1']?.[key] || []).forEach(i => { if(i.trim()) allItems.push(i.trim()); });
       if (allItems.length && byStaff[staffId]) {
         allItems.forEach(item => {
           byStaff[staffId].tasks.push({ name: `[${sectionName}] ${item}`, photo: false, type: 'stock' });
@@ -1149,48 +1146,61 @@
   async function saveAssignments() {
     const btn = document.getElementById('saveAssignBtn');
     setLoading(btn, true);
-    const currentBranch = sessionStorage.getItem('lead_branch') || '';
-    await db.from('daily_assignments').delete().eq('date', today()).eq('branch', currentBranch);
     saveAllStockInputs();
+    const branch = sessionStorage.getItem('lead_branch') || null;
+
+    // Delete only this branch's assignments for today
+    await db.from('daily_assignments').delete().eq('date', today()).eq('branch', branch);
+
     const rows = [];
-    for (const s of allStaff) {
-      const sel = staffSelections[s.id];
-      for (const tplId of sel.templateIds) {
-        rows.push({ date: today(), staff_id: s.id, task_template_id: tplId, is_adhoc: false, created_by: currentUser?.id, branch: sessionStorage.getItem('lead_branch') || null });
-      }
-      for (const adhoc of sel.adhocTasks) {
-        rows.push({ date: today(), staff_id: s.id, is_adhoc: true, custom_task_name: adhoc.name, photo_required: adhoc.photoRequired, created_by: currentUser?.id, branch: sessionStorage.getItem('lead_branch') || null });
-      }
-      // Stock manual items — saved with TOPUP: prefix for clean grouping
-      if (stockItems[s.id]) {
-        for (const [key, items] of Object.entries(stockItems[s.id])) {
-          const parts   = key.split('||');
-          const subId   = parts[0];
-          const section = parts[1] || 'Stock';
-          const subcat  = allSubcats.find(sc => sc.id === subId);
-          const subName = subcat?.name || section;
-          for (const item of items) {
-            const trimmed = item.trim();
-            if (!trimmed) continue;
-            rows.push({
-              date: today(),
-              staff_id: s.id,
-              is_adhoc: true,
-              custom_task_name: `TOPUP:${subName}:${section}:${trimmed}`,
-              photo_required: false,
-              created_by: currentUser?.id,
-              branch: sessionStorage.getItem('lead_branch') || null
-            });
-          }
-        }
+
+    // 1. Template tasks — from taskAssignments map { tplId: staffId }
+    for (const [tplId, staffId] of Object.entries(taskAssignments)) {
+      if (!staffId || !tplId) continue;
+      rows.push({
+        date: today(), staff_id: staffId, task_template_id: tplId,
+        is_adhoc: false, created_by: currentUser?.id, branch
+      });
+    }
+
+    // 2. Ad-hoc tasks — from selectedAdhocTasks array
+    for (const a of selectedAdhocTasks) {
+      if (!a.staffId) continue;
+      rows.push({
+        date: today(), staff_id: a.staffId, is_adhoc: true,
+        custom_task_name: a.name, photo_required: true,
+        created_by: currentUser?.id, branch
+      });
+    }
+
+    // 3. Stock items — from stockItems['s1'] keyed by 'subId||section'
+    //    assigned staff is in stockItems['__assign__'][key]
+    for (const [key, staffId] of Object.entries(stockItems['__assign__'] || {})) {
+      if (!staffId) continue;
+      const parts   = key.split('||');
+      const subcat  = allSubcats.find(sc => sc.id === parts[0]);
+      const subName = subcat?.name || parts[1] || 'Stock';
+      const section = parts[1] || subName;
+      const items   = stockItems['s1']?.[key] || [];
+      for (const item of items) {
+        const trimmed = item.trim();
+        if (!trimmed) continue;
+        rows.push({
+          date: today(), staff_id: staffId, is_adhoc: true,
+          custom_task_name: `TOPUP:${subName}:${section}:${trimmed}`,
+          photo_required: false, created_by: currentUser?.id, branch
+        });
       }
     }
+
     if (rows.length > 0) {
       const { error } = await db.from('daily_assignments').insert(rows);
       if (error) { showToast('Error saving assignments.', 'error'); setLoading(btn, false); return; }
     }
-    showToast("Today's tasks saved successfully!");
+
+    showToast(`Today's tasks saved! ${rows.length} assignments created.`);
     setLoading(btn, false);
+    setTimeout(() => loadAssignView(), 1500);
   }
 
   // ── TEMPLATES TAB ────────────────────────────────────────
