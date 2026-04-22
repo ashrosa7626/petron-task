@@ -1,4 +1,3 @@
-<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -465,17 +464,6 @@
   function goToStep2() {
     // MUST save stock inputs while step-1 DOM is still visible
     saveAllStockInputs();
-    // Show debug alert
-    const keys = Object.keys(stockItems);
-    let debug = 'stockItems keys: ' + keys.join(', ') + '\n';
-    for (const k of keys) {
-      const subkeys = Object.keys(stockItems[k]);
-      debug += k + ': ' + subkeys.join(', ') + '\n';
-      for (const sk of subkeys) {
-        debug += '  ' + sk + ' = [' + (stockItems[k][sk]||[]).join(', ') + ']\n';
-      }
-    }
-    alert(debug);
     // Validate at least one task selected
     if (selectedTaskIds.size === 0 && selectedAdhocTasks.length === 0 && !hasStockItems()) {
       showToast('Please select at least one task.', 'error'); return;
@@ -954,8 +942,8 @@
   }
 
   function ensureStock(staffId, key) {
-    if (!stockItems[staffId]) stockItems[staffId] = {};
-    if (!stockItems[staffId][key]) stockItems[staffId][key] = [''];
+    if (!stockItems['s1']) stockItems['s1'] = {};
+    if (!stockItems['s1'][key]) stockItems['s1'][key] = [''];
   }
 
   function stockInputSection(staffId, subId, task, grp) {
@@ -989,35 +977,38 @@
 
   function updateStockItem(staffId, safeKey, index, value) {
     const key = decodeURIComponent(safeKey);
-    ensureStock(staffId, key);
-    stockItems[staffId][key][index] = value;
+    if (!stockItems['s1']) stockItems['s1'] = {};
+    if (!stockItems['s1'][key]) stockItems['s1'][key] = [''];
+    stockItems['s1'][key][index] = value;
   }
 
   function addStockItem(staffId, safeKey) {
     const key = decodeURIComponent(safeKey);
-    ensureStock(staffId, key);
+    if (!stockItems['s1']) stockItems['s1'] = {};
+    if (!stockItems['s1'][key]) stockItems['s1'][key] = [''];
     // Save current input values first
     const container = document.getElementById('si-' + staffId + '-' + safeKey);
     if (container) {
       container.querySelectorAll('input').forEach((inp, i) => {
-        stockItems[staffId][key][i] = inp.value;
+        stockItems['s1'][key][i] = inp.value;
       });
     }
-    stockItems[staffId][key].push('');
+    stockItems['s1'][key].push('');
     rerenderStockSection(staffId, safeKey, key);
   }
 
   function removeStockItem(staffId, safeKey, index) {
     const key = decodeURIComponent(safeKey);
-    // Save current values before splice
+    if (!stockItems['s1']) stockItems['s1'] = {};
+    if (!stockItems['s1'][key]) stockItems['s1'][key] = [''];
     const container = document.getElementById('si-' + staffId + '-' + safeKey);
     if (container) {
       container.querySelectorAll('input').forEach((inp, i) => {
-        stockItems[staffId][key][i] = inp.value;
+        stockItems['s1'][key][i] = inp.value;
       });
     }
-    stockItems[staffId][key].splice(index, 1);
-    if (stockItems[staffId][key].length === 0) stockItems[staffId][key] = [''];
+    stockItems['s1'][key].splice(index, 1);
+    if (stockItems['s1'][key].length === 0) stockItems['s1'][key] = [''];
     rerenderStockSection(staffId, safeKey, key);
   }
 
@@ -1036,9 +1027,8 @@
         <button class="del-btn" onclick="removeStockItem('${staffId}','${safeKey}',${i})" title="Remove">✕</button>
       </div>`).join('');
     container.innerHTML = rows;
-    // Focus last input
-    const inputs = container.querySelectorAll('input');
-    if (inputs.length) inputs[inputs.length-1].focus();
+    const inputs2 = container.querySelectorAll('input');
+    if (inputs2.length) inputs2[inputs2.length-1].focus();
   }
 
   function checkboxRow(staffId, t, cls) {
@@ -1081,16 +1071,15 @@
   }
 
   function saveAllStockInputs() {
+    if (!stockItems['s1']) stockItems['s1'] = {};
     document.querySelectorAll('[id^="si-"]').forEach(container => {
-      const parts = container.id.split('-');
-      // id format: si-{staffId}-{safeKey}
-      const staffId  = parts[1];
-      const safeKey  = parts.slice(2).join('-');
-      const key      = decodeURIComponent(safeKey);
-      if (!stockItems[staffId]) stockItems[staffId] = {};
-      const inputs = container.querySelectorAll('input');
+      const parts   = container.id.split('-');
+      const safeKey = parts.slice(2).join('-');
+      const key     = decodeURIComponent(safeKey);
+      const inputs  = container.querySelectorAll('input');
       if (inputs.length > 0) {
-        stockItems[staffId][key] = Array.from(inputs).map(i => i.value);
+        // Always save to 's1' — the shared step1 store
+        stockItems['s1'][key] = Array.from(inputs).map(i => i.value);
       }
     });
   }
