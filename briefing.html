@@ -666,12 +666,23 @@ function renderClosing() {
   if (!state.remarks) state.remarks = state.closingMotiv;
   return `
     <div class="section-hd">Closing Remarks</div>
-    <div class="section-sub">A motivational one-liner has been added automatically.</div>
+    <div class="section-sub">Bacaan doa sebelum mula bekerja & kata penutup.</div>
+
+    <div style="background:linear-gradient(135deg,rgba(99,102,241,0.08),rgba(129,140,248,0.08));border:1px solid rgba(99,102,241,0.25);border-radius:var(--radius);padding:20px;margin-bottom:16px;text-align:center">
+      <div style="font-size:0.78rem;font-weight:700;color:#818CF8;text-transform:uppercase;letter-spacing:1px;margin-bottom:14px">🤲 Doa Sebelum Mula Bekerja</div>
+      <div style="font-size:1.5rem;line-height:2.2;color:var(--p-text);font-family:serif;margin-bottom:16px;direction:rtl">
+        اللَّهُمَّ إِنِّي أَسْأَلُكَ مِنْ خَيْرِ هَذَا الْعَمَلِ وَخَيْرِ مَافِيهِ وَأَعُوذُ بِكَ مِنْ شَرِّ هَذَا الْعَمَلِ وَشَرِّ مَافِيْهِ إِنَّكَ عَلَى كُلِّ شَيْءٍ قَدِيرٌ
+      </div>
+      <div style="color:var(--p-text2);font-size:0.95rem;font-style:italic;line-height:1.8">
+        "Ya Allah, aku memohon pada-Mu kebaikan pekerjaan ini dan segala kebaikan yang ada di dalamnya, dan aku berlindung pada-Mu daripada keburukan pekerjaan ini dan segala keburukan yang ada di dalamnya. Sesungguhnya di atas segala sesuatu itu Engkaulah yang Maha Menentukannya."
+      </div>
+    </div>
+
     <div class="motiv-box mb-12">
-      <div class="motiv-label">Auto-generated Motivational Closing</div>
+      <div class="motiv-label">✨ Auto-generated Motivational Closing</div>
       <div class="motiv-text">"${escHtml(state.closingMotiv)}"</div>
     </div>
-    <textarea class="inp" rows="6" placeholder="Add your personal closing remarks..."
+    <textarea class="inp" rows="5" placeholder="Add your personal closing remarks..."
       oninput="state.remarks=this.value">${escHtml(state.remarks)}</textarea>`;
 }
 
