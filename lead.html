@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Team Lead – Petron Tasks v9</title>
+  <title>Team Lead – Petron Tasks v10</title>
   <link rel="stylesheet" href="style.css">
   <style>
     .login-wrap { max-width:360px; margin:60px auto 0; }
@@ -16,6 +16,32 @@
 
     .nav-link { color:var(--muted); font-size:0.85rem; text-decoration:none; transition:color 0.15s; }
     .nav-link:hover { color:var(--accent); }
+
+    /* ── Step indicator ────────────────────── */
+    .step-ind { display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0; }
+    .step-ind__num { width:32px;height:32px;border-radius:50%;background:var(--accent);color:white;font-weight:700;font-size:0.88rem;display:flex;align-items:center;justify-content:center; }
+    .step-ind__num.inactive { background:var(--surface2);color:var(--muted); }
+    .step-ind__num.done { background:var(--success); }
+    .step-ind__label { font-size:0.72rem;font-weight:600;color:var(--text);white-space:nowrap; }
+    .step-ind__label.inactive { color:var(--muted); }
+    .step-line { flex:1;height:2px;background:var(--border);margin:0 8px;margin-bottom:20px; }
+    .step-line.done { background:var(--success); }
+
+    /* ── Task assign rows ──────────────────── */
+    .task-assign-row { background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 16px;margin-bottom:8px;display:flex;align-items:center;gap:12px; }
+    .task-assign-row__name { flex:1;font-size:0.9rem;font-weight:600; }
+    .task-assign-row__meta { font-size:0.75rem;color:var(--muted); }
+    .task-assign-row select { padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--font);font-size:0.85rem;outline:none;min-width:130px; }
+    .task-assign-row select:focus { border-color:var(--accent); }
+
+    /* ── Review rows ───────────────────────── */
+    .review-staff-block { margin-bottom:16px; }
+    .review-staff-name { font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted);margin-bottom:8px;padding:0 2px; }
+    .review-task-row { display:flex;align-items:center;gap:10px;padding:9px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:6px; }
+    .review-task-row__name { flex:1;font-size:0.88rem; }
+
+    /* ── Select all tasks row ──────────────── */
+    .task-select-group { background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:10px; }
 
     /* ── Staff block ───────────────────────── */
     .staff-assign-row { background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:16px; overflow:hidden; }
@@ -141,13 +167,65 @@
       <button class="tab-btn"                 id="tab-staff"     onclick="showTab('staff')">Manage Staff</button>
     </div>
 
-    <!-- ASSIGN TAB -->
+    <!-- ASSIGN TAB — 3-step wizard -->
     <div id="view-assign">
-      <div class="flex flex--between" style="margin-bottom:16px">
-        <div class="section-title" style="margin:0">Assign to staff</div>
-        <button class="btn btn--primary btn--sm" id="saveAssignBtn" onclick="saveAssignments()">Save Day's Tasks</button>
+
+      <!-- Step indicator -->
+      <div style="display:flex;align-items:center;margin-bottom:24px;gap:0">
+        <div class="step-ind" id="sind-1">
+          <div class="step-ind__num" id="snum-1">1</div>
+          <div class="step-ind__label">Select Tasks</div>
+        </div>
+        <div class="step-line" id="sline-1"></div>
+        <div class="step-ind" id="sind-2">
+          <div class="step-ind__num inactive" id="snum-2">2</div>
+          <div class="step-ind__label inactive">Assign Staff</div>
+        </div>
+        <div class="step-line" id="sline-2"></div>
+        <div class="step-ind" id="sind-3">
+          <div class="step-ind__num inactive" id="snum-3">3</div>
+          <div class="step-ind__label inactive">Review & Submit</div>
+        </div>
       </div>
-      <div id="assignList"><div class="empty-state">Loading...</div></div>
+
+      <!-- STEP 1: Select tasks -->
+      <div id="step-1">
+        <div style="margin-bottom:14px">
+          <div style="font-weight:700;font-size:1rem;margin-bottom:4px">Select today's tasks</div>
+          <div class="text-muted text-sm">Tick all tasks that need to be done today. You'll assign them to staff in the next step.</div>
+        </div>
+        <div id="taskSelectList"><div class="empty-state">Loading...</div></div>
+        <div style="margin-top:20px;display:flex;justify-content:flex-end">
+          <button class="btn btn--primary" onclick="goToStep2()">Next: Assign to Staff →</button>
+        </div>
+      </div>
+
+      <!-- STEP 2: Assign to staff -->
+      <div id="step-2" style="display:none">
+        <div style="margin-bottom:14px">
+          <div style="font-weight:700;font-size:1rem;margin-bottom:4px">Assign tasks to staff</div>
+          <div class="text-muted text-sm">For each task, select which staff member is responsible.</div>
+        </div>
+        <div id="taskAssignList"><div class="empty-state">Loading...</div></div>
+        <div style="margin-top:20px;display:flex;justify-content:space-between">
+          <button class="btn btn--ghost" onclick="goToStep1()">← Back</button>
+          <button class="btn btn--primary" onclick="goToStep3()">Next: Review →</button>
+        </div>
+      </div>
+
+      <!-- STEP 3: Review & submit -->
+      <div id="step-3" style="display:none">
+        <div style="margin-bottom:14px">
+          <div style="font-weight:700;font-size:1rem;margin-bottom:4px">Review & submit</div>
+          <div class="text-muted text-sm">Check the assignments below, then save.</div>
+        </div>
+        <div id="taskReviewList"><div class="empty-state">Loading...</div></div>
+        <div style="margin-top:20px;display:flex;justify-content:space-between">
+          <button class="btn btn--ghost" onclick="goToStep2()">← Back</button>
+          <button class="btn btn--success" id="saveAssignBtn" onclick="saveAssignments()">Save Day's Tasks</button>
+        </div>
+      </div>
+
     </div>
 
     <!-- TEMPLATES TAB -->
@@ -279,7 +357,15 @@
     if (tab === 'staff')     loadStaffList();
   }
 
-  // ── ASSIGN TAB ──────────────────────────────────────────
+  // ── ASSIGN TAB — 3-step wizard ─────────────────────────
+  // selectedTaskIds: Set of template IDs selected in step 1
+  // taskAssignments: { templateId: staffId } for step 2
+  // selectedAdhocTasks: [{name, photoRequired}] from step 1
+  // stockItemsStep1: stock items entered in step 1
+  let selectedTaskIds   = new Set();
+  let taskAssignments   = {}; // tplId → staffId
+  let selectedAdhocTasks = [];
+
   async function loadAssignView() {
     const [staffRes, tplRes, catRes, subRes, grpRes, existingRes] = await Promise.all([
       db.from('users').select('id,name,branch').eq('role','staff').eq('branch', sessionStorage.getItem('lead_branch') || '').order('name'),
@@ -297,34 +383,396 @@
     allSubgroups  = grpRes.data   || [];
     const existing = existingRes.data || [];
 
+    // Pre-populate from existing assignments
     staffSelections = {};
     stockItems = {};
+    selectedTaskIds = new Set();
+    taskAssignments = {};
+
     for (const s of allStaff) {
       const mine = existing.filter(a => a.staff_id === s.id);
       const stockAssignments = mine.filter(a => a.is_adhoc && a.custom_task_name?.startsWith('TOPUP:'));
-      const realAdhoc        = mine.filter(a => a.is_adhoc && !a.custom_task_name?.startsWith('TOPUP:'));
+      const realAdhoc = mine.filter(a => a.is_adhoc && !a.custom_task_name?.startsWith('TOPUP:'));
       staffSelections[s.id] = {
         templateIds: new Set(mine.filter(a => !a.is_adhoc).map(a => a.task_template_id)),
-        adhocTasks:  realAdhoc.map(a => ({ name: a.custom_task_name, photoRequired: a.photo_required || false })),
+        adhocTasks: realAdhoc.map(a => ({ name: a.custom_task_name, photoRequired: true })),
       };
-      // Restore stock items into stockItems store
+      // Restore selectedTaskIds and taskAssignments from existing
+      for (const tplId of staffSelections[s.id].templateIds) {
+        selectedTaskIds.add(tplId);
+        taskAssignments[tplId] = s.id;
+      }
+      // Restore stock items
       if (!stockItems[s.id]) stockItems[s.id] = {};
       for (const sa of stockAssignments) {
-        const parts   = sa.custom_task_name.split(':');
+        const parts = sa.custom_task_name.split(':');
         const subName = parts[1] || 'Stock';
         const section = parts[2] || subName;
-        const item    = parts.slice(3).join(':');
-        // Find subId from subName
-        const subcat  = allSubcats.find(sc => sc.name === subName);
-        const subId   = subcat?.id || subName;
-        const key     = subId + '||' + section;
+        const item = parts.slice(3).join(':');
+        const subcat = allSubcats.find(sc => sc.name === subName);
+        const subId = subcat?.id || subName;
+        const key = subId + '||' + section;
         if (!stockItems[s.id][key]) stockItems[s.id][key] = [];
         if (item) stockItems[s.id][key].push(item);
       }
-      // Ensure at least one empty slot per stock section
     }
 
-    renderAssignView();
+    goToStep1();
+  }
+
+  function setStepActive(n) {
+    [1,2,3].forEach(i => {
+      const num = document.getElementById('snum-' + i);
+      const lbl = document.getElementById('sind-' + i)?.querySelector('.step-ind__label');
+      if (i < n) {
+        num.className = 'step-ind__num done';
+        num.textContent = '✓';
+        if (lbl) lbl.className = 'step-ind__label';
+      } else if (i === n) {
+        num.className = 'step-ind__num';
+        num.textContent = i;
+        if (lbl) lbl.className = 'step-ind__label';
+      } else {
+        num.className = 'step-ind__num inactive';
+        num.textContent = i;
+        if (lbl) lbl.className = 'step-ind__label inactive';
+      }
+    });
+    [1,2].forEach(i => {
+      const line = document.getElementById('sline-' + i);
+      if (line) line.className = 'step-line' + (i < n ? ' done' : '');
+    });
+    [1,2,3].forEach(i => {
+      const el = document.getElementById('step-' + i);
+      if (el) el.style.display = i === n ? '' : 'none';
+    });
+  }
+
+  function goToStep1() {
+    setStepActive(1);
+    renderStep1();
+  }
+
+  function goToStep2() {
+    // Validate at least one task selected
+    if (selectedTaskIds.size === 0 && selectedAdhocTasks.length === 0 && !hasStockItems()) {
+      showToast('Please select at least one task.', 'error'); return;
+    }
+    setStepActive(2);
+    renderStep2();
+  }
+
+  function goToStep3() {
+    // Validate all tasks assigned
+    const unassigned = [...selectedTaskIds].filter(id => !taskAssignments[id]);
+    if (unassigned.length > 0) {
+      showToast('Please assign all tasks to a staff member.', 'error'); return;
+    }
+    setStepActive(3);
+    renderStep3();
+  }
+
+  function hasStockItems() {
+    for (const sid of Object.keys(stockItems)) {
+      for (const items of Object.values(stockItems[sid] || {})) {
+        if (items.some(i => i.trim())) return true;
+      }
+    }
+    return false;
+  }
+
+  // ── STEP 1: Select tasks ──────────────────────────────
+  function renderStep1() {
+    const list = document.getElementById('taskSelectList');
+    const tree = buildTree();
+    let html = '';
+
+    for (const cat of tree) {
+      const isStock = cat.name?.toLowerCase().includes('stock');
+      const catTasks = getAllCatTasks(cat);
+      const catChecked = catTasks.length > 0 && catTasks.every(t => selectedTaskIds.has(t.id));
+
+      let subcatHtml = '';
+      for (const sub of cat.subcats) {
+        const subTasks = getAllSubTasks(sub);
+        let subContent = '';
+
+        if (isStock) {
+          // Stock category — show input sections
+          subContent += sub.directTasks.map(t => stockInputSection('s1', sub.id, t, null)).join('');
+          for (const grp of sub.subgroups) {
+            subContent += stockInputSection('s1', sub.id, null, grp);
+          }
+        } else {
+          // Normal — show checkboxes with select-all
+          const subAllChecked = subTasks.length > 0 && subTasks.every(t => selectedTaskIds.has(t.id));
+          subContent += `<div class="select-all-row" onclick="selectAllSubStep1('${sub.id}')">
+            <input type="checkbox" id="s1sall-${sub.id}" ${subAllChecked?'checked':''} onclick="event.stopPropagation();selectAllSubStep1('${sub.id}')">
+            <span>Select all</span></div>`;
+          subContent += sub.directTasks.map(t => step1CheckboxRow(t)).join('');
+          for (const grp of sub.subgroups) {
+            const grpAllChecked = grp.tasks.length > 0 && grp.tasks.every(t => selectedTaskIds.has(t.id));
+            let grpContent = `<div class="select-all-row" style="padding-left:40px" onclick="selectAllGrpStep1('${grp.id}')">
+              <input type="checkbox" id="s1gall-${grp.id}" ${grpAllChecked?'checked':''} onclick="event.stopPropagation();selectAllGrpStep1('${grp.id}')">
+              <span>Select all</span></div>`;
+            grpContent += grp.tasks.map(t => step1CheckboxRow(t, 'task-checkbox task-checkbox--grp')).join('');
+            subContent += `<div class="ac-grp">
+              <div class="ac-grp-header" onclick="togAc('s1ag-${grp.id}','s1agc-${grp.id}')">
+                <span class="ac-grp-name">${grp.name}</span>
+                <span class="ac-chev" id="s1agc-${grp.id}">▼</span>
+              </div>
+              <div class="ac-grp-body" id="s1ag-${grp.id}">${grpContent}</div>
+            </div>`;
+          }
+        }
+
+        subcatHtml += `<div class="ac-sub">
+          <div class="ac-sub-header" onclick="togAc('s1as-${sub.id}','s1asc-${sub.id}')">
+            <span class="ac-sub-name">${sub.name||''}</span>
+            <span class="ac-chev" id="s1asc-${sub.id}">▼</span>
+          </div>
+          <div class="ac-sub-body" id="s1as-${sub.id}">${subContent}</div>
+        </div>`;
+      }
+
+      html += `<div class="task-select-group">
+        <div class="ac-cat-header" onclick="togAc('s1ac-${cat.id}','s1acc-${cat.id}')">
+          <span class="ac-cat-name">${cat.name}</span>
+          <span class="ac-chev" id="s1acc-${cat.id}">▼</span>
+        </div>
+        <div class="ac-cat-body" id="s1ac-${cat.id}">${subcatHtml}</div>
+      </div>`;
+    }
+
+    // Ad-hoc section
+    html += `<div class="task-select-group" style="margin-top:16px">
+      <div style="padding:12px 16px;background:var(--surface);font-size:0.82rem;font-weight:700;color:var(--accent2)">Ad-hoc Tasks</div>
+      <div style="padding:12px 16px">
+        <div id="s1-adhoc-tags">${renderAdhocStep1Tags()}</div>
+        <div class="adhoc-input-row" style="margin-top:8px">
+          <input type="text" id="s1-adhoc-input" placeholder="Type ad-hoc task name..." onkeydown="if(event.key==='Enter')addAdhocStep1()">
+          <button class="btn btn--ghost btn--sm" onclick="addAdhocStep1()">Add</button>
+        </div>
+      </div>
+    </div>`;
+
+    list.innerHTML = html;
+  }
+
+  function step1CheckboxRow(t, cls='task-checkbox task-checkbox--sub') {
+    const checked = selectedTaskIds.has(t.id);
+    return `<label class="${cls}">
+      <input type="checkbox" ${checked?'checked':''} onchange="toggleTaskStep1('${t.id}',this.checked)">
+      <span class="task-checkbox__label">${t.name}</span>
+      ${t.photo_required?'<span style="font-size:0.75rem;color:var(--warning)">📷</span>':''}
+    </label>`;
+  }
+
+  function toggleTaskStep1(tplId, checked) {
+    if (checked) selectedTaskIds.add(tplId);
+    else { selectedTaskIds.delete(tplId); delete taskAssignments[tplId]; }
+  }
+
+  function selectAllSubStep1(subId) {
+    const tasks = allTemplates.filter(t => t.subcategory_id === subId && !t.subgroup_id);
+    const allChecked = tasks.every(t => selectedTaskIds.has(t.id));
+    tasks.forEach(t => { if(allChecked) { selectedTaskIds.delete(t.id); delete taskAssignments[t.id]; } else selectedTaskIds.add(t.id); });
+    const cb = document.getElementById('s1sall-' + subId);
+    if (cb) cb.checked = !allChecked;
+    tasks.forEach(t => { const el = document.querySelector(`input[onchange*="${t.id}"]`); if(el) el.checked = !allChecked; });
+  }
+
+  function selectAllGrpStep1(grpId) {
+    const tasks = allTemplates.filter(t => t.subgroup_id === grpId);
+    const allChecked = tasks.every(t => selectedTaskIds.has(t.id));
+    tasks.forEach(t => { if(allChecked) { selectedTaskIds.delete(t.id); delete taskAssignments[t.id]; } else selectedTaskIds.add(t.id); });
+    const cb = document.getElementById('s1gall-' + grpId);
+    if (cb) cb.checked = !allChecked;
+  }
+
+  function addAdhocStep1() {
+    const inp = document.getElementById('s1-adhoc-input');
+    const name = inp.value.trim();
+    if (!name) return;
+    selectedAdhocTasks.push({ name, photoRequired: true, staffId: null });
+    inp.value = '';
+    document.getElementById('s1-adhoc-tags').innerHTML = renderAdhocStep1Tags();
+  }
+
+  function removeAdhocStep1(i) {
+    selectedAdhocTasks.splice(i, 1);
+    document.getElementById('s1-adhoc-tags').innerHTML = renderAdhocStep1Tags();
+  }
+
+  function renderAdhocStep1Tags() {
+    return selectedAdhocTasks.map((a,i) => `
+      <span class="adhoc-tag" onclick="removeAdhocStep1(${i})">
+        📷 ${a.name} <span style="opacity:0.6">✕</span>
+      </span>`).join('');
+  }
+
+  // ── STEP 2: Assign tasks to staff ────────────────────
+  function renderStep2() {
+    saveAllStockInputs();
+    const list = document.getElementById('taskAssignList');
+    const selectedTpls = allTemplates.filter(t => selectedTaskIds.has(t.id));
+
+    if (!selectedTpls.length && !selectedAdhocTasks.length) {
+      list.innerHTML = '<div class="empty-state">No tasks selected.</div>'; return;
+    }
+
+    const staffOptions = allStaff.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+    const unassigned = '<option value="">— Assign to —</option>';
+
+    let html = '';
+
+    // Group by category
+    const catMap = {};
+    for (const t of selectedTpls) {
+      const cat = allCategories.find(c => c.id === t.category_id);
+      const catName = cat?.name || 'Other';
+      if (!catMap[catName]) catMap[catName] = [];
+      catMap[catName].push(t);
+    }
+
+    for (const [catName, tasks] of Object.entries(catMap)) {
+      html += `<div style="margin-bottom:6px;font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted);padding:10px 0 4px">${catName}</div>`;
+      html += tasks.map(t => {
+        const assigned = taskAssignments[t.id] || '';
+        return `<div class="task-assign-row">
+          <div style="flex:1">
+            <div class="task-assign-row__name">${t.name}</div>
+            ${t.photo_required?'<div class="task-assign-row__meta">📷 Photo required</div>':''}
+          </div>
+          <select onchange="taskAssignments['${t.id}']=this.value">
+            <option value="" ${!assigned?'selected':''}>— Assign to —</option>
+            ${allStaff.map(s=>`<option value="${s.id}" ${assigned===s.id?'selected':''}>${s.name}</option>`).join('')}
+          </select>
+        </div>`;
+      }).join('');
+    }
+
+    // Ad-hoc tasks
+    if (selectedAdhocTasks.length) {
+      html += `<div style="margin-bottom:6px;font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--accent2);padding:10px 0 4px">Ad-hoc Tasks</div>`;
+      html += selectedAdhocTasks.map((a,i) => `
+        <div class="task-assign-row">
+          <div style="flex:1">
+            <div class="task-assign-row__name">📷 ${a.name}</div>
+          </div>
+          <select onchange="selectedAdhocTasks[${i}].staffId=this.value">
+            <option value="">— Assign to —</option>
+            ${allStaff.map(s=>`<option value="${s.id}" ${a.staffId===s.id?'selected':''}>${s.name}</option>`).join('')}
+          </select>
+        </div>`).join('');
+    }
+
+    // Stock items — assign whole subcategory
+    const stockCats = allCategories.filter(c => c.name?.toLowerCase().includes('stock'));
+    for (const cat of stockCats) {
+      const subs = allSubcats.filter(s => s.category_id === cat.id);
+      if (subs.length) {
+        html += `<div style="margin-bottom:6px;font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted);padding:10px 0 4px">${cat.name}</div>`;
+        for (const sub of subs) {
+          const grps = allSubgroups.filter(g => g.subcategory_id === sub.id);
+          const sections = grps.length ? grps : [{ id: sub.id, name: sub.name }];
+          for (const sec of sections) {
+            const key = sub.id + '||' + sec.name;
+            // Check if there are items for this section
+            const hasItems = Object.values(stockItems).some(si => si[key]?.some(i=>i.trim()));
+            if (!hasItems) continue;
+            const assignedStaff = stockItems['__assign__']?.[key] || '';
+            html += `<div class="task-assign-row">
+              <div style="flex:1">
+                <div class="task-assign-row__name">${sub.name} — ${sec.name}</div>
+                <div class="task-assign-row__meta">Stock top-up items</div>
+              </div>
+              <select onchange="setStockAssign('${key}',this.value)">
+                <option value="">— Assign to —</option>
+                ${allStaff.map(s=>`<option value="${s.id}" ${assignedStaff===s.id?'selected':''}>${s.name}</option>`).join('')}
+              </select>
+            </div>`;
+          }
+        }
+      }
+    }
+
+    list.innerHTML = html || '<div class="empty-state">No tasks to assign.</div>';
+  }
+
+  function setStockAssign(key, staffId) {
+    if (!stockItems['__assign__']) stockItems['__assign__'] = {};
+    stockItems['__assign__'][key] = staffId;
+  }
+
+  // ── STEP 3: Review ────────────────────────────────────
+  function renderStep3() {
+    const list = document.getElementById('taskReviewList');
+    // Group by staff
+    const byStaff = {};
+    for (const s of allStaff) byStaff[s.id] = { name: s.name, tasks: [] };
+
+    for (const tplId of selectedTaskIds) {
+      const staffId = taskAssignments[tplId];
+      const tpl = allTemplates.find(t => t.id === tplId);
+      if (!tplId || !tpl) continue;
+      if (staffId && byStaff[staffId]) {
+        byStaff[staffId].tasks.push({ name: tpl.name, photo: tpl.photo_required, type: 'template' });
+      }
+    }
+
+    for (const a of selectedAdhocTasks) {
+      if (a.staffId && byStaff[a.staffId]) {
+        byStaff[a.staffId].tasks.push({ name: a.name, photo: true, type: 'adhoc' });
+      }
+    }
+
+    // Stock items
+    for (const [key, staffId] of Object.entries(stockItems['__assign__'] || {})) {
+      if (!staffId) continue;
+      const sectionName = key.split('||')[1] || key;
+      const subName = key.split('||')[0];
+      // Collect items across all staff stockItems for this key
+      const allItems = [];
+      for (const [sid, si] of Object.entries(stockItems)) {
+        if (sid === '__assign__') continue;
+        (si[key] || []).forEach(i => { if(i.trim()) allItems.push(i.trim()); });
+      }
+      if (allItems.length && byStaff[staffId]) {
+        allItems.forEach(item => {
+          byStaff[staffId].tasks.push({ name: `[${sectionName}] ${item}`, photo: false, type: 'stock' });
+        });
+      }
+    }
+
+    const staffWithTasks = Object.entries(byStaff).filter(([,d]) => d.tasks.length > 0);
+    const unassigned = [...selectedTaskIds].filter(id => !taskAssignments[id]);
+
+    let html = '';
+
+    if (unassigned.length) {
+      html += `<div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:16px;color:var(--danger);font-size:0.85rem">
+        ⚠ ${unassigned.length} task(s) not yet assigned to any staff — go back and assign them.
+      </div>`;
+    }
+
+    if (!staffWithTasks.length) {
+      html += '<div class="empty-state">No tasks assigned yet.</div>';
+    } else {
+      html += staffWithTasks.map(([sid, data]) => `
+        <div class="review-staff-block">
+          <div class="review-staff-name">${data.name} — ${data.tasks.length} task(s)</div>
+          ${data.tasks.map(t => `
+            <div class="review-task-row">
+              <div class="review-task-row__name">${t.name}</div>
+              ${t.photo?'<span class="badge badge--photo" style="font-size:0.7rem">📷</span>':''}
+              ${t.type==='adhoc'?'<span class="badge badge--adhoc" style="font-size:0.7rem">Ad-hoc</span>':''}
+              ${t.type==='stock'?'<span class="badge" style="background:rgba(124,92,252,0.12);color:var(--accent2);font-size:0.7rem">Stock</span>':''}
+            </div>`).join('')}
+        </div>`).join('');
+    }
+
+    list.innerHTML = html;
   }
 
   function renderAssignView() {
