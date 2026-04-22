@@ -465,6 +465,17 @@
   function goToStep2() {
     // MUST save stock inputs while step-1 DOM is still visible
     saveAllStockInputs();
+    // Show debug alert
+    const keys = Object.keys(stockItems);
+    let debug = 'stockItems keys: ' + keys.join(', ') + '\n';
+    for (const k of keys) {
+      const subkeys = Object.keys(stockItems[k]);
+      debug += k + ': ' + subkeys.join(', ') + '\n';
+      for (const sk of subkeys) {
+        debug += '  ' + sk + ' = [' + (stockItems[k][sk]||[]).join(', ') + ']\n';
+      }
+    }
+    alert(debug);
     // Validate at least one task selected
     if (selectedTaskIds.size === 0 && selectedAdhocTasks.length === 0 && !hasStockItems()) {
       showToast('Please select at least one task.', 'error'); return;
