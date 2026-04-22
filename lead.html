@@ -863,27 +863,7 @@
       let subcatHtml = '';
 
       if (isStockCat) {
-        // STOCK CATEGORY — render manual input sections
-        subcatHtml += cat.directTasks.map(t => checkboxRow(staffId, t, 'task-checkbox')).join('');
-        for (const sub of cat.subcats) {
-          let subContent = '';
-          // Direct tasks under sub become manual input sections
-          if (sub.directTasks.length > 0) {
-            subContent += sub.directTasks.map(t => stockInputSection(staffId, sub.id, t, null)).join('');
-          }
-          // Subgroups become manual input sections
-          for (const grp of sub.subgroups) {
-            subContent += stockInputSection(staffId, sub.id, null, grp);
-          }
-          subcatHtml += `
-            <div class="ac-sub">
-              <div class="ac-sub-header" onclick="togAc('as-${staffId}-${sub.id}','asc-${staffId}-${sub.id}')">
-                <span class="ac-sub-name">${sub.name}</span>
-                <span class="ac-chev" id="asc-${staffId}-${sub.id}">▼</span>
-              </div>
-              <div class="ac-sub-body" id="as-${staffId}-${sub.id}">${subContent}</div>
-            </div>`;
-        }
+        // Stock is handled in Step 1 — skip rendering here
       } else {
         // NORMAL CATEGORY — render checkboxes
         const catTasks = getAllCatTasks(cat);
@@ -1073,12 +1053,13 @@
 
   function saveAllStockInputs() {
     if (!stockItems['s1']) stockItems['s1'] = {};
+    // Only read from si-s1- prefixed elements (step1 stock inputs)
     document.querySelectorAll('[id^="si-s1-"]').forEach(container => {
+      // id format: si-s1-{safeKey}
       const safeKey = container.id.slice('si-s1-'.length);
       const key     = decodeURIComponent(safeKey);
       const inputs  = container.querySelectorAll('input');
       if (inputs.length > 0) {
-        // Always save to 's1' — the shared step1 store
         stockItems['s1'][key] = Array.from(inputs).map(i => i.value);
       }
     });
