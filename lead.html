@@ -454,6 +454,8 @@
   }
 
   function goToStep2() {
+    // Save any stock inputs before moving on
+    saveAllStockInputs();
     // Validate at least one task selected
     if (selectedTaskIds.size === 0 && selectedAdhocTasks.length === 0 && !hasStockItems()) {
       showToast('Please select at least one task.', 'error'); return;
@@ -473,10 +475,9 @@
   }
 
   function hasStockItems() {
-    for (const sid of Object.keys(stockItems)) {
-      for (const items of Object.values(stockItems[sid] || {})) {
-        if (items.some(i => i.trim())) return true;
-      }
+    const s1 = stockItems['s1'] || {};
+    for (const items of Object.values(s1)) {
+      if (Array.isArray(items) && items.some(i => i.trim())) return true;
     }
     return false;
   }
@@ -636,6 +637,7 @@
     }
 
     for (const [catName, tasks] of Object.entries(catMap)) {
+      if (!tasks.length) continue;
       html += `<div style="margin-bottom:6px;font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted);padding:10px 0 4px">${catName}</div>`;
       html += tasks.map(t => {
         const assigned = taskAssignments[t.id] || '';
@@ -831,9 +833,8 @@
       catNode.directTasks = allTemplates.filter(t => t.category_id === cat.id && !t.subcategory_id);
       tree.push(catNode);
     }
-    // Uncategorised templates
-    const uncatTasks = allTemplates.filter(t => !t.category_id);
-    if (uncatTasks.length) tree.push({ id:'__uncat__', name:'Other', directTasks: uncatTasks, subcats: [] });
+    // Uncategorised templates shown separately in step 1 only if no category
+    // Skip adding to tree — they appear in ad-hoc section instead
     return tree;
   }
 
