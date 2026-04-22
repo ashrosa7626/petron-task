@@ -1,8 +1,9 @@
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Team Lead – Petron Tasks v10</title>
+  <title>Team Lead – Petron Tasks v16</title>
   <link rel="stylesheet" href="style.css">
   <style>
     .login-wrap { max-width:360px; margin:60px auto 0; }
@@ -953,7 +954,7 @@
     const safeKey = encodeURIComponent(key);
     const bodyId  = 'stk-' + staffId + '-' + safeKey;
     const chevId  = 'stkc-' + staffId + '-' + safeKey;
-    const rows = stockItems[staffId][key].map((val, i) => `
+    const rows = (stockItems['s1'][key] || ['']).map((val, i) => `
       <div class="stock-item-row">
         <input type="text" value="${val.replace(/"/g,'&quot;')}" placeholder="e.g. Milo 3in1, 100Plus..."
           oninput="updateStockItem('${staffId}','${safeKey}',${i},this.value)"
@@ -1019,7 +1020,7 @@
   function rerenderStockSection(staffId, safeKey, key) {
     const container = document.getElementById('si-' + staffId + '-' + safeKey);
     if (!container) return;
-    const rows = stockItems[staffId][key].map((val, i) => `
+    const rows = (stockItems['s1'][key] || ['']).map((val, i) => `
       <div class="stock-item-row">
         <input type="text" value="${val.replace(/"/g,'&quot;')}" placeholder="e.g. Milo 3in1, 100Plus..."
           oninput="updateStockItem('${staffId}','${safeKey}',${i},this.value)"
