@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Team Lead – Petron Tasks v16</title>
+  <title>Team Lead – Petron Tasks v17</title>
   <link rel="stylesheet" href="style.css">
   <style>
     .login-wrap { max-width:360px; margin:60px auto 0; }
@@ -121,12 +121,116 @@
     .stock-add-btn { font-size:0.78rem;padding:5px 12px; }
     .stock-direct { padding:10px 20px 12px; }
     .stock-direct-name { font-size:0.78rem;font-weight:600;color:var(--muted);margin-bottom:8px; }
+
+  /* ── Sidebar ─────────────────────────────── */
+  body { display:flex; }
+  .sidebar {
+    width: 220px;
+    min-height: 100vh;
+    background: #0F1B3D;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    position: fixed;
+    left: 0; top: 0; bottom: 0;
+    z-index: 100;
+    padding: 0;
+    transition: transform 0.25s ease;
+  }
+  .sidebar__logo {
+    padding: 20px 20px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    font-family: 'Syne', sans-serif;
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: white;
+    letter-spacing: -0.3px;
+  }
+  .sidebar__logo span { color: #E31837; }
+  .sidebar__nav {
+    flex: 1;
+    padding: 12px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .sidebar__link {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 20px;
+    color: rgba(255,255,255,0.6);
+    text-decoration: none;
+    font-size: 0.88rem;
+    font-weight: 600;
+    border-left: 3px solid transparent;
+    transition: all 0.15s;
+    cursor: pointer;
+    background: none;
+    border-top: none;
+    border-right: none;
+    border-bottom: none;
+    font-family: var(--font);
+    width: 100%;
+    text-align: left;
+  }
+  .sidebar__link:hover {
+    background: rgba(255,255,255,0.06);
+    color: white;
+    border-left-color: rgba(255,255,255,0.3);
+  }
+  .sidebar__link.active {
+    background: rgba(255,255,255,0.1);
+    color: white;
+    border-left-color: #E31837;
+  }
+  .sidebar__link svg {
+    width: 18px; height: 18px; flex-shrink: 0; opacity: 0.8;
+  }
+  .sidebar__link.active svg { opacity: 1; }
+  .sidebar__footer {
+    padding: 16px 20px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    font-size: 0.72rem;
+    color: rgba(255,255,255,0.3);
+  }
+  .page-wrap {
+    margin-left: 220px;
+    flex: 1;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    width: calc(100% - 220px);
+  }
+  @media (max-width: 640px) {
+    .sidebar { transform: translateX(-220px); }
+    .sidebar.open { transform: translateX(0); }
+    .page-wrap { margin-left: 0; width: 100%; }
+    .sidebar-toggle {
+      display: flex !important;
+    }
+  }
+  .sidebar-toggle {
+    display: none;
+    position: fixed;
+    top: 14px; left: 14px;
+    z-index: 200;
+    background: #0F1B3D;
+    border: none;
+    color: white;
+    width: 36px; height: 36px;
+    border-radius: 8px;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 1.1rem;
+  }
   </style>
 </head>
 <body>
 <div class="page">
   <div class="topbar">
-    <a href="index.html" class="btn btn--ghost btn--sm">← Staff View</a>
+    
     <div class="topbar__logo">Petron<span> Lead</span></div>
     <div style="font-size:0.82rem;font-weight:700;color:var(--accent)" id="leadBranchLabel"></div>
     <div id="leadNav" style="display:none;gap:12px;align-items:center" class="flex">
@@ -402,18 +506,18 @@
         selectedTaskIds.add(tplId);
         taskAssignments[tplId] = s.id;
       }
-      // Restore stock items
-      if (!stockItems[s.id]) stockItems[s.id] = {};
+      // Restore stock items into s1 store using simple 'stock||Section' key
+      if (!stockItems['s1']) stockItems['s1'] = {};
       for (const sa of stockAssignments) {
-        const parts = sa.custom_task_name.split(':');
-        const subName = parts[1] || 'Stock';
-        const section = parts[2] || subName;
-        const item = parts.slice(3).join(':');
-        const subcat = allSubcats.find(sc => sc.name === subName);
-        const subId = subcat?.id || subName;
-        const key = subId + '||' + section;
-        if (!stockItems[s.id][key]) stockItems[s.id][key] = [];
-        if (item) stockItems[s.id][key].push(item);
+        const parts   = sa.custom_task_name.split(':');
+        const section = parts[2] || 'Gondola'; // parts[2] is Gondola or Cafe
+        const item    = parts.slice(3).join(':');
+        const key     = 'stock||' + section;
+        if (!stockItems['s1'][key]) stockItems['s1'][key] = [];
+        if (item) stockItems['s1'][key].push(item);
+        // Also restore assign
+        if (!stockItems['__assign__']) stockItems['__assign__'] = {};
+        stockItems['__assign__'][key] = s.id;
       }
     }
 
@@ -508,11 +612,7 @@
         let subContent = '';
 
         if (isStock) {
-          // Stock category — show input sections
-          subContent += sub.directTasks.map(t => stockInputSection('s1', sub.id, t, null)).join('');
-          for (const grp of sub.subgroups) {
-            subContent += stockInputSection('s1', sub.id, null, grp);
-          }
+          // Skip — stock rendered separately below
         } else {
           // Normal — show checkboxes with select-all
           const subAllChecked = subTasks.length > 0 && subTasks.every(t => selectedTaskIds.has(t.id));
@@ -554,6 +654,18 @@
       </div>`;
     }
 
+    // ── Stocks & Merchandise — Gondola + Cafe ──────────
+    html += `<div class="task-select-group" style="margin-top:8px">
+      <div class="ac-cat-header" onclick="togAc('s1-stock-body','s1-stock-chev')">
+        <span class="ac-cat-name">Stocks &amp; Merchandise (Top-up)</span>
+        <span class="ac-chev" id="s1-stock-chev">▼</span>
+      </div>
+      <div class="ac-cat-body" id="s1-stock-body">
+        ${renderStockSection('Gondola')}
+        ${renderStockSection('Cafe')}
+      </div>
+    </div>`;
+
     // Ad-hoc section
     html += `<div class="task-select-group" style="margin-top:16px">
       <div style="padding:12px 16px;background:var(--surface);font-size:0.82rem;font-weight:700;color:var(--accent2)">Ad-hoc Tasks</div>
@@ -567,6 +679,74 @@
     </div>`;
 
     list.innerHTML = html;
+  }
+
+  function renderStockSection(sectionName) {
+    const key = 'stock||' + sectionName;
+    if (!stockItems['s1']) stockItems['s1'] = {};
+    if (!stockItems['s1'][key]) stockItems['s1'][key] = [''];
+    const safeKey = encodeURIComponent(key);
+    const rows = (stockItems['s1'][key] || ['']).map((val, i) => `
+      <div class="stock-item-row">
+        <input type="text" value="${val.replace(/"/g,'&quot;')}" placeholder="e.g. Milo 3in1, 100Plus..."
+          oninput="updateStockItemSimple('${safeKey}',${i},this.value)"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();addStockItemSimple('${safeKey}')}">
+        <button class="del-btn" onclick="removeStockItemSimple('${safeKey}',${i})" title="Remove">✕</button>
+      </div>`).join('');
+    return `
+      <div style="border-bottom:1px solid var(--border)">
+        <div style="padding:9px 16px;background:var(--surface2);font-size:0.78rem;font-weight:700;color:var(--accent)">${sectionName}</div>
+        <div style="padding:10px 16px 12px">
+          <div class="stock-items" id="si-s1-${safeKey}">${rows}</div>
+          <button class="btn btn--ghost btn--sm stock-add-btn" onclick="addStockItemSimple('${safeKey}')">+ Add item</button>
+        </div>
+      </div>`;
+  }
+
+  function updateStockItemSimple(safeKey, index, value) {
+    const key = decodeURIComponent(safeKey);
+    if (!stockItems['s1']) stockItems['s1'] = {};
+    if (!stockItems['s1'][key]) stockItems['s1'][key] = [''];
+    stockItems['s1'][key][index] = value;
+  }
+
+  function addStockItemSimple(safeKey) {
+    const key = decodeURIComponent(safeKey);
+    if (!stockItems['s1']) stockItems['s1'] = {};
+    if (!stockItems['s1'][key]) stockItems['s1'][key] = [''];
+    // Save current values first
+    const container = document.getElementById('si-s1-' + safeKey);
+    if (container) {
+      container.querySelectorAll('input').forEach((inp, i) => { stockItems['s1'][key][i] = inp.value; });
+    }
+    stockItems['s1'][key].push('');
+    rerenderSimpleStock(safeKey, key);
+  }
+
+  function removeStockItemSimple(safeKey, index) {
+    const key = decodeURIComponent(safeKey);
+    if (!stockItems['s1']?.[key]) return;
+    const container = document.getElementById('si-s1-' + safeKey);
+    if (container) {
+      container.querySelectorAll('input').forEach((inp, i) => { stockItems['s1'][key][i] = inp.value; });
+    }
+    stockItems['s1'][key].splice(index, 1);
+    if (stockItems['s1'][key].length === 0) stockItems['s1'][key] = [''];
+    rerenderSimpleStock(safeKey, key);
+  }
+
+  function rerenderSimpleStock(safeKey, key) {
+    const container = document.getElementById('si-s1-' + safeKey);
+    if (!container) return;
+    container.innerHTML = (stockItems['s1'][key] || ['']).map((val, i) => `
+      <div class="stock-item-row">
+        <input type="text" value="${val.replace(/"/g,'&quot;')}" placeholder="e.g. Milo 3in1, 100Plus..."
+          oninput="updateStockItemSimple('${safeKey}',${i},this.value)"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();addStockItemSimple('${safeKey}')}">
+        <button class="del-btn" onclick="removeStockItemSimple('${safeKey}',${i})" title="Remove">✕</button>
+      </div>`).join('');
+    const inputs = container.querySelectorAll('input');
+    if (inputs.length) inputs[inputs.length-1].focus();
   }
 
   function step1CheckboxRow(t, cls='task-checkbox task-checkbox--sub') {
@@ -678,36 +858,28 @@
         </div>`).join('');
     }
 
-    // Stock items — assign whole subcategory
-    const stockCats = allCategories.filter(c => c.name?.toLowerCase().includes('stock'));
-    for (const cat of stockCats) {
-      const subs = allSubcats.filter(s => s.category_id === cat.id);
-      if (subs.length) {
-        html += `<div style="margin-bottom:6px;font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted);padding:10px 0 4px">${cat.name}</div>`;
-        for (const sub of subs) {
-          const grps = allSubgroups.filter(g => g.subcategory_id === sub.id);
-          const sections = grps.length ? grps : [{ id: sub.id, name: sub.name }];
-          for (const sec of sections) {
-            const key = sub.id + '||' + sec.name;
-            // Check across ALL stockItems stores for this key
-            const hasItems = Object.entries(stockItems)
-              .filter(([k]) => k !== '__assign__')
-              .some(([, si]) => (si[key] || []).some(i => i.trim()));
-            if (!hasItems) continue;
-            const assignedStaff = stockItems['__assign__']?.[key] || '';
-            html += `<div class="task-assign-row">
-              <div style="flex:1">
-                <div class="task-assign-row__name">${sub.name} — ${sec.name}</div>
-                <div class="task-assign-row__meta">Stock top-up items</div>
-              </div>
-              <select onchange="setStockAssign('${key}',this.value)">
-                <option value="">— Assign to —</option>
-                ${allStaff.map(s=>`<option value="${s.id}" ${assignedStaff===s.id?'selected':''}>${s.name}</option>`).join('')}
-              </select>
-            </div>`;
-          }
-        }
-      }
+    // Stock items — simple Gondola + Cafe sections
+    const stockSections = ['Gondola', 'Cafe'];
+    let stockHtml = '';
+    for (const sec of stockSections) {
+      const key = 'stock||' + sec;
+      const items = (stockItems['s1']?.[key] || []).filter(i => i.trim());
+      if (!items.length) continue;
+      const assignedStaff = stockItems['__assign__']?.[key] || '';
+      stockHtml += `<div class="task-assign-row">
+        <div style="flex:1">
+          <div class="task-assign-row__name">📦 ${sec}</div>
+          <div class="task-assign-row__meta">${items.length} item(s): ${items.slice(0,3).join(', ')}${items.length>3?'…':''}</div>
+        </div>
+        <select onchange="setStockAssign('${key}',this.value)">
+          <option value="">— Assign to —</option>
+          ${allStaff.map(s=>`<option value="${s.id}" ${assignedStaff===s.id?'selected':''}>${s.name}</option>`).join('')}
+        </select>
+      </div>`;
+    }
+    if (stockHtml) {
+      html += `<div style="margin-bottom:6px;font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted);padding:10px 0 4px">Stocks &amp; Merchandise</div>`;
+      html += stockHtml;
     }
 
     list.innerHTML = html || '<div class="empty-state">No tasks to assign.</div>';
@@ -740,21 +912,14 @@
       }
     }
 
-    // Stock items
+    // Stock items — Gondola + Cafe
     for (const [key, staffId] of Object.entries(stockItems['__assign__'] || {})) {
-      if (!staffId) continue;
+      if (!staffId || !byStaff[staffId]) continue;
       const sectionName = key.split('||')[1] || key;
-      const subName = key.split('||')[0];
-      // Collect items from ALL stockItems stores
-      const allItems = [];
-      Object.entries(stockItems).filter(([k]) => k !== '__assign__').forEach(([, si]) => {
-        (si[key] || []).forEach(i => { if(i.trim()) allItems.push(i.trim()); });
+      const items = (stockItems['s1']?.[key] || []).filter(i => i.trim());
+      items.forEach(item => {
+        byStaff[staffId].tasks.push({ name: `[${sectionName}] ${item}`, photo: false, type: 'stock' });
       });
-      if (allItems.length && byStaff[staffId]) {
-        allItems.forEach(item => {
-          byStaff[staffId].tasks.push({ name: `[${sectionName}] ${item}`, photo: false, type: 'stock' });
-        });
-      }
     }
 
     const staffWithTasks = Object.entries(byStaff).filter(([,d]) => d.tasks.length > 0);
@@ -1168,21 +1333,17 @@
       });
     }
 
-    // 3. Stock items — from stockItems['s1'] keyed by 'subId||section'
-    //    assigned staff is in stockItems['__assign__'][key]
+    // 3. Stock items — Gondola + Cafe
     for (const [key, staffId] of Object.entries(stockItems['__assign__'] || {})) {
       if (!staffId) continue;
-      const parts   = key.split('||');
-      const subcat  = allSubcats.find(sc => sc.id === parts[0]);
-      const subName = subcat?.name || parts[1] || 'Stock';
-      const section = parts[1] || subName;
+      const section = key.split('||')[1] || key;
       const items   = stockItems['s1']?.[key] || [];
       for (const item of items) {
         const trimmed = item.trim();
         if (!trimmed) continue;
         rows.push({
           date: today(), staff_id: staffId, is_adhoc: true,
-          custom_task_name: `TOPUP:${subName}:${section}:${trimmed}`,
+          custom_task_name: `TOPUP:Stocks:${section}:${trimmed}`,
           photo_required: false, created_by: currentUser?.id, branch
         });
       }

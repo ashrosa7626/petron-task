@@ -305,58 +305,112 @@
     }
     .toast--show { transform: translateX(-50%) translateY(0); }
 
-    /* ── Branch selection screen ──────────────── */
-    .branch-screen {
-      position: fixed; inset: 0; z-index: 200;
-      background: var(--bg);
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-      padding: 32px;
-      animation: fade-up 0.5s ease both;
+  /* ── Sidebar ─────────────────────────────── */
+  body { display:flex; }
+  .sidebar {
+    width: 220px;
+    min-height: 100vh;
+    background: #0F1B3D;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    position: fixed;
+    left: 0; top: 0; bottom: 0;
+    z-index: 100;
+    padding: 0;
+    transition: transform 0.25s ease;
+  }
+  .sidebar__logo {
+    padding: 20px 20px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    font-family: 'Syne', sans-serif;
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: white;
+    letter-spacing: -0.3px;
+  }
+  .sidebar__logo span { color: #E31837; }
+  .sidebar__nav {
+    flex: 1;
+    padding: 12px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .sidebar__link {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 20px;
+    color: rgba(255,255,255,0.6);
+    text-decoration: none;
+    font-size: 0.88rem;
+    font-weight: 600;
+    border-left: 3px solid transparent;
+    transition: all 0.15s;
+    cursor: pointer;
+    background: none;
+    border-top: none;
+    border-right: none;
+    border-bottom: none;
+    font-family: var(--font);
+    width: 100%;
+    text-align: left;
+  }
+  .sidebar__link:hover {
+    background: rgba(255,255,255,0.06);
+    color: white;
+    border-left-color: rgba(255,255,255,0.3);
+  }
+  .sidebar__link.active {
+    background: rgba(255,255,255,0.1);
+    color: white;
+    border-left-color: #E31837;
+  }
+  .sidebar__link svg {
+    width: 18px; height: 18px; flex-shrink: 0; opacity: 0.8;
+  }
+  .sidebar__link.active svg { opacity: 1; }
+  .sidebar__footer {
+    padding: 16px 20px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    font-size: 0.72rem;
+    color: rgba(255,255,255,0.3);
+  }
+  .page-wrap {
+    margin-left: 220px;
+    flex: 1;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    width: calc(100% - 220px);
+  }
+  @media (max-width: 640px) {
+    .sidebar { transform: translateX(-220px); }
+    .sidebar.open { transform: translateX(0); }
+    .page-wrap { margin-left: 0; width: 100%; }
+    .sidebar-toggle {
+      display: flex !important;
     }
-    .branch-screen.hidden { display: none; }
-    .branch-title {
-      font-family: 'Syne', sans-serif;
-      font-size: clamp(1.6rem, 5vw, 2.2rem);
-      font-weight: 800; letter-spacing: -0.5px;
-      color: var(--ink); margin-bottom: 8px; text-align: center;
-    }
-    .branch-sub {
-      font-size: 0.95rem; color: var(--muted);
-      margin-bottom: 40px; text-align: center;
-    }
-    .branch-cards {
-      display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: 420px;
-    }
-    .branch-card {
-      background: var(--surface); border: 1.5px solid var(--border);
-      border-radius: var(--radius); padding: 24px 28px;
-      cursor: pointer; transition: all 0.15s;
-      display: flex; align-items: center; justify-content: space-between;
-    }
-    .branch-card:hover { border-color: var(--amber); background: var(--amber-lt); transform: translateY(-2px); box-shadow: var(--shadow-lg); }
-    .branch-card:active { transform: translateY(0); }
-    .branch-card__name { font-family: 'Syne', sans-serif; font-size: 1.2rem; font-weight: 800; color: var(--ink); }
-    .branch-card__arrow { font-size: 1.4rem; color: var(--amber); }
+  }
+  .sidebar-toggle {
+    display: none;
+    position: fixed;
+    top: 14px; left: 14px;
+    z-index: 200;
+    background: #0F1B3D;
+    border: none;
+    color: white;
+    width: 36px; height: 36px;
+    border-radius: 8px;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 1.1rem;
+  }
   </style>
 </head>
 <body>
-
-<div class="branch-screen" id="branchScreen">
-  <div class="branch-title">PetronTasks</div>
-  <div class="branch-sub">Select your branch to continue</div>
-  <div class="branch-cards">
-    <div class="branch-card" onclick="selectBranch('Safari')">
-      <span class="branch-card__name">Safari</span>
-      <span class="branch-card__arrow">→</span>
-    </div>
-    <div class="branch-card" onclick="selectBranch('Nilai Desa Jati')">
-      <span class="branch-card__name">Nilai Desa Jati</span>
-      <span class="branch-card__arrow">→</span>
-    </div>
-  </div>
-</div>
-
 <div class="bg-grid"></div>
 <div class="bg-glow"></div>
 
@@ -376,7 +430,6 @@
     </div>
     <div class="header-right">
       <div class="date-pill" id="dateLabel">—</div>
-      <div class="date-pill" id="branchLabel" style="color:var(--amber);font-weight:700"></div>
       <div class="clock-pill" id="clock">--:--</div>
     </div>
   </header>
@@ -419,11 +472,7 @@
   </div>
 
   <footer class="footer">
-    <a href="#" onclick="changeBranch()" class="footer-link">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
-      Change Branch
-    </a>
-    <a href="lead.html" class="footer-link">
+    <span style="display:none"><a href="lead.html" class="footer-link">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="8" r="4"/><path d="M6 20v-2a6 6 0 0 1 12 0v2"/>
       </svg>
@@ -467,32 +516,13 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="app.js"></script>
 <script>
-  function selectBranch(branch) {
-    sessionStorage.setItem('branch', branch);
-    document.getElementById('branchScreen').classList.add('hidden');
-    document.getElementById('branchLabel').textContent = branch;
-    loadStaff();
-  }
-
-  // Check if branch already selected this session
-  (function() {
-    const b = sessionStorage.getItem('branch');
-    if (b) {
-      document.getElementById('branchScreen').classList.add('hidden');
-      document.getElementById('branchLabel').textContent = b;
-    }
-  })();
-
   async function loadStaff() {
-    const branch = sessionStorage.getItem('branch');
-    if (!branch) return;
     const grid = document.getElementById('staffGrid');
 
     const { data: assignments, error } = await db
       .from('daily_assignments')
-      .select(`id, staff_id, users(id, name, branch), completions(id)`)
-      .eq('date', today())
-      .eq('branch', branch);
+      .select(`id, staff_id, users(id, name), completions(id)`)
+      .eq('date', today());
 
     if (error) {
       grid.innerHTML = `<div class="empty"><div class="empty__icon">⚠️</div><div class="empty__title">Connection error</div><div class="empty__sub">Could not load staff. Check your connection.</div></div>`;
@@ -552,13 +582,6 @@
     sessionStorage.setItem('staff_id', id);
     sessionStorage.setItem('staff_name', name);
     window.location.href = 'pin.html';
-  }
-
-  function changeBranch() {
-    sessionStorage.removeItem('branch');
-    document.getElementById('branchScreen').classList.remove('hidden');
-    document.getElementById('branchLabel').textContent = '';
-    document.getElementById('staffGrid').innerHTML = '';
   }
 
   loadStaff();
