@@ -4,186 +4,936 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Shift Briefing – Petron Tasks</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
-  /* ── Sidebar ─────────────────────────────── */
-  body { display:flex; }
-  .sidebar {
-    width: 220px;
-    min-height: 100vh;
-    background: #0F1B3D;
-    display: flex;
-    flex-direction: column;
-    flex-shrink: 0;
-    position: fixed;
-    left: 0; top: 0; bottom: 0;
-    z-index: 100;
-    padding: 0;
-    transition: transform 0.25s ease;
-  }
-  .sidebar__logo {
-    padding: 20px 20px 16px;
-    border-bottom: 1px solid rgba(255,255,255,0.08);
-    font-family: 'Syne', sans-serif;
-    font-size: 1.15rem;
-    font-weight: 800;
-    color: white;
-    letter-spacing: -0.3px;
-  }
-  .sidebar__logo span { color: #E31837; }
-  .sidebar__nav {
-    flex: 1;
-    padding: 12px 0;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-  .sidebar__link {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 11px 20px;
-    color: rgba(255,255,255,0.6);
-    text-decoration: none;
-    font-size: 0.88rem;
-    font-weight: 600;
-    border-left: 3px solid transparent;
-    transition: all 0.15s;
-    cursor: pointer;
-    background: none;
-    border-top: none;
-    border-right: none;
-    border-bottom: none;
-    font-family: var(--font);
-    width: 100%;
-    text-align: left;
-  }
-  .sidebar__link:hover {
-    background: rgba(255,255,255,0.06);
-    color: white;
-    border-left-color: rgba(255,255,255,0.3);
-  }
-  .sidebar__link.active {
-    background: rgba(255,255,255,0.1);
-    color: white;
-    border-left-color: #E31837;
-  }
-  .sidebar__link svg {
-    width: 18px; height: 18px; flex-shrink: 0; opacity: 0.8;
-  }
-  .sidebar__link.active svg { opacity: 1; }
-  .sidebar__footer {
-    padding: 16px 20px;
-    border-top: 1px solid rgba(255,255,255,0.08);
-    font-size: 0.72rem;
-    color: rgba(255,255,255,0.3);
-  }
-  .page-wrap {
-    margin-left: 220px;
-    flex: 1;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    width: calc(100% - 220px);
-  }
-  @media (max-width: 640px) {
-    .sidebar { transform: translateX(-220px); }
-    .sidebar.open { transform: translateX(0); }
-    .page-wrap { margin-left: 0; width: 100%; }
-    .sidebar-toggle {
-      display: flex !important;
+    :root {
+      --p-bg:#0B0F1A; --p-card:#121826; --p-border:#1F2A44; --p-header:#0F1B3D;
+      --p-blue:#3B82F6; --p-blue-lt:#60A5FA; --p-green:#22C55E; --p-amber:#F59E0B;
+      --p-red:#FF4D4F; --p-red-dk:#DC2626; --p-orange:#F97316; --p-indigo:#6366F1;
+      --p-text:#E6EDF7; --p-text2:#94A3B8; --p-text3:#64748B;
+      --p-btn-sec:#1F2A44; --p-btn-sech:#2A3A5F;
+      --font:'IBM Plex Sans',sans-serif; --mono:'IBM Plex Mono',monospace;
+      --radius:12px; --radius-sm:8px;
     }
-  }
-  .sidebar-toggle {
-    display: none;
-    position: fixed;
-    top: 14px; left: 14px;
-    z-index: 200;
-    background: #0F1B3D;
-    border: none;
-    color: white;
-    width: 36px; height: 36px;
-    border-radius: 8px;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    font-size: 1.1rem;
-  }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{background:var(--p-bg);color:var(--p-text);font-family:var(--font);min-height:100vh;font-size:16px}
+    .topbar{background:var(--p-header);border-bottom:1px solid var(--p-border);padding:0 20px;height:56px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100}
+    .topbar-title{font-size:1.1rem;font-weight:800;font-family:'Syne',sans-serif;flex:1;text-align:center}
+    .topbar a{color:var(--p-text2);text-decoration:none;font-size:0.85rem;display:flex;align-items:center;gap:6px}
+    .topbar a:hover{color:var(--p-text)}
+    .prog-wrap{background:var(--p-border);height:4px;width:100%}
+    .prog-fill{height:4px;background:linear-gradient(90deg,var(--p-orange),var(--p-amber));transition:width 0.4s ease}
+    .step-pills{display:flex;gap:6px;overflow-x:auto;padding:14px 16px 0;scrollbar-width:none}
+    .step-pills::-webkit-scrollbar{display:none}
+    .step-pill{flex-shrink:0;padding:4px 12px;border-radius:99px;font-size:0.72rem;font-weight:600;border:1px solid var(--p-border);color:var(--p-text3);background:var(--p-card)}
+    .step-pill.active{border-color:var(--p-orange);color:var(--p-orange);background:rgba(249,115,22,0.08)}
+    .step-pill.done{border-color:rgba(34,197,94,0.3);color:var(--p-green);background:rgba(34,197,94,0.08)}
+    .content{max-width:520px;margin:0 auto;padding:20px 16px 100px}
+    .card{background:var(--p-card);border:1px solid var(--p-border);border-radius:var(--radius);padding:18px;margin-bottom:14px}
+    .card-title{font-size:0.88rem;font-weight:700;color:var(--p-amber);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:14px}
+    .section-hd{font-size:1.3rem;font-weight:800;color:var(--p-text);margin-bottom:4px}
+    .section-sub{font-size:0.95rem;color:var(--p-text3);margin-bottom:18px}
+    .shift-btns{display:flex;gap:14px;justify-content:center;margin-top:12px}
+    .shift-btn{flex:1;max-width:180px;border:none;border-radius:var(--radius);padding:28px 16px;cursor:pointer;font-family:var(--font);font-weight:800;font-size:1rem;display:flex;flex-direction:column;align-items:center;gap:10px;transition:transform 0.15s,box-shadow 0.15s}
+    .shift-btn:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,0.4)}
+    .shift-btn.day{background:linear-gradient(135deg,var(--p-orange),var(--p-amber));color:#0B0F1A}
+    .shift-btn.night{background:linear-gradient(135deg,var(--p-indigo),#818CF8);color:#fff}
+    .shift-btn .shift-em{font-size:2.2rem}
+    .shift-btn .shift-sub{font-size:0.72rem;font-weight:600;opacity:0.75}
+    .carried-banner{background:rgba(255,77,79,0.08);border:1px solid rgba(255,77,79,0.25);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:18px}
+    .carried-banner-title{color:var(--p-red);font-size:0.8rem;font-weight:700;margin-bottom:6px}
+    .carried-banner-item{color:var(--p-text3);font-size:0.8rem;margin-bottom:3px}
+    .chk-item{display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:1px solid var(--p-border);cursor:pointer}
+    .chk-item:last-child{border-bottom:none}
+    .chk-box{width:20px;height:20px;border-radius:5px;flex-shrink:0;margin-top:1px;border:2px solid var(--p-border);background:transparent;display:flex;align-items:center;justify-content:center;transition:all 0.15s}
+    .chk-box.checked{background:var(--p-green);border-color:var(--p-green)}
+    .chk-box.checked::after{content:'✓';color:#0B0F1A;font-size:12px;font-weight:900}
+    .chk-label{font-size:1rem;line-height:1.6;color:var(--p-text2);transition:all 0.15s}
+    .chk-label.checked{color:var(--p-text3);text-decoration:line-through}
+    .staff-item{display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:var(--radius-sm);border:1px solid var(--p-border);background:var(--p-card);cursor:pointer;margin-bottom:8px;transition:all 0.15s}
+    .staff-item.present{border-color:rgba(34,197,94,0.4);background:rgba(34,197,94,0.06)}
+    .staff-av{width:36px;height:36px;border-radius:50%;background:var(--p-btn-sec);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.85rem;flex-shrink:0}
+    .staff-item.present .staff-av{background:rgba(34,197,94,0.2);color:var(--p-green)}
+    .staff-name{flex:1;font-size:1rem;font-weight:600}
+    .inp{width:100%;background:var(--p-btn-sec);border:1px solid var(--p-border);border-radius:var(--radius-sm);color:var(--p-text);padding:12px 14px;font-size:1rem;font-family:var(--font);outline:none;transition:border-color 0.15s}
+    .inp:focus{border-color:var(--p-blue)}
+    textarea.inp{resize:vertical;min-height:100px}
+    .btn{border:none;border-radius:var(--radius-sm);padding:11px 20px;font-family:var(--font);font-size:1rem;font-weight:700;cursor:pointer;transition:all 0.15s}
+    .btn-primary{background:linear-gradient(135deg,var(--p-orange),var(--p-amber));color:#0B0F1A}
+    .btn-ghost{background:var(--p-btn-sec);color:var(--p-text2);border:1px solid var(--p-border)}
+    .btn-ghost:hover{background:var(--p-btn-sech);color:var(--p-text)}
+    .btn-sm{padding:6px 13px;font-size:0.78rem}
+    .btn-danger{background:rgba(255,77,79,0.12);color:var(--p-red);border:1px solid rgba(255,77,79,0.25)}
+    .btn-success{background:rgba(34,197,94,0.12);color:var(--p-green);border:1px solid rgba(34,197,94,0.25)}
+    .btn-success.active{background:rgba(34,197,94,0.25)}
+    .btn-danger.active{background:rgba(255,77,79,0.25)}
+    .badge{font-size:0.7rem;font-weight:700;padding:2px 9px;border-radius:99px;font-family:var(--mono);letter-spacing:0.4px}
+    .badge-orange{background:rgba(249,115,22,0.15);color:var(--p-orange)}
+    .badge-green{background:rgba(34,197,94,0.15);color:var(--p-green)}
+    .badge-red{background:rgba(255,77,79,0.15);color:var(--p-red)}
+    .badge-blue{background:rgba(59,130,246,0.15);color:var(--p-blue)}
+    .issue-card{background:var(--p-card);border:1px solid var(--p-border);border-radius:var(--radius-sm);padding:14px;margin-bottom:10px}
+    .issue-card.carried{border-color:rgba(255,77,79,0.4);border-left:3px solid var(--p-red)}
+    .issue-text{font-size:1rem;color:var(--p-text);line-height:1.6;margin-bottom:10px}
+    .fb-card{background:var(--p-card);border:1px solid var(--p-border);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:8px}
+    .fb-name{font-size:0.78rem;font-weight:700;color:var(--p-amber);margin-bottom:4px}
+    .fb-comment{font-size:1rem;color:var(--p-text2);line-height:1.6}
+    .welcome-box{background:linear-gradient(135deg,rgba(249,115,22,0.08),rgba(251,191,36,0.08));border:1px solid rgba(249,115,22,0.2);border-radius:var(--radius);padding:20px;margin-bottom:16px;text-align:center}
+    .welcome-emoji{font-size:3.5rem;margin-bottom:10px}
+    .welcome-title{font-size:1.4rem;font-weight:800;font-family:'Syne',sans-serif;margin-bottom:10px}
+    .motiv-box{background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.2);border-radius:var(--radius-sm);padding:14px;margin-bottom:14px}
+    .motiv-label{font-size:0.72rem;font-weight:700;color:#818CF8;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.8px}
+    .motiv-text{font-size:1.05rem;color:#C7D2FE;font-style:italic;line-height:1.7}
+    .photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:10px;margin-top:14px}
+    .photo-thumb{position:relative;aspect-ratio:1;border-radius:var(--radius-sm);overflow:hidden;background:var(--p-btn-sec)}
+    .photo-thumb img{width:100%;height:100%;object-fit:cover}
+    .photo-del{position:absolute;top:5px;right:5px;background:rgba(11,15,26,0.7);border:none;border-radius:50%;width:22px;height:22px;color:var(--p-red);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center}
+    .upload-zone{border:2px dashed var(--p-border);border-radius:var(--radius);padding:30px 16px;text-align:center;cursor:pointer;transition:border-color 0.15s}
+    .upload-zone:hover{border-color:var(--p-orange)}
+    .upload-icon{font-size:2.5rem;margin-bottom:8px}
+    .review-row{display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid var(--p-border);font-size:1rem}
+    .review-row:last-child{border-bottom:none}
+    .review-lbl{color:var(--p-text3)}
+    .review-val{color:var(--p-text);font-weight:600;text-align:right;max-width:55%}
+    .db-card{background:var(--p-card);border:1px solid var(--p-border);border-radius:var(--radius);padding:16px;margin-bottom:12px}
+    .db-card-hdr{display:flex;justify-content:space-between;align-items:flex-start;cursor:pointer}
+    .db-card-body{margin-top:14px;border-top:1px solid var(--p-border);padding-top:14px;display:none}
+    .db-card-body.open{display:block}
+    .db-sub-title{font-size:0.82rem;font-weight:700;color:var(--p-text3);text-transform:uppercase;letter-spacing:0.8px;margin:12px 0 6px}
+    .chk-done-item{display:flex;align-items:flex-start;gap:8px;padding:5px 0;font-size:0.92rem;color:var(--p-text2);border-bottom:1px solid rgba(31,42,68,0.4)}
+    .chk-done-item:last-child{border-bottom:none}
+    .bottom-nav{position:fixed;bottom:0;left:0;right:0;background:rgba(11,15,26,0.92);backdrop-filter:blur(12px);border-top:1px solid var(--p-border);padding:12px 20px;display:flex;justify-content:space-between;gap:10px;max-width:520px;margin:0 auto}
+    .manage-panel{background:var(--p-card);border:1px solid var(--p-border);border-radius:var(--radius-sm);padding:14px;margin-bottom:14px}
+    .toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--p-green);color:#0B0F1A;padding:10px 20px;border-radius:99px;font-size:0.85rem;font-weight:700;opacity:0;transition:opacity 0.3s;pointer-events:none;z-index:999;white-space:nowrap}
+    .toast.show{opacity:1}
+    .toast.error{background:var(--p-red);color:#fff}
+    .loading-overlay{position:fixed;inset:0;background:rgba(11,15,26,0.85);display:flex;align-items:center;justify-content:center;z-index:200;font-size:0.9rem;color:var(--p-text2);flex-direction:column;gap:12px}
+    .spinner{width:32px;height:32px;border:3px solid var(--p-border);border-top-color:var(--p-orange);border-radius:50%;animation:spin 0.8s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .flex{display:flex;align-items:center;gap:8px}
+    .flex-between{display:flex;justify-content:space-between;align-items:center}
+    .mt-8{margin-top:8px}.mt-12{margin-top:12px}.mb-8{margin-bottom:8px}.mb-12{margin-bottom:12px}
+    .empty-state{color:var(--p-text3);font-size:0.85rem;text-align:center;padding:24px 0}
+    input[type="file"]{display:none}
+    @media(max-width:540px){.shift-btns{flex-direction:column;align-items:center}.shift-btn{max-width:100%;width:100%;flex-direction:row;padding:18px 20px}}
   </style>
 </head>
 <body>
-<div class="sidebar" id="sidebar">
-  <div class="sidebar__logo">Petron<span>Tasks</span></div>
-  <nav class="sidebar__nav">
-    <a href="index.html" class="sidebar__link" id="snav-home">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-      Home
-    </a>
-    <a href="dashboard.html" class="sidebar__link" id="snav-dashboard">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-      Dashboard
-    </a>
-    <a href="briefing.html" class="sidebar__link" id="snav-briefing">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-      Shift Briefing
-    </a>
-    <a href="lead.html" class="sidebar__link" id="snav-lead">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-      Lead Panel
-    </a>
-    <a href="supervisor.html" class="sidebar__link" id="snav-supervisor">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-      Sign-Off Review
-    </a>
-  </nav>
-  <div class="sidebar__footer">Petron Tasks © 2026</div>
-</div>
-<button class="sidebar-toggle" onclick="document.getElementById('sidebar').classList.toggle('open')" title="Menu">☰</button>
 
-<div class="page-wrap">
-<div class="page">
-  <div class="topbar">
-    <div class="topbar__logo">Shift<span> Briefing</span></div>
-  </div>
-  <div class="content">
-    <div style="margin-bottom:24px">
-      <div style="font-size:1.3rem;font-weight:700">Shift Briefing</div>
-      <div class="text-muted text-sm" id="briefDateLabel"></div>
-    </div>
-    <div class="empty-state" style="margin-top:60px">
-      <div style="font-size:2rem;margin-bottom:12px">📋</div>
-      <div style="font-weight:700;margin-bottom:6px">Coming Soon</div>
-      <div class="text-sm text-muted">Shift briefing notes will appear here.</div>
-    </div>
-  </div>
+<div class="topbar">
+  <a href="dashboard.html">← Dashboard</a>
+  <div class="topbar-title" id="topTitle">Shift Briefing</div>
+  <span id="topShiftBadge"></span>
 </div>
+<div class="prog-wrap"><div class="prog-fill" id="progFill" style="width:0%"></div></div>
+<div class="step-pills" id="stepPills"></div>
+<div class="content" id="mainContent"></div>
+<div class="bottom-nav" id="bottomNav" style="display:none">
+  <button class="btn btn-ghost" id="btnBack" onclick="prevStep()">← Back</button>
+  <button class="btn btn-primary" id="btnNext" onclick="nextStep()">Next →</button>
 </div>
+<div class="toast" id="toast"></div>
+<input type="file" id="photoInput" accept="image/*" multiple onchange="handlePhotos(event)">
 
 <script>
-  // Highlight active sidebar link
-  (function() {
-    const page = location.pathname.split('/').pop() || 'index.html';
-    const map = {
-      'index.html': 'snav-home',
-      '': 'snav-home',
-      'dashboard.html': 'snav-dashboard',
-      'briefing.html': 'snav-briefing',
-      'lead.html': 'snav-lead',
-      'supervisor.html': 'snav-supervisor',
-      'tasks.html': 'snav-home',
-      'pin.html': 'snav-home',
-    };
-    const activeId = map[page];
-    if (activeId) {
-      const el = document.getElementById(activeId);
-      if (el) el.classList.add('active');
+// ─── SUPABASE SETUP ──────────────────────────────────────────────────────────
+const SUPABASE_URL = 'https://vwffiuciogthfzekkkkz.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ3ZmZpdWNpb2d0aGZ6ZWtra2t6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4NzcwMTAsImV4cCI6MjA5MTQ1MzAxMH0.OTEyOMn1fmUNV7pR51KMOLsMTNAfytt62uGS_AkQXyw';
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ─── DB HELPERS ──────────────────────────────────────────────────────────────
+async function dbGet(key) {
+  try {
+    const { data } = await db.from('shift_briefings').select('value').eq('key', key).maybeSingle();
+    return data ? JSON.parse(data.value) : null;
+  } catch { return null; }
+}
+async function dbSet(key, value) {
+  try {
+    await db.from('shift_briefings').upsert({ key, value: JSON.stringify(value) }, { onConflict: 'key' });
+  } catch(e) { console.error('dbSet', e); }
+}
+async function dbList(prefix) {
+  try {
+    const { data } = await db.from('shift_briefings').select('key').like('key', prefix + '%').order('key', { ascending: true });
+    return data ? data.map(r => r.key) : [];
+  } catch { return []; }
+}
+async function getStaffList() {
+  try {
+    const { data } = await db.from('shift_staff').select('name').order('name');
+    return data ? data.map(r => r.name) : [];
+  } catch { return []; }
+}
+async function addStaffDb(name) {
+  try { await db.from('shift_staff').upsert({ name }, { onConflict: 'name' }); } catch {}
+}
+async function removeStaffDb(name) {
+  try { await db.from('shift_staff').delete().eq('name', name); } catch {}
+}
+
+// ─── CHECKLIST DATA ──────────────────────────────────────────────────────────
+const MOTIVATIONAL_LINES = [
+  "Saya mampu dan pasti bisa!",
+  "Kesuksesan adalah hasil kerja keras dan ketekunan.",
+  "Setiap hari adalah kesempatan baru untuk belajar.",
+  "Belajarlah dari kesalahan - ia bukan kegagalan, ia pengajaran.",
+  "Utamakan keselamatan, utamakan layanan.",
+  "Setiap pelanggan adalah peluang jualan.",
+  "Tambah sedikit, hasil besar.",
+  "Promosi tidak jual sendiri - kita yang jual!",
+  "Kerja berpasukan mudahkan waktu sibuk.",
+  "Buat betul walaupun tiada yang melihat."
+];
+
+const MORNING_CHECKLIST = [
+  { section:"1. SAFETY (KESELAMATAN)", icon:"shield", items:[
+    "Periksa kawasan pam - tiada tumpahan minyak / halangan",
+    "Pakai PPE yang diperlukan",
+    "Dilarang guna telefon semasa mengisi minyak dan penurunan minyak",
+    "Peralatan kecemasan mudah dicapai (fire extinguisher & spill kit)",
+    "Sentiasa drop cash - Always perform safe drop",
+    "NO HERO POLICY"
+  ]},
+  { section:"2. HOUSEKEEPING (KEBERSIHAN)", icon:"clean", items:[
+    "Kawasan pam dan kaunter cashier bersih sebelum waktu sibuk",
+    "Tandas bersih, kering & cukup bekalan",
+    "Kedai kemas & stok penuh"
+  ]},
+  { section:"3. CUSTOMER SERVICE (LAYANAN PELANGGAN)", icon:"service", items:[
+    "Tawarkan bantuan - Offer help proactively",
+    "Uniform Lengkap: tudung/rambut/topi kemas, nampak tanda-nama, kasut & stokin hitam",
+    "Ada wisel, lanyard promo, vest",
+    "Vest Schedule: Google Review (everyday), WW (Wednesday), FF (Friday)",
+    "5 Step MSP - Sambut pelanggan dengan senyuman & eye contact",
+    "Upsell",
+    "Tanya dan promote PMILES",
+    "Terima Kasih Jumpa Lagi - jangan lupa"
+  ]},
+  { section:"4. SALES BOOSTER & PROMOTIONS", icon:"sales", items:[
+    "Maklumkan pelanggan tentang promosi semasa",
+    "Cadangkan barangan tambahan (minuman, snek, essentials)",
+    "Amalkan upselling ringkas - Tambah air atau minuman?",
+    "Pastikan promosi jelas & kemas",
+    "Promosikan pakej kombo / jimat",
+    "Galakkan pelanggan datang semula"
+  ]},
+  { section:"5. REGULATORY (PEMATUHAN)", icon:"reg", items:[
+    "Ikut SOP & peraturan",
+    "Diesel tidak melebihi 250 liter",
+    "Tiada pengisian dalam tong tidak dibenarkan",
+    "Tiada pengisian R95 ke kenderaan asing",
+    "Tiada open pump policy",
+    "Larangan merokok dipatuhi"
+  ]},
+  { section:"6. DAILY FOCUS (FOKUS HARI INI)", icon:"focus", items:[
+    "Urus waktu sibuk dengan baik",
+    "Komunikasi jelas sesama kita",
+    "Kerja berpasukan",
+    "Dapatkan 5 Google review (5-star)",
+    "Perhatikan MSP"
+  ]}
+];
+
+const NIGHT_CHECKLIST = [
+  { section:"1. SAFETY (KESELAMATAN)", icon:"shield", items:[
+    "Pastikan pencahayaan mencukupi di semua kawasan",
+    "Peka terhadap aktiviti mencurigakan",
+    "Ikut keselamatan wang tunai - frequent cash drop",
+    "Elak kawasan sunyi",
+    "Sentiasa drop cash",
+    "NO HERO POLICY"
+  ]},
+  { section:"2. HOUSEKEEPING (KEBERSIHAN)", icon:"clean", items:[
+    "Kekalkan kebersihan tandas",
+    "Bersihkan pam & kaunter",
+    "Tambah stok untuk esok",
+    "Buang sampah sebelum tamat syif",
+    "Ikuti Daily Task Checklist"
+  ]},
+  { section:"3. CUSTOMER SERVICE (LAYANAN PELANGGAN)", icon:"service", items:[
+    "Uniform Lengkap (sama seperti syif pagi)",
+    "5 Step MSP - Sambut pelanggan dengan senyuman",
+    "Upsell",
+    "Promote PMILES",
+    "Terima Kasih Jumpa Lagi",
+    "Kekal peka & responsif",
+    "Layanan mesra & pantas"
+  ]},
+  { section:"4. SALES BOOSTER & PROMOTIONS", icon:"sales", items:[
+    "Promote night deals / slow-hour offers",
+    "Suggest quick buys (coffee, snacks)",
+    "Pastikan kawasan promosi menarik",
+    "Upsell walaupun kurang pelanggan",
+    "Cadangkan barangan keperluan"
+  ]},
+  { section:"5. REGULATORY (PEMATUHAN)", icon:"reg", items:[
+    "Ikut SOP & peraturan (sama seperti syif pagi)",
+    "Pastikan premis selamat",
+    "Diesel tidak melebihi 250 liter",
+    "Tiada pengisian R95 ke kenderaan asing"
+  ]},
+  { section:"6. SHIFT FOCUS (FOKUS SYIF)", icon:"focus", items:[
+    "Jangan leka",
+    "Laporkan masalah",
+    "Dapatkan 5 Google review (5-star)",
+    "Perhatikan MSP"
+  ]}
+];
+
+const SA_CSA = [
+  { section:"SA - Safety", icon:"sa", items:["Always perform safe drop","Follow No Hero Policy"] },
+  { section:"SA - Customer Service", icon:"sa", items:["Greet, smile, maintain eye contact","Inform total amount clearly","Ask for P.Miles / loyalty usage","Request signature if needed"] },
+  { section:"SA - Sales & Promotion", icon:"sa", items:["Actively promote SHOPTALK","Maintain cleanliness & remove expired items","Report stock issues","Target: Minimum 5 Google Reviews daily"] },
+  { section:"SA - Reminder", icon:"sa", items:["Check diesel quota before filling","No Jerry can unless approved","No RON95 for foreign vehicles"] },
+  { section:"CSA - Safety & Operations", icon:"csa", items:["Wear safety vest & boots","Follow No Hero Policy","Ensure DCDC & PPE compliance","Ensure fire extinguisher visible"] },
+  { section:"CSA - Cleanliness & Service", icon:"csa", items:["Check toilet hourly","Maintain forecourt cleanliness","Assist proactively (e.g. windshield cleaning)","Watch for suspicious activity"] },
+  { section:"CSA - Promotion", icon:"csa", items:["Wear promo vest daily","Carry Google Review card","Target 5 reviews daily","Vest Schedule: Mon/Tue/Thu - Google Review, Wed - WW, Fri - FF"] }
+];
+
+const GENERAL = [{ section:"General Reminders", icon:"gen", items:["If any EL/MC/AL - inform earlier","If feeling unwell, inform boss","Take rest (5-10 mins) if needed"] }];
+const STEP_LABELS = ["Attendance","Welcome","Checklist","Ad-hoc","Issues","Feedback","Closing","Photos","Review"];
+
+// ─── STATE ───────────────────────────────────────────────────────────────────
+let state = {
+  view:'home', step:0, shift:null,
+  attendance:[], checklist:{}, adhoc:'',
+  issues:[], carriedIssues:[],
+  feedback:[], remarks:'', photos:[],
+  staffList:[], showManage:false,
+  motivLine:'', closingMotiv:''
+};
+let dbFilter = 'All';
+
+// ─── INIT ────────────────────────────────────────────────────────────────────
+async function init() {
+  showLoading(true);
+  state.staffList = await getStaffList();
+  state.carriedIssues = await loadAllUnresolvedIssues();
+  showLoading(false);
+  renderHome();
+}
+
+async function loadAllUnresolvedIssues() {
+  const keys = await dbList('briefing:');
+  // Map of issue id -> latest state (from newest briefing that contains it)
+  const issueMap = {};
+  const sorted = [...keys].sort((a,b) => b.localeCompare(a));
+  for (const key of sorted) {
+    const b = await dbGet(key);
+    if (!b) continue;
+    for (const issue of (b.issues || [])) {
+      // Only record the FIRST (newest) occurrence of each issue id
+      if (!(issue.id in issueMap)) {
+        issueMap[issue.id] = { ...issue, carriedFrom: b.timestamp };
+      }
     }
-  })();
-</script>
+  }
+  // Return only issues whose latest state is unresolved
+  return Object.values(issueMap)
+    .filter(i => i.resolved !== true)
+    .map(i => ({ ...i, isCarried: true }));
+}
 
-<script>
-  document.getElementById('briefDateLabel').textContent =
-    new Date().toLocaleDateString([], { weekday:'long', month:'long', day:'numeric' });
+function showLoading(show) {
+  let el = document.getElementById('loadingOverlay');
+  if (show && !el) {
+    el = document.createElement('div');
+    el.id = 'loadingOverlay';
+    el.className = 'loading-overlay';
+    el.innerHTML = '<div class="spinner"></div><div>Loading...</div>';
+    document.body.appendChild(el);
+  } else if (!show && el) {
+    el.remove();
+  }
+}
+
+// ─── HOME ────────────────────────────────────────────────────────────────────
+function renderHome() {
+  state.view = 'home';
+  document.getElementById('topTitle').textContent = 'Shift Briefing';
+  document.getElementById('topShiftBadge').innerHTML = '';
+  document.getElementById('stepPills').innerHTML = '';
+  document.getElementById('progFill').style.width = '0%';
+  document.getElementById('bottomNav').style.display = 'none';
+
+  let carriedHtml = '';
+  if (state.carriedIssues.length) {
+    const items = state.carriedIssues.slice(0,3).map(i => `<div class="carried-banner-item">• ${escHtml(i.text)}</div>`).join('');
+    const more = state.carriedIssues.length > 3 ? `<div class="carried-banner-item">+${state.carriedIssues.length - 3} more issues...</div>` : '';
+    carriedHtml = `<div class="carried-banner">
+      <div class="carried-banner-title">WARNING: ${state.carriedIssues.length} Unresolved Issue(s) Pending</div>
+      ${items}${more}
+    </div>`;
+  }
+
+  document.getElementById('mainContent').innerHTML = `
+    <div style="text-align:center;padding-top:16px">
+      <div style="font-size:3rem;margin-bottom:10px">&#x26FD;</div>
+      <div style="font-size:1.6rem;font-weight:800;font-family:'Syne',sans-serif;margin-bottom:4px">Shift Briefing</div>
+      <div style="color:var(--p-text3);font-size:0.85rem;margin-bottom:28px">Petron Task Management System</div>
+      ${carriedHtml}
+      <div style="color:var(--p-text3);font-size:0.82rem;margin-bottom:14px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px">Select Shift</div>
+      <div class="shift-btns">
+        <button class="shift-btn day" onclick="startBriefing('Day')">
+          <span class="shift-em">&#x2600;&#xFE0F;</span>
+          <div><div>Day Shift</div><div class="shift-sub">Syif Pagi</div></div>
+        </button>
+        <button class="shift-btn night" onclick="startBriefing('Night')">
+          <span class="shift-em">&#x1F319;</span>
+          <div><div>Night Shift</div><div class="shift-sub">Syif Malam</div></div>
+        </button>
+      </div>
+      <div style="margin-top:24px">
+        <button class="btn btn-ghost" onclick="renderDashboard()" style="width:100%">View All Briefings</button>
+      </div>
+    </div>`;
+}
+
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ─── START BRIEFING ──────────────────────────────────────────────────────────
+function startBriefing(shift) {
+  state.shift = shift;
+  state.step = 0;
+  state.attendance = [];
+  state.checklist = {};
+  state.adhoc = '';
+  state.issues = [];
+  state.feedback = [];
+  state.remarks = '';
+  state.photos = [];
+  state.showManage = false;
+  state.motivLine = MOTIVATIONAL_LINES[Math.floor(Math.random() * MOTIVATIONAL_LINES.length)];
+  state.closingMotiv = MOTIVATIONAL_LINES[Math.floor(Math.random() * MOTIVATIONAL_LINES.length)];
+  state.view = 'briefing';
+  renderBriefing();
+}
+
+// ─── BRIEFING RENDER ─────────────────────────────────────────────────────────
+function renderBriefing() {
+  const s = state.step;
+  const total = STEP_LABELS.length;
+  document.getElementById('progFill').style.width = Math.round((s / (total - 1)) * 100) + '%';
+  const shiftColor = state.shift === 'Day' ? 'var(--p-orange)' : '#818CF8';
+  document.getElementById('topTitle').textContent = STEP_LABELS[s] || 'Briefing';
+  document.getElementById('topShiftBadge').innerHTML =
+    `<span class="badge" style="background:${shiftColor}22;color:${shiftColor};border:1px solid ${shiftColor}44">${state.shift === 'Day' ? 'Day' : 'Night'} Shift</span>`;
+  document.getElementById('stepPills').innerHTML = STEP_LABELS.map((l, i) =>
+    `<div class="step-pill ${i===s?'active':i<s?'done':''}">${i<s?'&#10003; ':''}${l}</div>`).join('');
+  document.getElementById('bottomNav').style.display = 'flex';
+  document.getElementById('btnBack').disabled = s === 0;
+  document.getElementById('btnBack').style.opacity = s === 0 ? '0.4' : '1';
+  document.getElementById('btnNext').textContent = s === total - 1 ? 'Save Briefing' : 'Next';
+  const c = document.getElementById('mainContent');
+  if (s===0) c.innerHTML = renderAttendance();
+  else if (s===1) c.innerHTML = renderWelcome();
+  else if (s===2) c.innerHTML = renderChecklist();
+  else if (s===3) c.innerHTML = renderAdhoc();
+  else if (s===4) c.innerHTML = renderIssues();
+  else if (s===5) c.innerHTML = renderFeedback();
+  else if (s===6) c.innerHTML = renderClosing();
+  else if (s===7) c.innerHTML = renderPhotos();
+  else if (s===8) c.innerHTML = renderReview();
+}
+
+// ── STEP 0: Attendance ───────────────────────────────────────────────────────
+function renderAttendance() {
+  const manageHtml = state.showManage ? `
+    <div class="manage-panel">
+      <div style="color:var(--p-text2);font-size:0.82rem;font-weight:600;margin-bottom:10px">Add / Remove Staff</div>
+      <div class="flex mb-12">
+        <input class="inp" id="newStaffInput" placeholder="Staff name..." style="flex:1" onkeydown="if(event.key==='Enter')addStaff()">
+        <button class="btn btn-primary btn-sm" onclick="addStaff()">+ Add</button>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        ${state.staffList.map(n => `
+          <div style="background:var(--p-btn-sec);border:1px solid var(--p-border);border-radius:6px;padding:5px 10px;font-size:0.8rem;color:var(--p-text2);display:flex;align-items:center;gap:8px">
+            ${escHtml(n)}<span onclick="removeStaff(this)" data-name="${escHtml(n)}" style="color:var(--p-red);cursor:pointer;font-weight:700">x</span>
+          </div>`).join('')}
+        ${state.staffList.length === 0 ? '<span style="color:var(--p-text3);font-size:0.8rem">No staff yet.</span>' : ''}
+      </div>
+    </div>` : '';
+
+  const staffRows = state.staffList.length === 0
+    ? '<div class="empty-state">No staff added yet.<br>Click Manage Staff List to add staff.</div>'
+    : state.staffList.map(name => {
+        const present = state.attendance.includes(name);
+        const initials = name.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
+        return `<div class="staff-item ${present?'present':''}" onclick="toggleAttendance(this)" data-name="${escHtml(name)}">
+          <div class="staff-av">${initials}</div>
+          <div class="staff-name">${escHtml(name)}</div>
+          <div class="chk-box ${present?'checked':''}"></div>
+        </div>`;
+      }).join('');
+
+  return `
+    <div class="section-hd">Attendance</div>
+    <div class="section-sub">Tick staff who are present for this shift</div>
+    <div class="flex mb-12" style="flex-wrap:wrap;gap:8px">
+      <button class="btn btn-ghost btn-sm" onclick="toggleManage()">${state.showManage ? 'Close' : 'Manage Staff List'}</button>
+      <span class="badge badge-green">${state.attendance.length} Present</span>
+    </div>
+    ${manageHtml}${staffRows}`;
+}
+
+function toggleAttendance(el) {
+  const name = el.dataset.name;
+  state.attendance.includes(name)
+    ? state.attendance = state.attendance.filter(n => n !== name)
+    : state.attendance.push(name);
+  renderBriefing();
+}
+function toggleManage() { state.showManage = !state.showManage; renderBriefing(); }
+async function addStaff() {
+  const inp = document.getElementById('newStaffInput');
+  const n = inp ? inp.value.trim() : '';
+  if (n && !state.staffList.includes(n)) {
+    state.staffList.push(n);
+    await addStaffDb(n);
+  }
+  renderBriefing();
+}
+async function removeStaff(el) {
+  const name = el.dataset.name;
+  state.staffList = state.staffList.filter(n => n !== name);
+  state.attendance = state.attendance.filter(n => n !== name);
+  await removeStaffDb(name);
+  renderBriefing();
+}
+
+// ── STEP 1: Welcome ──────────────────────────────────────────────────────────
+function renderWelcome() {
+  const greeting = state.shift === 'Day' ? 'Selamat Pagi' : 'Selamat Malam';
+  const badges = state.attendance.length
+    ? state.attendance.map(n => `<span class="badge badge-orange" style="margin:3px">${escHtml(n)}</span>`).join('')
+    : '<span style="color:var(--p-text3);font-size:0.82rem">No staff ticked</span>';
+  return `
+    <div class="welcome-box">
+      <div class="welcome-emoji">${state.shift === 'Day' ? '&#x2600;&#xFE0F;' : '&#x1F319;'}</div>
+      <div class="welcome-title">${greeting}, Team!</div>
+      <div style="display:flex;flex-wrap:wrap;justify-content:center;margin-bottom:12px">${badges}</div>
+    </div>
+    <div class="motiv-box">
+      <div class="motiv-label">Kata-kata Semangat</div>
+      <div class="motiv-text">"${escHtml(state.motivLine)}"</div>
+    </div>
+    <div class="card">
+      <div style="color:var(--p-text2);font-size:1.1rem;line-height:2">
+        Hari ini adalah peluang baru untuk memberikan yang terbaik.<br>
+        Mari kita mulakan syif ini dengan semangat, keselamatan, dan layanan cemerlang.<br>
+        <strong style="color:var(--p-amber);font-size:1.15rem">Kita boleh! 💪</strong>
+      </div>
+    </div>`;
+}
+
+// ── STEP 2: Checklist ────────────────────────────────────────────────────────
+function renderChecklist() {
+  const allSections = [...(state.shift === 'Day' ? MORNING_CHECKLIST : NIGHT_CHECKLIST), ...SA_CSA, ...GENERAL];
+  const total = allSections.reduce((a, s) => a + s.items.length, 0);
+  const done  = Object.values(state.checklist).filter(Boolean).length;
+  const sections = allSections.map(sec => {
+    const items = sec.items.map(item => {
+      const key = sec.section + ':' + item;
+      const checked = !!state.checklist[key];
+      return `<div class="chk-item" onclick="toggleCheck(this)" data-key="${escHtml(key)}">
+        <div class="chk-box ${checked ? 'checked' : ''}"></div>
+        <div class="chk-label ${checked ? 'checked' : ''}">${escHtml(item)}</div>
+      </div>`;
+    }).join('');
+    return `<div class="card"><div class="card-title">${escHtml(sec.section)}</div>${items}</div>`;
+  }).join('');
+  return `
+    <div class="flex-between mb-12">
+      <div><div class="section-hd">Briefing Checklist</div><div class="section-sub">Tick each item as you cover it</div></div>
+      <span class="badge ${done === total ? 'badge-green' : 'badge-orange'}">${done}/${total}</span>
+    </div>${sections}`;
+}
+
+function toggleCheck(el) {
+  const key = el.dataset.key;
+  state.checklist[key] = !state.checklist[key];
+  renderBriefing();
+}
+
+// ── STEP 3: Adhoc ────────────────────────────────────────────────────────────
+function renderAdhoc() {
+  return `
+    <div class="section-hd">Ad-hoc Information</div>
+    <div class="section-sub">Record any additional topics or announcements</div>
+    <textarea class="inp" rows="8" placeholder="E.g. upcoming audit on Thursday, new promo starts tomorrow..."
+      oninput="state.adhoc=this.value">${escHtml(state.adhoc)}</textarea>
+    <div style="color:var(--p-text3);font-size:0.75rem;margin-top:6px">${state.adhoc.length} characters</div>`;
+}
+
+// ── STEP 4: Issues ───────────────────────────────────────────────────────────
+function renderIssues() {
+  const carriedHtml = state.carriedIssues.map(issue => `
+    <div class="issue-card carried">
+      <div class="flex mb-8" style="gap:6px;flex-wrap:wrap">
+        <span class="badge badge-red">Carried Forward</span>
+        ${issue.carriedFrom ? `<span style="color:var(--p-text3);font-size:0.72rem">from ${new Date(issue.carriedFrom).toLocaleDateString('en-MY',{day:'numeric',month:'short',year:'numeric'})}</span>` : ''}
+      </div>
+      <div class="issue-text">${escHtml(issue.text)}</div>
+      <div class="flex mb-8" style="flex-wrap:wrap;gap:8px">
+        <button class="btn btn-sm btn-success ${issue.resolved === true ? 'active' : ''}" onclick="updateCarried(${issue.id},'resolved',true)">Resolved</button>
+        <button class="btn btn-sm btn-danger ${issue.resolved !== true ? 'active' : ''}" onclick="updateCarried(${issue.id},'resolved',false)">Not Resolved</button>
+      </div>
+      <textarea class="inp" rows="2" placeholder="Add update or notes..." oninput="updateCarried(${issue.id},'update',this.value)">${escHtml(issue.update || '')}</textarea>
+    </div>`).join('');
+
+  const issuesHtml = state.issues.map(issue => `
+    <div class="issue-card">
+      <div class="flex-between mb-8">
+        <div class="issue-text" style="margin:0;flex:1">${escHtml(issue.text)}</div>
+        <button onclick="removeIssue(${issue.id})" style="background:none;border:none;color:var(--p-red);cursor:pointer;font-size:1.1rem;padding:0;margin-left:10px">x</button>
+      </div>
+      <div class="flex mb-8" style="flex-wrap:wrap;gap:8px">
+        <button class="btn btn-sm btn-success ${issue.resolved === true ? 'active' : ''}" onclick="updateIssue(${issue.id},'resolved',true)">Resolved</button>
+        <button class="btn btn-sm btn-danger ${issue.resolved === false ? 'active' : ''}" onclick="updateIssue(${issue.id},'resolved',false)">Not Resolved</button>
+      </div>
+      <textarea class="inp" rows="2" placeholder="Add update or notes..." oninput="updateIssue(${issue.id},'update',this.value)">${escHtml(issue.update || '')}</textarea>
+    </div>`).join('');
+
+  const empty = (state.carriedIssues.length + state.issues.length === 0)
+    ? '<div class="empty-state">No issues. Add one below or all carried issues are resolved.</div>' : '';
+
+  return `
+    <div class="section-hd">Issues Log</div>
+    <div class="section-sub">Unresolved issues from past shifts appear automatically. Mark resolved to clear them.</div>
+    <div class="flex mb-12">
+      <input class="inp" id="newIssueInput" placeholder="Describe a new issue..." style="flex:1" onkeydown="if(event.key==='Enter')addIssue()">
+      <button class="btn btn-primary btn-sm" onclick="addIssue()">+ Add</button>
+    </div>
+    ${carriedHtml}${issuesHtml}${empty}`;
+}
+
+function addIssue() {
+  const inp = document.getElementById('newIssueInput');
+  const t = inp ? inp.value.trim() : '';
+  if (!t) return;
+  state.issues.push({ id: Date.now(), text: t, resolved: null, update: '' });
+  renderBriefing();
+}
+function removeIssue(id) { state.issues = state.issues.filter(i => i.id !== id); renderBriefing(); }
+function updateIssue(id, field, val) {
+  const i = state.issues.find(x => x.id === id);
+  if (i) i[field] = val;
+  if (field !== 'update') renderBriefing();
+}
+function updateCarried(id, field, val) {
+  const i = state.carriedIssues.find(x => x.id === id);
+  if (i) i[field] = val;
+  if (field !== 'update') renderBriefing();
+}
+
+// ── STEP 5: Feedback ─────────────────────────────────────────────────────────
+function renderFeedback() {
+  const items = state.feedback.length
+    ? state.feedback.map(fb => `
+      <div class="fb-card">
+        <div class="flex-between">
+          <div class="fb-name">${escHtml(fb.name)}</div>
+          <button onclick="removeFeedback(${fb.id})" style="background:none;border:none;color:var(--p-red);cursor:pointer;font-size:1rem">x</button>
+        </div>
+        <div class="fb-comment">${escHtml(fb.comment)}</div>
+      </div>`).join('')
+    : '<div class="empty-state">No feedback added yet.</div>';
+  return `
+    <div class="section-hd">Attendee Feedback</div>
+    <div class="section-sub">Collect feedback from staff who attended the briefing</div>
+    <div class="card">
+      <input class="inp mb-8" id="fbName" placeholder="Staff name (optional)">
+      <textarea class="inp mb-8" id="fbComment" rows="3" placeholder="Feedback or comment..."></textarea>
+      <button class="btn btn-primary btn-sm" onclick="addFeedback()">+ Add Feedback</button>
+    </div>${items}`;
+}
+function addFeedback() {
+  const name = (document.getElementById('fbName')?.value || '').trim() || 'Anonymous';
+  const comment = (document.getElementById('fbComment')?.value || '').trim();
+  if (!comment) return;
+  state.feedback.push({ id: Date.now(), name, comment });
+  renderBriefing();
+}
+function removeFeedback(id) { state.feedback = state.feedback.filter(f => f.id !== id); renderBriefing(); }
+
+// ── STEP 6: Closing ──────────────────────────────────────────────────────────
+function renderClosing() {
+  if (!state.remarks) state.remarks = state.closingMotiv;
+  return `
+    <div class="section-hd">Closing Remarks</div>
+    <div class="section-sub">Bacaan doa sebelum mula bekerja & kata penutup.</div>
+
+    <div style="background:linear-gradient(135deg,rgba(99,102,241,0.08),rgba(129,140,248,0.08));border:1px solid rgba(99,102,241,0.25);border-radius:var(--radius);padding:20px;margin-bottom:16px;text-align:center">
+      <div style="font-size:0.78rem;font-weight:700;color:#818CF8;text-transform:uppercase;letter-spacing:1px;margin-bottom:14px">🤲 Doa Sebelum Mula Bekerja</div>
+      <div style="font-size:1.5rem;line-height:2.2;color:var(--p-text);font-family:serif;margin-bottom:16px;direction:rtl">
+        اللَّهُمَّ إِنِّي أَسْأَلُكَ مِنْ خَيْرِ هَذَا الْعَمَلِ وَخَيْرِ مَافِيهِ وَأَعُوذُ بِكَ مِنْ شَرِّ هَذَا الْعَمَلِ وَشَرِّ مَافِيْهِ إِنَّكَ عَلَى كُلِّ شَيْءٍ قَدِيرٌ
+      </div>
+      <div style="color:var(--p-text2);font-size:0.95rem;font-style:italic;line-height:1.8">
+        "Ya Allah, aku memohon pada-Mu kebaikan pekerjaan ini dan segala kebaikan yang ada di dalamnya, dan aku berlindung pada-Mu daripada keburukan pekerjaan ini dan segala keburukan yang ada di dalamnya. Sesungguhnya di atas segala sesuatu itu Engkaulah yang Maha Menentukannya."
+      </div>
+    </div>
+
+    <div class="motiv-box mb-12">
+      <div class="motiv-label">✨ Auto-generated Motivational Closing</div>
+      <div class="motiv-text">"${escHtml(state.closingMotiv)}"</div>
+    </div>
+    <textarea class="inp" rows="5" placeholder="Add your personal closing remarks..."
+      oninput="state.remarks=this.value">${escHtml(state.remarks)}</textarea>`;
+}
+
+// ── STEP 7: Photos ───────────────────────────────────────────────────────────
+function renderPhotos() {
+  const grid = state.photos.length
+    ? `<div class="photo-grid">${state.photos.map(p => `
+        <div class="photo-thumb">
+          <img src="${p.src}" alt="">
+          <button class="photo-del" onclick="removePhoto('${p.id}')">x</button>
+        </div>`).join('')}</div>` : '';
+  return `
+    <div class="section-hd">Briefing Photos</div>
+    <div class="section-sub">Upload photo proof of the briefing. No limit.</div>
+    <div class="upload-zone" onclick="document.getElementById('photoInput').click()">
+      <div class="upload-icon">&#x1F4F7;</div>
+      <div style="color:var(--p-text2);font-size:0.88rem">Click to upload photos</div>
+      <div style="color:var(--p-text3);font-size:0.78rem;margin-top:4px">JPG, PNG, HEIC supported</div>
+    </div>${grid}`;
+}
+function handlePhotos(e) {
+  Array.from(e.target.files).forEach(file => {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      state.photos.push({ id: String(Date.now() + Math.random()), src: ev.target.result, name: file.name });
+      renderBriefing();
+    };
+    reader.readAsDataURL(file);
+  });
+  e.target.value = '';
+}
+function removePhoto(id) { state.photos = state.photos.filter(p => p.id !== id); renderBriefing(); }
+
+// ── STEP 8: Review ───────────────────────────────────────────────────────────
+function renderReview() {
+  const allSections = [...(state.shift === 'Day' ? MORNING_CHECKLIST : NIGHT_CHECKLIST), ...SA_CSA, ...GENERAL];
+  const totalChk = allSections.reduce((a, s) => a + s.items.length, 0);
+  const doneChk  = Object.values(state.checklist).filter(Boolean).length;
+  const allIssues = [...state.carriedIssues, ...state.issues];
+  const unresolved = allIssues.filter(i => i.resolved !== true).length;
+  const rows = [
+    { l:'Shift', v: state.shift + ' Shift' },
+    { l:'Date & Time', v: new Date().toLocaleString('en-MY', { weekday:'short', day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) },
+    { l:'Staff Present', v: state.attendance.length ? state.attendance.join(', ') : 'None' },
+    { l:'Checklist Items Ticked', v: `${doneChk} / ${totalChk} items` },
+    { l:'Issues', v: `${allIssues.length} total (${unresolved} unresolved)` },
+    { l:'Feedback Entries', v: state.feedback.length },
+    { l:'Photos', v: state.photos.length + ' uploaded' },
+  ].map(r => `<div class="review-row"><span class="review-lbl">${r.l}</span><span class="review-val">${escHtml(String(r.v))}</span></div>`).join('');
+  const remarkPreview = state.remarks
+    ? `<div style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:var(--radius-sm);padding:12px 14px;margin-top:14px;color:#C7D2FE;font-size:0.85rem;font-style:italic">"${escHtml(state.remarks)}"</div>` : '';
+  return `
+    <div class="section-hd">Review & Submit</div>
+    <div class="section-sub">Summary before saving this briefing</div>
+    <div class="card">${rows}${remarkPreview}</div>
+    <div style="color:var(--p-text3);font-size:0.8rem;text-align:center;margin-top:8px">
+      Tap Save to store this briefing. Unresolved issues will appear in the next shift automatically.
+    </div>`;
+}
+
+// ─── NAVIGATION ──────────────────────────────────────────────────────────────
+function nextStep() {
+  if (state.step < STEP_LABELS.length - 1) {
+    state.step++;
+    renderBriefing();
+    window.scrollTo(0, 0);
+  } else {
+    saveBriefing();
+  }
+}
+function prevStep() {
+  if (state.step > 0) { state.step--; renderBriefing(); window.scrollTo(0, 0); }
+}
+
+// ─── SAVE ────────────────────────────────────────────────────────────────────
+async function saveBriefing() {
+  showLoading(true);
+  const ts = Date.now();
+  const data = {
+    timestamp: ts, shift: state.shift,
+    attendance: [...state.attendance],
+    checklist: { ...state.checklist },
+    adhoc: state.adhoc,
+    issues: [
+      ...state.carriedIssues.map(i => ({ ...i, isCarried: true })),
+      ...state.issues
+    ],
+    feedback: [...state.feedback],
+    remarks: state.remarks,
+    photos: state.photos.map(p => ({ id: p.id, src: p.src, name: p.name }))
+  };
+  await dbSet('briefing:' + ts, data);
+  state.carriedIssues = await loadAllUnresolvedIssues();
+  showLoading(false);
+  showToast('Briefing saved successfully!');
+  setTimeout(() => renderDashboard(), 900);
+}
+
+// ─── DASHBOARD ───────────────────────────────────────────────────────────────
+async function renderDashboard() {
+  state.view = 'dashboard';
+  document.getElementById('topTitle').textContent = 'All Briefings';
+  document.getElementById('topShiftBadge').innerHTML = '';
+  document.getElementById('stepPills').innerHTML = '';
+  document.getElementById('progFill').style.width = '100%';
+  document.getElementById('bottomNav').style.display = 'none';
+  document.getElementById('mainContent').innerHTML = '<div class="empty-state">Loading briefings...</div>';
+
+  const keys = await dbList('briefing:');
+  const briefings = (await Promise.all(keys.map(k => dbGet(k)))).filter(Boolean).sort((a, b) => b.timestamp - a.timestamp);
+  const filtered = dbFilter === 'All' ? briefings : briefings.filter(b => b.shift === dbFilter);
+
+  const filterBtns = ['All', 'Day', 'Night'].map(f => {
+    const active = dbFilter === f;
+    const label = f === 'Day' ? 'Day Shift' : f === 'Night' ? 'Night Shift' : 'All';
+    return `<button class="btn btn-sm ${active ? 'btn-primary' : 'btn-ghost'}" onclick="setDbFilter('${f}')">${label}</button>`;
+  }).join('');
+
+  const cards = filtered.length === 0
+    ? '<div class="empty-state">No briefings found.</div>'
+    : filtered.map(b => {
+        const allIssues = b.issues || [];
+        const unresolved = allIssues.filter(i => i.resolved !== true).length;
+        const shiftColor = b.shift === 'Day' ? 'var(--p-orange)' : '#818CF8';
+        const date = new Date(b.timestamp).toLocaleDateString('en-MY', { weekday:'short', day:'numeric', month:'short', year:'numeric' });
+        const time = new Date(b.timestamp).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+        const id = 'db' + b.timestamp;
+
+        // Build ticked checklist grouped by section
+        const allSections = [...(b.shift === 'Day' ? MORNING_CHECKLIST : NIGHT_CHECKLIST), ...SA_CSA, ...GENERAL];
+        const totalChk = allSections.reduce((a, s) => a + s.items.length, 0);
+        const doneChk  = Object.values(b.checklist || {}).filter(Boolean).length;
+        const tickedSections = allSections.map(sec => {
+          const ticked = sec.items.filter(item => b.checklist && b.checklist[sec.section + ':' + item]);
+          return ticked.length ? { section: sec.section, ticked, total: sec.items.length } : null;
+        }).filter(Boolean);
+
+        const checklistHtml = tickedSections.map(sec => `
+          <div style="margin-bottom:10px">
+            <div style="font-size:0.72rem;font-weight:700;color:var(--p-amber);margin-bottom:5px">${escHtml(sec.section)} (${sec.ticked.length}/${sec.total})</div>
+            ${sec.ticked.map(item => `
+              <div class="chk-done-item">
+                <div style="color:var(--p-green);font-weight:700;flex-shrink:0">&#10003;</div>
+                <div>${escHtml(item)}</div>
+              </div>`).join('')}
+          </div>`).join('');
+
+        return `<div class="db-card">
+          <div class="db-card-hdr" onclick="toggleDbCard('${id}')">
+            <div>
+              <div class="flex mb-8" style="flex-wrap:wrap;gap:6px">
+                <span class="badge" style="background:${shiftColor}22;color:${shiftColor}">${escHtml(b.shift)} Shift</span>
+                ${unresolved ? `<span class="badge badge-red">${unresolved} unresolved</span>` : ''}
+                <span class="badge badge-blue">${doneChk}/${totalChk} checklist</span>
+              </div>
+              <div style="font-weight:700;font-size:0.95rem;color:var(--p-text)">${date}</div>
+              <div style="color:var(--p-text3);font-size:0.8rem">${time} · ${(b.attendance||[]).length} staff · ${(b.photos||[]).length} photos</div>
+            </div>
+            <span style="color:var(--p-text3)" id="chev-${id}">&#x25BC;</span>
+          </div>
+          <div class="db-card-body" id="${id}">
+            ${(b.attendance||[]).length ? `
+              <div class="db-sub-title">Attendance</div>
+              <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">
+                ${b.attendance.map(n => `<span class="badge badge-green">${escHtml(n)}</span>`).join('')}
+              </div>` : ''}
+            ${b.adhoc ? `
+              <div class="db-sub-title">Ad-hoc Notes</div>
+              <div style="color:var(--p-text2);font-size:0.83rem;line-height:1.6;margin-bottom:10px">${escHtml(b.adhoc)}</div>` : ''}
+            <div class="db-sub-title" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;margin-top:12px" onclick="toggleChkSection('chk-${id}','chkchev-${id}')">
+              <span>Checklist Covered (${doneChk}/${totalChk})</span>
+              <span id="chkchev-${id}" style="font-size:0.7rem;color:var(--p-text3);background:var(--p-btn-sec);border:1px solid var(--p-border);border-radius:4px;padding:2px 8px">Show &#x25BC;</span>
+            </div>
+            <div id="chk-${id}" style="display:none;margin-bottom:10px">
+              ${tickedSections.length ? checklistHtml : '<div style="color:var(--p-text3);font-size:0.8rem;padding:8px 0">No items ticked in this briefing.</div>'}
+            </div>
+            ${allIssues.length ? `
+              <div class="db-sub-title">Issues (${allIssues.length})</div>
+              ${allIssues.map(i => `
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--p-border);gap:8px">
+                  <div>
+                    <div style="font-size:0.83rem;color:var(--p-text)">${escHtml(i.text)}</div>
+                    ${i.update ? `<div style="font-size:0.75rem;color:var(--p-text3);margin-top:2px">Update: ${escHtml(i.update)}</div>` : ''}
+                    ${i.isCarried ? `<div style="font-size:0.72rem;color:var(--p-orange);margin-top:2px">Carried forward</div>` : ''}
+                  </div>
+                  <span class="badge ${i.resolved === true ? 'badge-green' : 'badge-red'}">${i.resolved === true ? 'Resolved' : 'Unresolved'}</span>
+                </div>`).join('')}` : ''}
+            ${(b.feedback||[]).length ? `
+              <div class="db-sub-title">Feedback</div>
+              ${b.feedback.map(f => `
+                <div style="padding:5px 0;border-bottom:1px solid var(--p-border)">
+                  <span style="color:var(--p-amber);font-size:0.78rem;font-weight:700">${escHtml(f.name)}: </span>
+                  <span style="color:var(--p-text2);font-size:0.83rem">${escHtml(f.comment)}</span>
+                </div>`).join('')}` : ''}
+            ${b.remarks ? `
+              <div class="db-sub-title">Closing Remarks</div>
+              <div style="color:#C7D2FE;font-size:0.85rem;font-style:italic;margin-bottom:10px">"${escHtml(b.remarks)}"</div>` : ''}
+            ${(b.photos||[]).length ? `
+              <div class="db-sub-title">Photos (${b.photos.length})</div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:8px;margin-top:6px">
+                ${b.photos.map(p => `<img src="${p.src}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px">`).join('')}
+              </div>` : ''}
+          </div>
+        </div>`;
+      }).join('');
+
+  document.getElementById('mainContent').innerHTML = `
+    <div class="flex-between mb-12">
+      <div>
+        <div class="section-hd">Dashboard</div>
+        <div style="color:var(--p-text3);font-size:0.82rem">${briefings.length} briefings recorded</div>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="renderHome()">+ New Briefing</button>
+    </div>
+    <div class="flex mb-12">${filterBtns}</div>
+    ${cards}`;
+}
+
+function toggleDbCard(id) {
+  const body = document.getElementById(id);
+  const chev = document.getElementById('chev-' + id);
+  if (!body) return;
+  body.classList.toggle('open');
+  if (chev) chev.innerHTML = body.classList.contains('open') ? '&#x25B2;' : '&#x25BC;';
+}
+function setDbFilter(f) { dbFilter = f; renderDashboard(); }
+function toggleChkSection(bodyId, chevId) {
+  const body = document.getElementById(bodyId);
+  const chev = document.getElementById(chevId);
+  if (!body) return;
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : 'block';
+  if (chev) chev.innerHTML = isOpen ? 'Show &#x25BC;' : 'Hide &#x25B2;';
+}
+
+// ─── TOAST ───────────────────────────────────────────────────────────────────
+function showToast(msg, isError = false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast' + (isError ? ' error' : '');
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ─── BOOT ────────────────────────────────────────────────────────────────────
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
 </script>
+<script src="sidebar.js"></script>
 </body>
 </html>
