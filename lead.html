@@ -500,7 +500,8 @@
     let html = '';
 
     for (const cat of tree) {
-      const isStock = cat.name?.toLowerCase().includes('stock');
+      const isStock = cat.name && cat.name.toLowerCase().includes('stock');
+      if (isStock) continue;
       const catTasks = getAllCatTasks(cat);
       const catChecked = catTasks.length > 0 && catTasks.every(t => selectedTaskIds.has(t.id));
 
