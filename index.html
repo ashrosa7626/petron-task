@@ -575,10 +575,12 @@
   async function loadStaff() {
     const grid = document.getElementById('staffGrid');
 
+    const currentBranch = localStorage.getItem('selectedBranch') || 'Safari';
     const { data: assignments, error } = await db
       .from('daily_assignments')
       .select(`id, staff_id, users(id, name), completions(id)`)
-      .eq('date', today());
+      .eq('date', today())
+      .eq('branch', currentBranch);
 
     if (error) {
       grid.innerHTML = `<div class="empty"><div class="empty__icon"></div><div class="empty__title">Connection error</div><div class="empty__sub">Could not load staff. Check your connection.</div></div>`;
