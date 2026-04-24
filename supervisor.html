@@ -182,13 +182,10 @@ window.addEventListener('DOMContentLoaded', function() {
   <div style="position:absolute;left:50%;transform:translateX(-50%);">
     <div style="font-family:Syne,sans-serif;font-size:1.1rem;font-weight:800;" id="supTitle"><span style="color:#3B82F6;">Safari</span><span style="color:#E6EDF7;">SignOff</span></div>
   </div>
-  <div style="min-width:160px;"></div>
-</div>
-    <div id="supNav" style="display:none;gap:12px;align-items:center" class="flex">
-      <span class="text-sm text-muted" id="supName"></span>
-      <button class="btn btn--ghost btn--sm" onclick="logout()">Logout</button>
-    </div>
+  <div id="supNav" style="display:flex;gap:12px;align-items:center;min-width:160px;justify-content:flex-end;">
+    <button class="btn btn--ghost btn--sm" onclick="logout()">Logout</button>
   </div>
+</div>
 
   <!-- LOGIN -->
   <div class="content" id="loginView">
