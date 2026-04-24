@@ -759,24 +759,27 @@
         </div>`).join('');
     }
 
-    // Stock items — simple Gondola + Cafe sections
+    // Stock items — individual item assignment
     const stockSections = ['Gondola', 'Cafe'];
     let stockHtml = '';
     for (const sec of stockSections) {
       const key = 'stock||' + sec;
       const items = (stockItems['s1']?.[key] || []).filter(i => i.trim());
       if (!items.length) continue;
-      const assignedStaff = stockItems['__assign__']?.[key] || '';
-      stockHtml += `<div class="task-assign-row">
-        <div style="flex:1">
-          <div class="task-assign-row__name">📦 ${sec}</div>
-          <div class="task-assign-row__meta">${items.length} item(s): ${items.slice(0,3).join(', ')}${items.length>3?'…':''}</div>
-        </div>
-        <select onchange="setStockAssign('${key}',this.value)">
-          <option value="">— Assign to —</option>
-          ${allStaff.map(s=>`<option value="${s.id}" ${assignedStaff===s.id?'selected':''}>${s.name}</option>`).join('')}
-        </select>
-      </div>`;
+      stockHtml += `<div style="margin-bottom:4px;font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--p-blue,#3B82F6);padding:8px 0 2px">📦 ${sec}</div>`;
+      items.forEach((item, idx) => {
+        const itemKey = key + '||' + idx;
+        const assigned = stockItems['__assign__']?.[itemKey] || '';
+        stockHtml += `<div class="task-assign-row">
+          <div style="flex:1">
+            <div class="task-assign-row__name">${item}</div>
+          </div>
+          <select onchange="setStockAssign('${itemKey}',this.value)">
+            <option value="">— Assign to —</option>
+            ${allStaff.map(s=>`<option value="${s.id}" ${assigned===s.id?'selected':''}>${s.name}</option>`).join('')}
+          </select>
+        </div>`;
+      });
     }
     if (stockHtml) {
       html += `<div style="margin-bottom:6px;font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted);padding:10px 0 4px">Stocks &amp; Merchandise</div>`;
@@ -1234,20 +1237,21 @@
       });
     }
 
-    // 3. Stock items — Gondola + Cafe
-    for (const [key, staffId] of Object.entries(stockItems['__assign__'] || {})) {
-      if (!staffId) continue;
-      const section = key.split('||')[1] || key;
-      const items   = stockItems['s1']?.[key] || [];
-      for (const item of items) {
-        const trimmed = item.trim();
-        if (!trimmed) continue;
+    // 3. Stock items — individual item assignments
+    const stockSections2 = ['Gondola', 'Cafe'];
+    for (const sec of stockSections2) {
+      const key = 'stock||' + sec;
+      const items = (stockItems['s1']?.[key] || []).filter(i => i.trim());
+      items.forEach((item, idx) => {
+        const itemKey = key + '||' + idx;
+        const staffId = stockItems['__assign__']?.[itemKey] || '';
+        if (!staffId) return;
         rows.push({
           date: today(), staff_id: staffId, is_adhoc: true,
-          custom_task_name: `TOPUP:Stocks:${section}:${trimmed}`,
+          custom_task_name: `TOPUP:Stocks:${sec}:${item.trim()}`,
           photo_required: false, created_by: currentUser?.id, branch
         });
-      }
+      });
     }
 
     if (rows.length > 0) {
