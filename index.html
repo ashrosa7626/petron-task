@@ -652,8 +652,7 @@ function switchBranch(branch) {
   const headerTitle = document.getElementById('headerTitle');
   if (headerTitle) headerTitle.innerHTML = '<span style="color:#3B82F6">' + branch + '</span><span style="color:#E6EDF7;">Tasks</span>';
   if (typeof loadStaff === 'function') loadStaff();
-  if (typeof initPage === 'function') initPage();
-  location.reload();
+  if (typeof init === 'function') init();
 }
 window.addEventListener('DOMContentLoaded', function() {
   const saved = localStorage.getItem('selectedBranch') || 'Safari';
