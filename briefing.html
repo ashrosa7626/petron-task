@@ -357,10 +357,12 @@ async function loadAllUnresolvedIssues() {
   const keys = await dbList('briefing:');
   // Map of issue id -> latest state (from newest briefing that contains it)
   const issueMap = {};
+  const currentBranch = localStorage.getItem('selectedBranch') || 'Safari';
   const sorted = [...keys].sort((a,b) => b.localeCompare(a));
   for (const key of sorted) {
     const b = await dbGet(key);
     if (!b) continue;
+    if (b.branch && b.branch !== currentBranch) continue;
     for (const issue of (b.issues || [])) {
       // Only record the FIRST (newest) occurrence of each issue id
       if (!(issue.id in issueMap)) {
@@ -811,6 +813,7 @@ async function saveBriefing() {
     remarks: state.remarks,
     photos: state.photos.map(p => ({ id: p.id, src: p.src, name: p.name }))
   };
+  data.branch = localStorage.getItem('selectedBranch') || 'Safari';
   await dbSet('briefing:' + ts, data);
   state.carriedIssues = await loadAllUnresolvedIssues();
   showLoading(false);
@@ -830,7 +833,9 @@ async function renderDashboard() {
 
   const keys = await dbList('briefing:');
   const briefings = (await Promise.all(keys.map(k => dbGet(k)))).filter(Boolean).sort((a, b) => b.timestamp - a.timestamp);
-  const filtered = dbFilter === 'All' ? briefings : briefings.filter(b => b.shift === dbFilter);
+  const currentBranch = localStorage.getItem('selectedBranch') || 'Safari';
+  const branchFiltered = briefings.filter(b => !b.branch || b.branch === currentBranch);
+  const filtered = dbFilter === 'All' ? branchFiltered : branchFiltered.filter(b => b.shift === dbFilter);
 
   const filterBtns = ['All', 'Day', 'Night'].map(f => {
     const active = dbFilter === f;
