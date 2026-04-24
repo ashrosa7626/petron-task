@@ -309,7 +309,7 @@ window.addEventListener('DOMContentLoaded', function() {
     }
 
     currentSupervisorId = userData.id;
-    document.getElementById('supName').textContent = userData.name;
+    const supNameEl = document.getElementById('supName'); if (supNameEl) supNameEl.textContent = userData.name;
     document.getElementById('loginView').style.display = 'none';
     document.getElementById('mainView').style.display = '';
     document.getElementById('supNav').style.display = 'flex';
