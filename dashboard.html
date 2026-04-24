@@ -142,7 +142,7 @@
     </select>
     <!-- Big centred title -->
     <div style="position:absolute;left:50%;transform:translateX(-50%);text-align:center;pointer-events:none">
-      <div style="font-size:1.5rem;font-weight:800;letter-spacing:-0.5px" id="dashTitle">Safari Dashboard</div>
+      <div style="font-family:Syne,sans-serif;font-size:1.2rem;font-weight:800;" id="dashTitle"><span style="color:#3B82F6;">Safari</span><span style="color:#E6EDF7;">Dashboard</span></div>
     </div>
     <!-- Date navigator right -->
     <div style="display:flex;align-items:center;gap:8px;margin-left:auto">
@@ -248,7 +248,7 @@
   function switchBranch(branch) {
     currentBranch = branch;
     document.getElementById('branchSelect').value = branch;
-    document.getElementById('dashTitle').textContent = branch + ' Dashboard';
+    document.getElementById('dashTitle').innerHTML = '<span style="color:#3B82F6">' + branch + '</span><span style="color:#E6EDF7;">Dashboard</span>';
     loadDashboard();
   }
 
