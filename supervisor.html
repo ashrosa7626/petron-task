@@ -283,9 +283,16 @@ window.addEventListener('DOMContentLoaded', function() {
       .eq('auth_id', data.user.id)
       .single();
 
-    if (!user || !['supervisor', 'lead'].includes(user.role)) {
+    if (!user) {
       await db.auth.signOut();
-      document.getElementById('loginError').textContent = 'Access denied. Supervisor accounts only.';
+      document.getElementById('loginError').textContent = 'Account not found in system. Contact admin.';
+      setLoading(btn, false);
+      return;
+    }
+    if (!['supervisor', 'lead'].includes(user.role)) {
+      await db.auth.signOut();
+      document.getElementById('loginError').textContent = 'Access denied. Role: ' + user.role;
+      setLoading(btn, false);
       return;
     }
 
