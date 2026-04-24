@@ -307,7 +307,7 @@
 
   }
   .sidebar-toggle {
-    display: none;
+    display: flex;
     position: fixed;
     top: 14px; left: 14px;
     z-index: 200;
@@ -349,6 +349,30 @@
     <div class="header-right">
       <div class="date-pill" id="dateLabel">—</div>
       <div class="clock-pill" id="clock">--:--</div>
+      <div style="position:relative">
+        <select id="branchToggle" onchange="switchBranch(this.value)" style="
+          appearance:none;
+          -webkit-appearance:none;
+          background:#1F2A44;
+          color:#E6EDF7;
+          border:1px solid #2A3A5F;
+          border-radius:99px;
+          padding:8px 36px 8px 16px;
+          font-family:inherit;
+          font-size:0.85rem;
+          font-weight:600;
+          cursor:pointer;
+          outline:none;
+        ">
+          <option value="Safari">🏢 Safari</option>
+          <option value="Nilai Desa Jati">🏢 Nilai Desa Jati</option>
+        </select>
+        <span style="
+          position:absolute;right:12px;top:50%;
+          transform:translateY(-50%);
+          pointer-events:none;color:#94A3B8;font-size:0.75rem;
+        ">▾</span>
+      </div>
     </div>
   </header>
 
@@ -429,6 +453,20 @@
   }
   updateClock();
   setInterval(updateClock, 1000);
+
+function switchBranch(branch) {
+  localStorage.setItem('selectedBranch', branch);
+  document.getElementById('branchToggle').value = branch;
+  if (typeof loadStaff === 'function') loadStaff();
+  if (typeof loadTasks === 'function') loadTasks();
+}
+// Restore saved branch on load
+window.addEventListener('DOMContentLoaded', function() {
+  const saved = localStorage.getItem('selectedBranch') || 'Safari';
+  const sel = document.getElementById('branchToggle');
+  if (sel) sel.value = saved;
+});
+
 </script>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
