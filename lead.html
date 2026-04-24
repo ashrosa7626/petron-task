@@ -124,6 +124,14 @@
 
  
   </style>
+
+<script>
+(function() {
+  const branch = localStorage.getItem('selectedBranch') || 'Safari';
+  const short = branch === 'Nilai Desa Jati' ? 'Nilai' : branch;
+  document.title = short + 'Lead';
+})();
+</script>
 </head>
 <body>
 <div class="page">

@@ -453,6 +453,14 @@
   .logo__text span { color: #F97316; }
   .logo__mark { background: #F97316; }
 </style>
+
+<script>
+(function() {
+  const branch = localStorage.getItem('selectedBranch') || 'Safari';
+  const short = branch === 'Nilai Desa Jati' ? 'Nilai' : branch;
+  document.title = short + 'Tasks';
+})();
+</script>
 </head>
 <body>
 <div class="bg-grid"></div>

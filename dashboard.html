@@ -122,6 +122,14 @@
     .sup-btn { position:fixed;bottom:24px;right:24px;display:flex;align-items:center;gap:8px;padding:13px 20px;border-radius:99px;background:var(--p-red);border:none;color:white;font-family:var(--font);font-size:0.9rem;font-weight:600;cursor:pointer;box-shadow:var(--shadow);text-decoration:none;transition:background 0.15s; }
     .sup-btn:hover { background:var(--p-red-dk); }
   </style>
+
+<script>
+(function() {
+  const branch = localStorage.getItem('selectedBranch') || 'Safari';
+  const short = branch === 'Nilai Desa Jati' ? 'Nilai' : branch;
+  document.title = short + 'Dashboard';
+})();
+</script>
 </head>
 <body>
 <div class="page">
