@@ -488,7 +488,7 @@
       const lbl = document.getElementById('sind-' + i)?.querySelector('.step-ind__label');
       if (i < n) {
         num.className = 'step-ind__num done';
-        num.textContent = '✓';
+        num.textContent = '';
         if (lbl) lbl.className = 'step-ind__label';
       } else if (i === n) {
         num.className = 'step-ind__num';
@@ -652,7 +652,7 @@
         <input type="text" value="${val.replace(/"/g,'&quot;')}" placeholder="e.g. Milo 3in1, 100Plus..."
           oninput="updateStockItemSimple('${safeKey}',${i},this.value)"
           onkeydown="if(event.key==='Enter'){event.preventDefault();addStockItemSimple('${safeKey}')}">
-        <button class="del-btn" onclick="removeStockItemSimple('${safeKey}',${i})" title="Remove">✕</button>
+        <button class="del-btn" onclick="removeStockItemSimple('${safeKey}',${i})" title="Remove"></button>
       </div>`).join('');
     return `
       <div style="border-bottom:1px solid var(--border)">
@@ -704,7 +704,7 @@
         <input type="text" value="${val.replace(/"/g,'&quot;')}" placeholder="e.g. Milo 3in1, 100Plus..."
           oninput="updateStockItemSimple('${safeKey}',${i},this.value)"
           onkeydown="if(event.key==='Enter'){event.preventDefault();addStockItemSimple('${safeKey}')}">
-        <button class="del-btn" onclick="removeStockItemSimple('${safeKey}',${i})" title="Remove">✕</button>
+        <button class="del-btn" onclick="removeStockItemSimple('${safeKey}',${i})" title="Remove"></button>
       </div>`).join('');
     const inputs = container.querySelectorAll('input');
     if (inputs.length) inputs[inputs.length-1].focus();
@@ -715,7 +715,7 @@
     return `<label class="${cls}">
       <input type="checkbox" ${checked?'checked':''} onchange="toggleTaskStep1('${t.id}',this.checked)">
       <span class="task-checkbox__label">${t.name}</span>
-      ${t.photo_required?'<span style="font-size:0.75rem;color:var(--warning)">📷</span>':''}
+      ${t.photo_required?'<span style="font-size:0.75rem;color:var(--warning)"></span>':''}
     </label>`;
   }
 
@@ -758,7 +758,7 @@
   function renderAdhocStep1Tags() {
     return selectedAdhocTasks.map((a,i) => `
       <span class="adhoc-tag" onclick="removeAdhocStep1(${i})">
-        📷 ${a.name} <span style="opacity:0.6">✕</span>
+         ${a.name} <span style="opacity:0.6"></span>
       </span>`).join('');
   }
 
@@ -794,7 +794,7 @@
         return `<div class="task-assign-row">
           <div style="flex:1">
             <div class="task-assign-row__name">${t.name}</div>
-            ${t.photo_required?'<div class="task-assign-row__meta">📷 Photo required</div>':''}
+            ${t.photo_required?'<div class="task-assign-row__meta"> Photo required</div>':''}
           </div>
           <select onchange="taskAssignments['${t.id}']=this.value">
             <option value="" ${!assigned?'selected':''}>— Assign to —</option>
@@ -810,7 +810,7 @@
       html += selectedAdhocTasks.map((a,i) => `
         <div class="task-assign-row">
           <div style="flex:1">
-            <div class="task-assign-row__name">📷 ${a.name}</div>
+            <div class="task-assign-row__name"> ${a.name}</div>
           </div>
           <select onchange="selectedAdhocTasks[${i}].staffId=this.value">
             <option value="">— Assign to —</option>
@@ -826,7 +826,7 @@
       const key = 'stock||' + sec;
       const items = (stockItems['s1']?.[key] || []).filter(i => i.trim());
       if (!items.length) continue;
-      stockHtml += `<div style="margin-bottom:4px;font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--p-blue,#3B82F6);padding:8px 0 2px">📦 ${sec}</div>`;
+      stockHtml += `<div style="margin-bottom:4px;font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--p-blue,#3B82F6);padding:8px 0 2px"> ${sec}</div>`;
       items.forEach((item, idx) => {
         const itemKey = key + '||' + idx;
         const assigned = stockItems['__assign__']?.[itemKey] || '';
@@ -893,7 +893,7 @@
 
     if (unassigned.length) {
       html += `<div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:16px;color:var(--danger);font-size:0.85rem">
-        ⚠ ${unassigned.length} task(s) not yet assigned to any staff — go back and assign them.
+         ${unassigned.length} task(s) not yet assigned to any staff — go back and assign them.
       </div>`;
     }
 
@@ -906,7 +906,7 @@
           ${data.tasks.map(t => `
             <div class="review-task-row">
               <div class="review-task-row__name">${t.name}</div>
-              ${t.photo?'<span class="badge badge--photo" style="font-size:0.7rem">📷</span>':''}
+              ${t.photo?'<span class="badge badge--photo" style="font-size:0.7rem"></span>':''}
               ${t.type==='adhoc'?'<span class="badge badge--adhoc" style="font-size:0.7rem">Ad-hoc</span>':''}
               ${t.type==='stock'?'<span class="badge" style="background:rgba(124,92,252,0.12);color:var(--accent2);font-size:0.7rem">Stock</span>':''}
             </div>`).join('')}
@@ -1068,7 +1068,7 @@
         <input type="text" value="${val.replace(/"/g,'&quot;')}" placeholder="e.g. Milo 3in1, 100Plus..."
           oninput="updateStockItem('${staffId}','${safeKey}',${i},this.value)"
           onkeydown="stockKeydown(event,'${staffId}','${safeKey}')">
-        <button class="del-btn" onclick="removeStockItem('${staffId}','${safeKey}',${i})" title="Remove">✕</button>
+        <button class="del-btn" onclick="removeStockItem('${staffId}','${safeKey}',${i})" title="Remove"></button>
       </div>`).join('');
     return `
       <div class="stock-subgroup-wrap">
@@ -1134,7 +1134,7 @@
         <input type="text" value="${val.replace(/"/g,'&quot;')}" placeholder="e.g. Milo 3in1, 100Plus..."
           oninput="updateStockItem('${staffId}','${safeKey}',${i},this.value)"
           onkeydown="stockKeydown(event,'${staffId}','${safeKey}')">
-        <button class="del-btn" onclick="removeStockItem('${staffId}','${safeKey}',${i})" title="Remove">✕</button>
+        <button class="del-btn" onclick="removeStockItem('${staffId}','${safeKey}',${i})" title="Remove"></button>
       </div>`).join('');
     container.innerHTML = rows;
     const inputs2 = container.querySelectorAll('input');
@@ -1147,8 +1147,8 @@
       <input type="checkbox" ${checked?'checked':''}
         onchange="toggleTemplate('${staffId}','${t.id}',this.checked)">
       <span class="task-checkbox__label">${t.name}</span>
-      ${t.photo_required ? '<span style="font-size:0.75rem;color:var(--warning)">📷</span>' : ''}
-      ${t.has_note       ? '<span style="font-size:0.75rem;color:var(--warning)">📝</span>' : ''}
+      ${t.photo_required ? '<span style="font-size:0.75rem;color:var(--warning)"></span>' : ''}
+      ${t.has_note       ? '<span style="font-size:0.75rem;color:var(--warning)"></span>' : ''}
     </label>`;
   }
 
@@ -1263,7 +1263,7 @@
   function renderAdhocTagsHtml(staffId) {
     return (staffSelections[staffId]?.adhocTasks || []).map((a, i) => `
       <span class="adhoc-tag" onclick="removeAdhoc('${staffId}',${i})">
-        📷 ${a.name} <span style="opacity:0.6">✕</span>
+         ${a.name} <span style="opacity:0.6"></span>
       </span>`).join('');
   }
 
@@ -1337,8 +1337,8 @@
           <div class="task-item__name">${t.name}</div>
           <div class="task-item__meta">
             ${t.categories?.name ? `<span>${t.categories.name}${t.subcategories?.name ? ' › ' + t.subcategories.name : ''}</span>` : ''}
-            ${t.photo_required ? '<span class="badge badge--photo">📷 Photo</span>' : ''}
-            ${t.has_note ? '<span class="badge" style="background:rgba(245,158,11,0.1);color:var(--warning)">📝 Note</span>' : ''}
+            ${t.photo_required ? '<span class="badge badge--photo"> Photo</span>' : ''}
+            ${t.has_note ? '<span class="badge" style="background:rgba(245,158,11,0.1);color:var(--warning)"> Note</span>' : ''}
             ${!t.is_active ? '<span class="badge" style="background:rgba(239,68,68,0.1);color:var(--danger)">Inactive</span>' : ''}
           </div>
         </div>

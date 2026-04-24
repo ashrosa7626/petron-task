@@ -573,7 +573,7 @@
       .eq('date', today());
 
     if (error) {
-      grid.innerHTML = `<div class="empty"><div class="empty__icon">⚠️</div><div class="empty__title">Connection error</div><div class="empty__sub">Could not load staff. Check your connection.</div></div>`;
+      grid.innerHTML = `<div class="empty"><div class="empty__icon">️</div><div class="empty__title">Connection error</div><div class="empty__sub">Could not load staff. Check your connection.</div></div>`;
       return;
     }
 
@@ -597,7 +597,7 @@
       staff.length ? `${staff.length} member${staff.length > 1 ? 's' : ''}` : '';
 
     if (staff.length === 0) {
-      grid.innerHTML = `<div class="empty"><div class="empty__icon">📋</div><div class="empty__title">No tasks assigned yet</div><div class="empty__sub">Ask your Team Lead to set up today's tasks.</div></div>`;
+      grid.innerHTML = `<div class="empty"><div class="empty__icon"></div><div class="empty__title">No tasks assigned yet</div><div class="empty__sub">Ask your Team Lead to set up today's tasks.</div></div>`;
       return;
     }
 

@@ -3,11 +3,11 @@
 
 (function() {
   const PAGES = [
-    { label:'Home',           icon:'🏠', href:'index.html' },
-    { label:'Dashboard',      icon:'📊', href:'dashboard.html' },
-    { label:'Shift Briefing', icon:'⛽', href:'briefing.html' },
-    { label:'Lead Panel',     icon:'👑', href:'lead.html' },
-    { label:'Sign-Off Review',icon:'✅', href:'supervisor.html' },
+    { label:'Home',           icon:'', href:'index.html' },
+    { label:'Dashboard',      icon:'', href:'dashboard.html' },
+    { label:'Shift Briefing', icon:'', href:'briefing.html' },
+    { label:'Lead Panel',     icon:'', href:'lead.html' },
+    { label:'Sign-Off Review',icon:'', href:'supervisor.html' },
   ];
 
   const currentFile = window.location.pathname.split('/').pop() || 'index.html';
