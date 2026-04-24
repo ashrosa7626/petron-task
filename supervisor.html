@@ -148,13 +148,42 @@
   const short = branch === 'Nilai Desa Jati' ? 'Nilai' : branch;
   document.title = short + 'SignOff';
 })();
+
+function switchBranchSup(branch) {
+  localStorage.setItem('selectedBranch', branch);
+  const short = branch === 'Nilai Desa Jati' ? 'Nilai' : branch;
+  document.title = short + 'SignOff';
+  const t = document.getElementById('supTitle');
+  if (t) t.innerHTML = '<span style="color:#3B82F6;">' + branch + '</span><span style="color:#E6EDF7;">SignOff</span>';
+  if (typeof loadCompletions === 'function') loadCompletions();
+}
+window.addEventListener('DOMContentLoaded', function() {
+  const saved = localStorage.getItem('selectedBranch') || 'Safari';
+  const sel = document.getElementById('branchToggle');
+  if (sel) sel.value = saved;
+  const short = saved === 'Nilai Desa Jati' ? 'Nilai' : saved;
+  document.title = short + 'SignOff';
+  const t = document.getElementById('supTitle');
+  if (t) t.innerHTML = '<span style="color:#3B82F6;">' + saved + '</span><span style="color:#E6EDF7;">SignOff</span>';
+});
+
 </script>
 </head>
 <body>
 <div class="page">
-  <div class="topbar">
-    <a href="lead.html" class="btn btn--ghost btn--sm">← Lead Panel</a>
-    <div class="topbar__logo">Petron<span> Sign-Off</span></div>
+  <div class="topbar" style="position:relative;display:flex;align-items:center;justify-content:space-between;padding:0 20px;">
+  <div style="position:relative;margin-left:52px;">
+    <select id="branchToggle" onchange="switchBranchSup(this.value)" style="appearance:none;-webkit-appearance:none;background:#1F2A44;color:#E6EDF7;border:1px solid #2A3A5F;border-radius:99px;padding:7px 32px 7px 14px;font-family:inherit;font-size:0.82rem;font-weight:600;cursor:pointer;outline:none;">
+      <option value="Safari">Safari</option>
+      <option value="Nilai Desa Jati">Nilai Desa Jati</option>
+    </select>
+    <span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);pointer-events:none;color:#94A3B8;font-size:0.75rem;">▾</span>
+  </div>
+  <div style="position:absolute;left:50%;transform:translateX(-50%);">
+    <div style="font-family:Syne,sans-serif;font-size:1.1rem;font-weight:800;" id="supTitle"><span style="color:#3B82F6;">Safari</span><span style="color:#E6EDF7;">SignOff</span></div>
+  </div>
+  <div style="min-width:160px;"></div>
+</div>
     <div id="supNav" style="display:none;gap:12px;align-items:center" class="flex">
       <span class="text-sm text-muted" id="supName"></span>
       <button class="btn btn--ghost btn--sm" onclick="logout()">Logout</button>
