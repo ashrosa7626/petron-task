@@ -64,7 +64,7 @@
     }
 
     /* ── Header ───────────────────────────────────────── */
-    .header { position:relative;
+    .header { position:relative; position:relative;
       display: flex; align-items: center; justify-content: space-between;
       padding: 20px 32px;
       background: rgba(255,255,255,0.75);
@@ -416,19 +416,23 @@
 
 <div class="page">
 
-  <header class="header">
-    <div class="logo">
-      <div class="logo__mark">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M3 22V6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16"/>
-          <path d="M3 11h12"/>
-          <path d="M15 6h1a2 2 0 0 1 2 2v3.5a1.5 1.5 0 0 0 3 0V8l-3-3"/>
-          <path d="M3 22h12"/>
-        </svg>
+  <header class="header" style="position:relative;display:flex;align-items:center;justify-content:space-between;padding:0 20px;">
+    <!-- Left: Branch toggle -->
+    <div style="display:flex;align-items:center;min-width:200px;">
+      <div style="position:relative">
+        <select id="branchToggle" onchange="switchBranch(this.value)" style="appearance:none;-webkit-appearance:none;background:#1F2A44;color:#E6EDF7;border:1px solid #2A3A5F;border-radius:99px;padding:8px 36px 8px 16px;font-family:inherit;font-size:0.85rem;font-weight:600;cursor:pointer;outline:none;">
+          <option value="Safari">Safari</option>
+          <option value="Nilai Desa Jati">Nilai Desa Jati</option>
+        </select>
+        <span style="position:absolute;right:12px;top:50%;transform:translateY(-50%);pointer-events:none;color:#94A3B8;font-size:0.75rem;">▾</span>
       </div>
-      <div class="logo__text">Petron<span>Tasks</span></div>
     </div>
-    <div class="header-right">
+    <!-- Centre: Title -->
+    <div style="position:absolute;left:50%;transform:translateX(-50%);text-align:center;">
+      <div style="font-family:Syne,sans-serif;font-size:1.2rem;font-weight:800;color:#E6EDF7;" id="headerTitle">Safari<span style="color:#F97316;">Tasks</span></div>
+    </div>
+    <!-- Right: Date & Clock -->
+    <div style="display:flex;align-items:center;gap:12px;min-width:200px;justify-content:flex-end;">
       <div class="date-pill" id="dateLabel">—</div>
       <div class="clock-pill" id="clock">--:--</div>
     </div>
