@@ -198,12 +198,14 @@ async function dbList(prefix) {
     return data ? data.map(r => r.key) : [];
   } catch { return []; }
 }
-async function dbListAll(prefix) {
+async function dbListAll(prefix, limit = null) {
   try {
-    const { data, error } = await db.from('shift_briefings')
+    let q = db.from('shift_briefings')
       .select('key,value')
       .like('key', prefix + '%')
       .order('key', { ascending: false });
+    if (limit) q = q.limit(limit);
+    const { data, error } = await q;
     if (!error && data && data.length > 0) {
       return data.map(r => {
         try { return JSON.parse(r.value); } catch { return null; }
@@ -211,11 +213,13 @@ async function dbListAll(prefix) {
     }
     // Fallback: fetch individually (preserves access to all existing data)
     const keys = await dbList(prefix);
-    const results = await Promise.all(keys.map(k => dbGet(k)));
+    const recent = limit ? keys.slice(-limit) : keys;
+    const results = await Promise.all(recent.map(k => dbGet(k)));
     return results.filter(Boolean).sort((a, b) => b.timestamp - a.timestamp);
   } catch {
     const keys = await dbList(prefix);
-    const results = await Promise.all(keys.map(k => dbGet(k)));
+    const recent = limit ? keys.slice(-limit) : keys;
+    const results = await Promise.all(recent.map(k => dbGet(k)));
     return results.filter(Boolean).sort((a, b) => b.timestamp - a.timestamp);
   }
 }
@@ -368,15 +372,18 @@ let allBriefingsCache = {};
 
 // ─── INIT ────────────────────────────────────────────────────────────────────
 async function init() {
-  showLoading(true);
-  state.staffList = await getStaffList();
-  state.carriedIssues = await loadAllUnresolvedIssues();
-  showLoading(false);
-  renderHome();
+  renderHome(); // Show home immediately — no loading wait
+  const [staffList, issues] = await Promise.all([
+    getStaffList(),
+    loadAllUnresolvedIssues(),
+  ]);
+  state.staffList = staffList;
+  state.carriedIssues = issues;
+  if (state.view === 'home') renderHome(); // Refresh with carried issues + staff
 }
 
 async function loadAllUnresolvedIssues() {
-  const briefings = await dbListAll('briefing:');
+  const briefings = await dbListAll('briefing:', 60);
   const issueMap = {};
   const currentBranch = localStorage.getItem('selectedBranch') || 'Safari';
   const sorted = [...briefings].sort((a, b) => b.timestamp - a.timestamp);
