@@ -198,6 +198,18 @@ async function dbList(prefix) {
     return data ? data.map(r => r.key) : [];
   } catch { return []; }
 }
+async function dbListAll(prefix) {
+  try {
+    const { data } = await db.from('shift_briefings')
+      .select('key,value')
+      .like('key', prefix + '%')
+      .order('key', { ascending: false });
+    if (!data) return [];
+    return data.map(r => {
+      try { return JSON.parse(r.value); } catch { return null; }
+    }).filter(Boolean);
+  } catch { return []; }
+}
 async function getStaffList() {
   try {
     const { data } = await db.from('shift_staff').select('name').order('name');
@@ -343,6 +355,7 @@ let state = {
   motivLine:'', closingMotiv:''
 };
 let dbFilter = 'All';
+let allBriefingsCache = {};
 
 // ─── INIT ────────────────────────────────────────────────────────────────────
 async function init() {
@@ -354,23 +367,18 @@ async function init() {
 }
 
 async function loadAllUnresolvedIssues() {
-  const keys = await dbList('briefing:');
-  // Map of issue id -> latest state (from newest briefing that contains it)
+  const briefings = await dbListAll('briefing:');
   const issueMap = {};
   const currentBranch = localStorage.getItem('selectedBranch') || 'Safari';
-  const sorted = [...keys].sort((a,b) => b.localeCompare(a));
-  for (const key of sorted) {
-    const b = await dbGet(key);
-    if (!b) continue;
+  const sorted = [...briefings].sort((a, b) => b.timestamp - a.timestamp);
+  for (const b of sorted) {
     if (b.branch && b.branch !== currentBranch) continue;
     for (const issue of (b.issues || [])) {
-      // Only record the FIRST (newest) occurrence of each issue id
       if (!(issue.id in issueMap)) {
         issueMap[issue.id] = { ...issue, carriedFrom: b.timestamp };
       }
     }
   }
-  // Return only issues whose latest state is unresolved
   return Object.values(issueMap)
     .filter(i => i.resolved !== true)
     .map(i => ({ ...i, isCarried: true }));
@@ -831,10 +839,12 @@ async function renderDashboard() {
   document.getElementById('bottomNav').style.display = 'none';
   document.getElementById('mainContent').innerHTML = '<div class="empty-state">Loading briefings...</div>';
 
-  const keys = await dbList('briefing:');
-  const briefings = (await Promise.all(keys.map(k => dbGet(k)))).filter(Boolean).sort((a, b) => b.timestamp - a.timestamp);
+  const allBriefings = await dbListAll('briefing:');
+  allBriefingsCache = {};
+  allBriefings.forEach(b => { if (b?.timestamp) allBriefingsCache[b.timestamp] = b; });
+
   const currentBranch = localStorage.getItem('selectedBranch') || 'Safari';
-  const branchFiltered = briefings.filter(b => !b.branch || b.branch === currentBranch);
+  const branchFiltered = allBriefings.filter(b => !b.branch || b.branch === currentBranch);
   const filtered = dbFilter === 'All' ? branchFiltered : branchFiltered.filter(b => b.shift === dbFilter);
 
   const filterBtns = ['All', 'Day', 'Night'].map(f => {
@@ -853,7 +863,6 @@ async function renderDashboard() {
         const time = new Date(b.timestamp).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
         const id = 'db' + b.timestamp;
 
-        // Build ticked checklist grouped by section
         const allSections = [...(b.shift === 'Day' ? MORNING_CHECKLIST : NIGHT_CHECKLIST), ...SA_CSA, ...GENERAL];
         const totalChk = allSections.reduce((a, s) => a + s.items.length, 0);
         const doneChk  = Object.values(b.checklist || {}).filter(Boolean).length;
@@ -883,7 +892,12 @@ async function renderDashboard() {
               <div style="font-weight:700;font-size:0.95rem;color:var(--p-text)">${date}</div>
               <div style="color:var(--p-text3);font-size:0.8rem">${time} · ${(b.attendance||[]).length} staff · ${(b.photos||[]).length} photos</div>
             </div>
-            <span style="color:var(--p-text3)" id="chev-${id}">&#x25BC;</span>
+            <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+              <button onclick="event.stopPropagation();downloadBriefing(${b.timestamp})"
+                style="background:rgba(249,115,22,0.12);color:var(--p-orange);border:1px solid rgba(249,115,22,0.3);border-radius:6px;padding:5px 10px;font-size:0.72rem;font-weight:700;cursor:pointer;white-space:nowrap;font-family:var(--font)"
+                title="Download this briefing">&#x2193; Save</button>
+              <span style="color:var(--p-text3)" id="chev-${id}">&#x25BC;</span>
+            </div>
           </div>
           <div class="db-card-body" id="${id}">
             ${(b.attendance||[]).length ? `
@@ -932,12 +946,16 @@ async function renderDashboard() {
       }).join('');
 
   document.getElementById('mainContent').innerHTML = `
-    <div class="flex-between mb-12">
+    <div class="flex-between mb-12" style="flex-wrap:wrap;gap:10px">
       <div>
         <div class="section-hd">Dashboard</div>
-        <div style="color:var(--p-text3);font-size:0.82rem">${briefings.length} briefings recorded</div>
+        <div style="color:var(--p-text3);font-size:0.82rem">${branchFiltered.length} briefing(s) recorded</div>
       </div>
-      <button class="btn btn-primary btn-sm" onclick="renderHome()">+ New Briefing</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;align-items:center">
+        <button class="btn btn-ghost btn-sm" onclick="downloadRange('week')" title="Download this week's briefings">&#x2193; Week</button>
+        <button class="btn btn-ghost btn-sm" onclick="downloadRange('month')" title="Download this month's briefings">&#x2193; Month</button>
+        <button class="btn btn-primary btn-sm" onclick="renderHome()">+ New Briefing</button>
+      </div>
     </div>
     <div class="flex mb-12">${filterBtns}</div>
     ${cards}`;
@@ -958,6 +976,119 @@ function toggleChkSection(bodyId, chevId) {
   const isOpen = body.style.display !== 'none';
   body.style.display = isOpen ? 'none' : 'block';
   if (chev) chev.innerHTML = isOpen ? 'Show &#x25BC;' : 'Hide &#x25B2;';
+}
+
+// ─── DOWNLOADS ───────────────────────────────────────────────────────────────
+function formatBriefingText(b) {
+  const allSections = [...(b.shift === 'Day' ? MORNING_CHECKLIST : NIGHT_CHECKLIST), ...SA_CSA, ...GENERAL];
+  const totalChk = allSections.reduce((a, s) => a + s.items.length, 0);
+  const doneChk = Object.values(b.checklist || {}).filter(Boolean).length;
+  const allIssues = b.issues || [];
+  const unresolved = allIssues.filter(i => i.resolved !== true).length;
+  const date = new Date(b.timestamp).toLocaleDateString('en-MY', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+  const time = new Date(b.timestamp).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+  const LINE = '='.repeat(50);
+  const DASH = '-'.repeat(50);
+  let t = LINE + '\n';
+  t += '          PETRON SHIFT BRIEFING REPORT\n';
+  t += LINE + '\n';
+  t += `Branch  : ${b.branch || 'Safari'}\n`;
+  t += `Shift   : ${b.shift} Shift\n`;
+  t += `Date    : ${date}\n`;
+  t += `Time    : ${time}\n`;
+  t += DASH + '\n\n';
+  t += `ATTENDANCE (${(b.attendance||[]).length} staff)\n`;
+  t += (b.attendance||[]).length ? b.attendance.join(', ') : 'None';
+  t += '\n\n';
+  t += `CHECKLIST: ${doneChk}/${totalChk} items covered\n`;
+  allSections.forEach(sec => {
+    const ticked = sec.items.filter(item => b.checklist && b.checklist[sec.section + ':' + item]);
+    if (ticked.length) {
+      t += `\n  ${sec.section} (${ticked.length}/${sec.items.length})\n`;
+      ticked.forEach(item => { t += `    [OK] ${item}\n`; });
+    }
+  });
+  t += '\n';
+  if (b.adhoc) { t += 'AD-HOC NOTES\n' + b.adhoc + '\n\n'; }
+  if (allIssues.length) {
+    t += `ISSUES (${allIssues.length} total, ${unresolved} unresolved)\n`;
+    allIssues.forEach(i => {
+      t += `  [${i.resolved === true ? 'RESOLVED' : 'UNRESOLVED'}] ${i.text}\n`;
+      if (i.update) t += `    Update: ${i.update}\n`;
+      if (i.isCarried) t += '    (Carried forward from previous shift)\n';
+    });
+    t += '\n';
+  }
+  if ((b.feedback||[]).length) {
+    t += `FEEDBACK (${b.feedback.length} entries)\n`;
+    b.feedback.forEach(f => { t += `  ${f.name}: ${f.comment}\n`; });
+    t += '\n';
+  }
+  if (b.remarks) { t += `CLOSING REMARKS\n"${b.remarks}"\n\n`; }
+  t += `Photos: ${(b.photos||[]).length} attached (view in app)\n`;
+  t += LINE + '\n';
+  return t;
+}
+
+function triggerDownload(text, filename) {
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function downloadBriefing(ts) {
+  const b = allBriefingsCache[ts];
+  if (!b) { showToast('Briefing data not found', true); return; }
+  const dateStr = new Date(b.timestamp).toISOString().split('T')[0];
+  triggerDownload(formatBriefingText(b), `briefing-${b.shift.toLowerCase()}-${dateStr}.txt`);
+  showToast('Briefing downloaded!');
+}
+
+function downloadRange(period) {
+  const currentBranch = localStorage.getItem('selectedBranch') || 'Safari';
+  const now = new Date();
+  let startDate;
+  if (period === 'week') {
+    const dow = now.getDay();
+    startDate = new Date(now);
+    startDate.setDate(now.getDate() - (dow === 0 ? 6 : dow - 1));
+    startDate.setHours(0, 0, 0, 0);
+  } else {
+    startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+  }
+  const rangeLabel = period === 'week'
+    ? 'Week of ' + startDate.toLocaleDateString('en-MY', { day:'numeric', month:'short', year:'numeric' })
+    : now.toLocaleDateString('en-MY', { month:'long', year:'numeric' });
+
+  const inRange = Object.values(allBriefingsCache)
+    .filter(b => (!b.branch || b.branch === currentBranch) && new Date(b.timestamp) >= startDate)
+    .sort((a, b) => a.timestamp - b.timestamp);
+
+  if (!inRange.length) { showToast('No briefings found for ' + rangeLabel, true); return; }
+
+  const LINE = '='.repeat(50);
+  let text = LINE + '\n';
+  text += `  PETRON BRIEFING HISTORY - ${rangeLabel.toUpperCase()}\n`;
+  text += `  Branch: ${currentBranch}\n`;
+  text += `  Generated: ${now.toLocaleDateString('en-MY', { day:'numeric', month:'long', year:'numeric' })}\n`;
+  text += LINE + '\n';
+  text += `Total briefings: ${inRange.length}\n\n`;
+  inRange.forEach((b, i) => {
+    text += `\n${'-'.repeat(50)}\nBRIEFING ${i + 1} of ${inRange.length}\n${'-'.repeat(50)}\n`;
+    text += formatBriefingText(b) + '\n';
+  });
+
+  const tag = period === 'week'
+    ? 'week-' + startDate.toISOString().split('T')[0]
+    : now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+  triggerDownload(text, `briefings-${tag}-${currentBranch.toLowerCase().replace(/\s+/g, '-')}.txt`);
+  showToast(`Downloaded ${inRange.length} briefing(s)!`);
 }
 
 // ─── TOAST ───────────────────────────────────────────────────────────────────
