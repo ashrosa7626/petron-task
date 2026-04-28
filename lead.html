@@ -439,8 +439,6 @@ window.addEventListener('DOMContentLoaded', function() {
     document.getElementById('loginView').style.display  = 'none';
     document.getElementById('leadView').style.display   = '';
     document.getElementById('leadNav').style.display    = 'flex';
-    const b = sessionStorage.getItem('lead_branch') || '';
-    document.getElementById('leadBranchLabel').textContent = b;
     loadAssignView();
   }
 
