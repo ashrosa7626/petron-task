@@ -200,15 +200,24 @@ async function dbList(prefix) {
 }
 async function dbListAll(prefix) {
   try {
-    const { data } = await db.from('shift_briefings')
+    const { data, error } = await db.from('shift_briefings')
       .select('key,value')
       .like('key', prefix + '%')
       .order('key', { ascending: false });
-    if (!data) return [];
-    return data.map(r => {
-      try { return JSON.parse(r.value); } catch { return null; }
-    }).filter(Boolean);
-  } catch { return []; }
+    if (!error && data && data.length > 0) {
+      return data.map(r => {
+        try { return JSON.parse(r.value); } catch { return null; }
+      }).filter(Boolean);
+    }
+    // Fallback: fetch individually (preserves access to all existing data)
+    const keys = await dbList(prefix);
+    const results = await Promise.all(keys.map(k => dbGet(k)));
+    return results.filter(Boolean).sort((a, b) => b.timestamp - a.timestamp);
+  } catch {
+    const keys = await dbList(prefix);
+    const results = await Promise.all(keys.map(k => dbGet(k)));
+    return results.filter(Boolean).sort((a, b) => b.timestamp - a.timestamp);
+  }
 }
 async function getStaffList() {
   try {
@@ -580,7 +589,7 @@ function renderWelcome() {
 
 // ── STEP 2: Checklist ────────────────────────────────────────────────────────
 function renderChecklist() {
-  const allSections = [...(state.shift === 'Day' ? MORNING_CHECKLIST : NIGHT_CHECKLIST), ...SA_CSA, ...GENERAL];
+  const allSections = state.shift === 'Day' ? MORNING_CHECKLIST : NIGHT_CHECKLIST;
   const total = allSections.reduce((a, s) => a + s.items.length, 0);
   const done  = Object.values(state.checklist).filter(Boolean).length;
   const sections = allSections.map(sec => {
@@ -765,7 +774,7 @@ function removePhoto(id) { state.photos = state.photos.filter(p => p.id !== id);
 
 // ── STEP 8: Review ───────────────────────────────────────────────────────────
 function renderReview() {
-  const allSections = [...(state.shift === 'Day' ? MORNING_CHECKLIST : NIGHT_CHECKLIST), ...SA_CSA, ...GENERAL];
+  const allSections = state.shift === 'Day' ? MORNING_CHECKLIST : NIGHT_CHECKLIST;
   const totalChk = allSections.reduce((a, s) => a + s.items.length, 0);
   const doneChk  = Object.values(state.checklist).filter(Boolean).length;
   const allIssues = [...state.carriedIssues, ...state.issues];
@@ -854,7 +863,9 @@ async function renderDashboard() {
   }).join('');
 
   const cards = filtered.length === 0
-    ? '<div class="empty-state">No briefings found.</div>'
+    ? (allBriefings.length > branchFiltered.length
+        ? `<div class="empty-state">No briefings found for <strong style="color:var(--p-text)">${escHtml(currentBranch)}</strong>.<br><span style="font-size:0.78rem;margin-top:6px;display:block">Your older briefings may be saved under a different branch — try switching the branch toggle above.</span></div>`
+        : '<div class="empty-state">No briefings recorded yet.</div>')
     : filtered.map(b => {
         const allIssues = b.issues || [];
         const unresolved = allIssues.filter(i => i.resolved !== true).length;
@@ -863,7 +874,7 @@ async function renderDashboard() {
         const time = new Date(b.timestamp).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
         const id = 'db' + b.timestamp;
 
-        const allSections = [...(b.shift === 'Day' ? MORNING_CHECKLIST : NIGHT_CHECKLIST), ...SA_CSA, ...GENERAL];
+        const allSections = b.shift === 'Day' ? MORNING_CHECKLIST : NIGHT_CHECKLIST;
         const totalChk = allSections.reduce((a, s) => a + s.items.length, 0);
         const doneChk  = Object.values(b.checklist || {}).filter(Boolean).length;
         const tickedSections = allSections.map(sec => {
@@ -980,7 +991,7 @@ function toggleChkSection(bodyId, chevId) {
 
 // ─── DOWNLOADS ───────────────────────────────────────────────────────────────
 function formatBriefingText(b) {
-  const allSections = [...(b.shift === 'Day' ? MORNING_CHECKLIST : NIGHT_CHECKLIST), ...SA_CSA, ...GENERAL];
+  const allSections = b.shift === 'Day' ? MORNING_CHECKLIST : NIGHT_CHECKLIST;
   const totalChk = allSections.reduce((a, s) => a + s.items.length, 0);
   const doneChk = Object.values(b.checklist || {}).filter(Boolean).length;
   const allIssues = b.issues || [];
