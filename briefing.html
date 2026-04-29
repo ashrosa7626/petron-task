@@ -936,16 +936,21 @@ async function saveBriefing() {
 }
 
 // ─── DASHBOARD ───────────────────────────────────────────────────────────────
-async function renderDashboard() {
-  state.view = 'dashboard';
-  document.getElementById('topTitle').textContent = 'All Briefings';
-  document.getElementById('topShiftBadge').innerHTML = '';
-  document.getElementById('stepPills').innerHTML = '';
-  document.getElementById('progFill').style.width = '100%';
-  document.getElementById('bottomNav').style.display = 'none';
-  document.getElementById('mainContent').innerHTML = '<div class="empty-state">Loading briefings...</div>';
+function loadLocalBriefings() {
+  const result = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('pb_b_')) {
+        try { const b = JSON.parse(localStorage.getItem(k)); if (b && b.timestamp) result.push(b); } catch {}
+      }
+    }
+  } catch {}
+  return result.sort((a, b) => b.timestamp - a.timestamp);
+}
 
-  const allBriefings = await dbListAll('briefing:');
+function paintDashboard(allBriefings, syncing) {
+  if (state.view !== 'dashboard') return;
   allBriefingsCache = {};
   allBriefings.forEach(b => { if (b?.timestamp) allBriefingsCache[b.timestamp] = b; });
 
@@ -970,7 +975,6 @@ async function renderDashboard() {
         const date = new Date(b.timestamp).toLocaleDateString('en-MY', { weekday:'short', day:'numeric', month:'short', year:'numeric' });
         const time = new Date(b.timestamp).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
         const id = 'db' + b.timestamp;
-
         const allSections = b.shift === 'Day' ? MORNING_CHECKLIST : NIGHT_CHECKLIST;
         const totalChk = allSections.reduce((a, s) => a + s.items.length, 0);
         const doneChk  = Object.values(b.checklist || {}).filter(Boolean).length;
@@ -978,7 +982,6 @@ async function renderDashboard() {
           const ticked = sec.items.filter(item => b.checklist && b.checklist[sec.section + ':' + item]);
           return ticked.length ? { section: sec.section, ticked, total: sec.items.length } : null;
         }).filter(Boolean);
-
         const checklistHtml = tickedSections.map(sec => `
           <div style="margin-bottom:10px">
             <div style="font-size:0.72rem;font-weight:700;color:var(--p-amber);margin-bottom:5px">${escHtml(sec.section)} (${sec.ticked.length}/${sec.total})</div>
@@ -988,7 +991,6 @@ async function renderDashboard() {
                 <div>${escHtml(item)}</div>
               </div>`).join('')}
           </div>`).join('');
-
         return `<div class="db-card">
           <div class="db-card-hdr" onclick="toggleDbCard('${id}')">
             <div>
@@ -1053,11 +1055,14 @@ async function renderDashboard() {
         </div>`;
       }).join('');
 
+  const syncBadge = syncing
+    ? `<span style="font-size:0.72rem;color:var(--p-text3);display:inline-flex;align-items:center;gap:4px"><span class="spinner" style="width:10px;height:10px;border-width:2px"></span>syncing</span>`
+    : '';
   document.getElementById('mainContent').innerHTML = `
     <div class="flex-between mb-12" style="flex-wrap:wrap;gap:10px">
       <div>
         <div class="section-hd">Dashboard</div>
-        <div style="color:var(--p-text3);font-size:0.82rem">${branchFiltered.length} briefing(s) recorded</div>
+        <div style="color:var(--p-text3);font-size:0.82rem;display:flex;align-items:center;gap:8px">${branchFiltered.length} briefing(s) ${syncBadge}</div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;align-items:center">
         <button class="btn btn-ghost btn-sm" onclick="downloadRange('week')" title="Download this week's briefings">&#x2193; Week</button>
@@ -1069,6 +1074,33 @@ async function renderDashboard() {
     ${cards}`;
 }
 
+async function renderDashboard() {
+  state.view = 'dashboard';
+  document.getElementById('topTitle').textContent = 'All Briefings';
+  document.getElementById('topShiftBadge').innerHTML = '';
+  document.getElementById('stepPills').innerHTML = '';
+  document.getElementById('progFill').style.width = '100%';
+  document.getElementById('bottomNav').style.display = 'none';
+
+  // Paint from localStorage immediately — zero network wait
+  const local = loadLocalBriefings();
+  if (local.length > 0) {
+    paintDashboard(local, true);
+  } else {
+    document.getElementById('mainContent').innerHTML =
+      '<div class="empty-state" style="padding-top:40px"><div class="spinner" style="margin:0 auto 12px"></div>Loading briefings...</div>';
+  }
+
+  // Fetch from Supabase in background; repaint only if there are new records
+  const allBriefings = await dbListAll('briefing:');
+  if (allBriefings.length !== local.length) {
+    paintDashboard(allBriefings, false);
+  } else {
+    // Same count — just remove the syncing badge
+    paintDashboard(allBriefings, false);
+  }
+}
+
 function toggleDbCard(id) {
   const body = document.getElementById(id);
   const chev = document.getElementById('chev-' + id);
@@ -1076,7 +1108,7 @@ function toggleDbCard(id) {
   body.classList.toggle('open');
   if (chev) chev.innerHTML = body.classList.contains('open') ? '&#x25B2;' : '&#x25BC;';
 }
-function setDbFilter(f) { dbFilter = f; renderDashboard(); }
+function setDbFilter(f) { dbFilter = f; paintDashboard(Object.values(allBriefingsCache), false); }
 function toggleChkSection(bodyId, chevId) {
   const body = document.getElementById(bodyId);
   const chev = document.getElementById(chevId);
