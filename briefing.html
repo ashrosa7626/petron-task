@@ -199,6 +199,21 @@ async function dbList(prefix) {
   } catch { return []; }
 }
 async function dbListAll(prefix, limit = null) {
+  const merged = {};
+
+  // Load local backups first (instant, always available)
+  if (prefix === 'briefing:') {
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('pb_b_')) {
+          try { const b = JSON.parse(localStorage.getItem(k)); if (b && b.timestamp) merged[b.timestamp] = b; } catch {}
+        }
+      }
+    } catch {}
+  }
+
+  // Merge from Supabase (adds briefings from other devices not in localStorage)
   try {
     let q = db.from('shift_briefings')
       .select('key,value')
@@ -207,33 +222,50 @@ async function dbListAll(prefix, limit = null) {
     if (limit) q = q.limit(limit);
     const { data, error } = await q;
     if (!error && data && data.length > 0) {
-      return data.map(r => {
-        try { return JSON.parse(r.value); } catch { return null; }
-      }).filter(Boolean);
+      data.forEach(r => {
+        try { const b = JSON.parse(r.value); if (b && b.timestamp && !merged[b.timestamp]) merged[b.timestamp] = b; } catch {}
+      });
+    } else {
+      const keys = await dbList(prefix);
+      const recent = limit ? keys.slice(-limit) : keys;
+      const results = await Promise.all(recent.map(k => dbGet(k)));
+      results.filter(Boolean).forEach(b => { if (b.timestamp && !merged[b.timestamp]) merged[b.timestamp] = b; });
     }
-    // Fallback: fetch individually (preserves access to all existing data)
-    const keys = await dbList(prefix);
-    const recent = limit ? keys.slice(-limit) : keys;
-    const results = await Promise.all(recent.map(k => dbGet(k)));
-    return results.filter(Boolean).sort((a, b) => b.timestamp - a.timestamp);
   } catch {
-    const keys = await dbList(prefix);
-    const recent = limit ? keys.slice(-limit) : keys;
-    const results = await Promise.all(recent.map(k => dbGet(k)));
-    return results.filter(Boolean).sort((a, b) => b.timestamp - a.timestamp);
+    try {
+      const keys = await dbList(prefix);
+      const recent = limit ? keys.slice(-limit) : keys;
+      const results = await Promise.all(recent.map(k => dbGet(k)));
+      results.filter(Boolean).forEach(b => { if (b.timestamp && !merged[b.timestamp]) merged[b.timestamp] = b; });
+    } catch {}
   }
+
+  return Object.values(merged).sort((a, b) => b.timestamp - a.timestamp);
 }
 async function getStaffList() {
   try {
     const { data } = await db.from('shift_staff').select('name').order('name');
-    return data ? data.map(r => r.name) : [];
-  } catch { return []; }
+    if (data && data.length > 0) {
+      const names = data.map(r => r.name);
+      localStorage.setItem('pb_staff', JSON.stringify(names));
+      return names;
+    }
+  } catch {}
+  try { return JSON.parse(localStorage.getItem('pb_staff') || '[]'); } catch { return []; }
 }
 async function addStaffDb(name) {
   try { await db.from('shift_staff').upsert({ name }, { onConflict: 'name' }); } catch {}
+  try {
+    const list = JSON.parse(localStorage.getItem('pb_staff') || '[]');
+    if (!list.includes(name)) { list.push(name); list.sort(); localStorage.setItem('pb_staff', JSON.stringify(list)); }
+  } catch {}
 }
 async function removeStaffDb(name) {
   try { await db.from('shift_staff').delete().eq('name', name); } catch {}
+  try {
+    const list = JSON.parse(localStorage.getItem('pb_staff') || '[]');
+    localStorage.setItem('pb_staff', JSON.stringify(list.filter(n => n !== name)));
+  } catch {}
 }
 
 // ─── CHECKLIST DATA ──────────────────────────────────────────────────────────
@@ -838,10 +870,24 @@ async function saveBriefing() {
     photos: state.photos.map(p => ({ id: p.id, src: p.src, name: p.name }))
   };
   data.branch = localStorage.getItem('selectedBranch') || 'Safari';
-  await dbSet('briefing:' + ts, data);
+
+  // Save locally first — guaranteed, even if Supabase fails
+  try {
+    localStorage.setItem('pb_b_' + ts, JSON.stringify(data));
+  } catch {
+    try { localStorage.setItem('pb_b_' + ts, JSON.stringify({ ...data, photos: [] })); } catch {}
+  }
+
+  // Save to Supabase (sync across devices)
+  try {
+    await dbSet('briefing:' + ts, data);
+  } catch(e) {
+    console.error('Supabase save failed; briefing kept in local storage', e);
+  }
+
   state.carriedIssues = await loadAllUnresolvedIssues();
   showLoading(false);
-  showToast('Briefing saved successfully!');
+  showToast('Briefing saved!');
   setTimeout(() => renderDashboard(), 900);
 }
 
@@ -996,8 +1042,8 @@ function toggleChkSection(bodyId, chevId) {
   if (chev) chev.innerHTML = isOpen ? 'Show &#x25BC;' : 'Hide &#x25B2;';
 }
 
-// ─── DOWNLOADS ───────────────────────────────────────────────────────────────
-function formatBriefingText(b) {
+// ─── DOWNLOADS (PDF) ─────────────────────────────────────────────────────────
+function briefingBodyHtml(b) {
   const allSections = b.shift === 'Day' ? MORNING_CHECKLIST : NIGHT_CHECKLIST;
   const totalChk = allSections.reduce((a, s) => a + s.items.length, 0);
   const doneChk = Object.values(b.checklist || {}).filter(Boolean).length;
@@ -1005,67 +1051,76 @@ function formatBriefingText(b) {
   const unresolved = allIssues.filter(i => i.resolved !== true).length;
   const date = new Date(b.timestamp).toLocaleDateString('en-MY', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
   const time = new Date(b.timestamp).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
-  const LINE = '='.repeat(50);
-  const DASH = '-'.repeat(50);
-  let t = LINE + '\n';
-  t += '          PETRON SHIFT BRIEFING REPORT\n';
-  t += LINE + '\n';
-  t += `Branch  : ${b.branch || 'Safari'}\n`;
-  t += `Shift   : ${b.shift} Shift\n`;
-  t += `Date    : ${date}\n`;
-  t += `Time    : ${time}\n`;
-  t += DASH + '\n\n';
-  t += `ATTENDANCE (${(b.attendance||[]).length} staff)\n`;
-  t += (b.attendance||[]).length ? b.attendance.join(', ') : 'None';
-  t += '\n\n';
-  t += `CHECKLIST: ${doneChk}/${totalChk} items covered\n`;
-  allSections.forEach(sec => {
-    const ticked = sec.items.filter(item => b.checklist && b.checklist[sec.section + ':' + item]);
-    if (ticked.length) {
-      t += `\n  ${sec.section} (${ticked.length}/${sec.items.length})\n`;
-      ticked.forEach(item => { t += `    [OK] ${item}\n`; });
-    }
-  });
-  t += '\n';
-  if (b.adhoc) { t += 'AD-HOC NOTES\n' + b.adhoc + '\n\n'; }
-  if (allIssues.length) {
-    t += `ISSUES (${allIssues.length} total, ${unresolved} unresolved)\n`;
-    allIssues.forEach(i => {
-      t += `  [${i.resolved === true ? 'RESOLVED' : 'UNRESOLVED'}] ${i.text}\n`;
-      if (i.update) t += `    Update: ${i.update}\n`;
-      if (i.isCarried) t += '    (Carried forward from previous shift)\n';
-    });
-    t += '\n';
-  }
-  if ((b.feedback||[]).length) {
-    t += `FEEDBACK (${b.feedback.length} entries)\n`;
-    b.feedback.forEach(f => { t += `  ${f.name}: ${f.comment}\n`; });
-    t += '\n';
-  }
-  if (b.remarks) { t += `CLOSING REMARKS\n"${b.remarks}"\n\n`; }
-  t += `Photos: ${(b.photos||[]).length} attached (view in app)\n`;
-  t += LINE + '\n';
-  return t;
+  const sec = (title, content) => `<div style="margin-bottom:14px;border:1px solid #e5e7eb;border-radius:8px;padding:14px"><div style="font-size:12px;font-weight:700;color:#d97706;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:10px">${title}</div>${content}</div>`;
+  const tag = (txt, bg, col) => `<span style="display:inline-block;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700;background:${bg};color:${col};margin:2px">${txt}</span>`;
+
+  const attendanceHtml = sec(
+    `Attendance (${(b.attendance||[]).length} Staff)`,
+    (b.attendance||[]).length
+      ? `<div style="display:flex;flex-wrap:wrap;gap:5px">${b.attendance.map(n => tag(escHtml(n),'#dbeafe','#1e40af')).join('')}</div>`
+      : '<span style="color:#9ca3af;font-size:12px">None recorded</span>'
+  );
+
+  const checklistContent = allSections.map(s => {
+    const ticked = s.items.filter(item => b.checklist && b.checklist[s.section + ':' + item]);
+    if (!ticked.length) return '';
+    return `<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:700;color:#92400e;background:#fffbeb;padding:3px 8px;border-radius:4px;margin-bottom:5px">${escHtml(s.section)} (${ticked.length}/${s.items.length})</div>${ticked.map(item => `<div style="font-size:12px;padding:2px 0 2px 6px;border-bottom:1px solid #f3f4f6;color:#374151"><span style="color:#059669;font-weight:700">&#10003;</span> ${escHtml(item)}</div>`).join('')}</div>`;
+  }).join('') || '<span style="color:#9ca3af;font-size:12px">No items ticked</span>';
+
+  const issuesHtml = allIssues.length ? sec(
+    `Issues (${allIssues.length} Total, ${unresolved} Unresolved)`,
+    allIssues.map(i => `<div style="padding:8px;border-left:3px solid ${i.resolved===true?'#10b981':i.isCarried?'#ef4444':'#f59e0b'};background:${i.resolved===true?'#f0fdf4':i.isCarried?'#fef2f2':'#fffbeb'};margin-bottom:7px;border-radius:0 4px 4px 0"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:${i.resolved===true?'#059669':'#dc2626'}">${i.resolved===true?'&#10003; RESOLVED':'&#10007; UNRESOLVED'}${i.isCarried?' &middot; CARRIED FORWARD':''}</div><div style="font-size:12px;margin-top:3px;color:#111">${escHtml(i.text)}</div>${i.update?`<div style="font-size:11px;color:#6b7280;margin-top:3px">Update: ${escHtml(i.update)}</div>`:''}</div>`).join('')
+  ) : '';
+
+  const feedbackHtml = (b.feedback||[]).length ? sec(
+    `Feedback (${b.feedback.length} Entries)`,
+    b.feedback.map(f => `<div style="padding:5px 10px;background:#f8fafc;border-radius:4px;margin-bottom:5px;font-size:12px"><strong style="color:#92400e">${escHtml(f.name)}:</strong> ${escHtml(f.comment)}</div>`).join('')
+  ) : '';
+
+  const remarksHtml = b.remarks ? sec(
+    'Closing Remarks',
+    `<div style="background:#f0f4ff;border-left:4px solid #6366f1;padding:10px 14px;border-radius:0 6px 6px 0;font-style:italic;color:#4338ca;font-size:13px">"${escHtml(b.remarks)}"</div>`
+  ) : '';
+
+  const photosHtml = (b.photos||[]).length ? sec(
+    `Photos (${b.photos.length})`,
+    `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:6px">${b.photos.map(p=>`<img src="${p.src}" alt="${escHtml(p.name||'')}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:5px">`).join('')}</div>`
+  ) : '';
+
+  const adhocHtml = b.adhoc ? sec('Ad-hoc Notes', `<div style="font-size:12px;color:#374151;line-height:1.7">${escHtml(b.adhoc).replace(/\n/g,'<br>')}</div>`) : '';
+
+  return `
+  <div style="background:#1e3a6e;color:white;padding:18px;border-radius:8px;margin-bottom:16px">
+    <div style="font-size:1.1rem;font-weight:800;border-bottom:2px solid rgba(255,255,255,0.25);padding-bottom:8px;margin-bottom:12px">PETRON SHIFT BRIEFING</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;font-size:12px">
+      <div style="background:rgba(255,255,255,0.1);padding:7px 10px;border-radius:4px"><div style="font-size:9px;opacity:0.7;text-transform:uppercase;margin-bottom:2px">Branch</div>${escHtml(b.branch||'Safari')}</div>
+      <div style="background:rgba(255,255,255,0.1);padding:7px 10px;border-radius:4px"><div style="font-size:9px;opacity:0.7;text-transform:uppercase;margin-bottom:2px">Shift</div>${escHtml(b.shift)} Shift</div>
+      <div style="background:rgba(255,255,255,0.1);padding:7px 10px;border-radius:4px"><div style="font-size:9px;opacity:0.7;text-transform:uppercase;margin-bottom:2px">Date</div>${date}</div>
+      <div style="background:rgba(255,255,255,0.1);padding:7px 10px;border-radius:4px"><div style="font-size:9px;opacity:0.7;text-transform:uppercase;margin-bottom:2px">Time</div>${time}</div>
+    </div>
+  </div>
+  ${attendanceHtml}
+  ${sec(`Checklist (${doneChk}/${totalChk} Items Covered)`, checklistContent)}
+  ${adhocHtml}${issuesHtml}${feedbackHtml}${remarksHtml}${photosHtml}
+  <div style="margin-top:16px;padding-top:10px;border-top:1px solid #e5e7eb;font-size:10px;color:#9ca3af;text-align:center">Generated by Petron Task Management System &middot; ${new Date().toLocaleDateString('en-MY',{day:'numeric',month:'long',year:'numeric'})}</div>`;
 }
 
-function triggerDownload(text, filename) {
-  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+function openPrintWin(html, docTitle) {
+  const w = window.open('', '_blank');
+  if (!w) { showToast('Allow popups to save as PDF', true); return false; }
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${escHtml(docTitle)}</title><style>body{font-family:Arial,sans-serif;margin:20px;color:#111;font-size:13px}@media print{body{margin:0}.no-print{display:none}}</style></head><body>${html}</body></html>`);
+  w.document.close();
+  w.focus();
+  setTimeout(() => w.print(), 600);
+  return true;
 }
 
 function downloadBriefing(ts) {
   const b = allBriefingsCache[ts];
   if (!b) { showToast('Briefing data not found', true); return; }
-  const dateStr = new Date(b.timestamp).toISOString().split('T')[0];
-  triggerDownload(formatBriefingText(b), `briefing-${b.shift.toLowerCase()}-${dateStr}.txt`);
-  showToast('Briefing downloaded!');
+  const dateStr = new Date(b.timestamp).toLocaleDateString('en-MY', { day:'numeric', month:'short', year:'numeric' });
+  const title = `Petron Briefing - ${b.shift} Shift - ${dateStr}`;
+  if (openPrintWin(briefingBodyHtml(b), title)) showToast('Opening PDF — use Save as PDF in the print dialog');
 }
 
 function downloadRange(period) {
@@ -1090,23 +1145,10 @@ function downloadRange(period) {
 
   if (!inRange.length) { showToast('No briefings found for ' + rangeLabel, true); return; }
 
-  const LINE = '='.repeat(50);
-  let text = LINE + '\n';
-  text += `  PETRON BRIEFING HISTORY - ${rangeLabel.toUpperCase()}\n`;
-  text += `  Branch: ${currentBranch}\n`;
-  text += `  Generated: ${now.toLocaleDateString('en-MY', { day:'numeric', month:'long', year:'numeric' })}\n`;
-  text += LINE + '\n';
-  text += `Total briefings: ${inRange.length}\n\n`;
-  inRange.forEach((b, i) => {
-    text += `\n${'-'.repeat(50)}\nBRIEFING ${i + 1} of ${inRange.length}\n${'-'.repeat(50)}\n`;
-    text += formatBriefingText(b) + '\n';
-  });
+  const header = `<div style="background:#1e3a6e;color:white;padding:18px;border-radius:8px;margin-bottom:20px"><div style="font-size:1.1rem;font-weight:800;margin-bottom:6px">PETRON BRIEFING HISTORY</div><div style="font-size:13px;opacity:0.8">${escHtml(rangeLabel)} &middot; Branch: ${escHtml(currentBranch)} &middot; ${inRange.length} Briefing(s)</div></div>`;
+  const pages = inRange.map((b, i) => (i > 0 ? '<div style="page-break-before:always;margin-top:24px"></div>' : '') + briefingBodyHtml(b)).join('');
 
-  const tag = period === 'week'
-    ? 'week-' + startDate.toISOString().split('T')[0]
-    : now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
-  triggerDownload(text, `briefings-${tag}-${currentBranch.toLowerCase().replace(/\s+/g, '-')}.txt`);
-  showToast(`Downloaded ${inRange.length} briefing(s)!`);
+  if (openPrintWin(header + pages, `Petron Briefings - ${rangeLabel}`)) showToast(`Opening ${inRange.length} briefing(s) as PDF...`);
 }
 
 // ─── TOAST ───────────────────────────────────────────────────────────────────
