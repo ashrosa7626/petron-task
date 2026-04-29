@@ -164,6 +164,9 @@ function switchBranch(branch) {
   document.title = short + 'Briefing';
   const topTitle = document.getElementById('topTitle');
   if (topTitle) topTitle.innerHTML = '<span style="color:#3B82F6;">' + branch + '</span><span style="color:#E6EDF7;">Briefing</span>';
+  // Re-derive the branch-filtered staff list without re-fetching
+  state.staffList = deriveStaffList();
+  if (state.view === 'home') renderHome();
 }
 window.addEventListener('DOMContentLoaded', function() {
   const saved = localStorage.getItem('selectedBranch') || 'Safari';
@@ -243,63 +246,89 @@ async function dbListAll(prefix, limit = null) {
 
   return Object.values(merged).sort((a, b) => b.timestamp - a.timestamp);
 }
-async function saveStaffToDb(names) {
+// Staff stored as [{ name, branch }] in 'stafflist:all' key of shift_briefings
+async function saveStaffToDb(allStaff) {
+  localStorage.setItem('pb_staff_all', JSON.stringify(allStaff));
+  await dbSet('stafflist:all', { staff: allStaff, updated: Date.now() });
+}
+
+function deriveStaffList() {
   const branch = localStorage.getItem('selectedBranch') || 'Safari';
-  const sorted = [...names].sort();
-  localStorage.setItem('pb_staff', JSON.stringify(sorted));
-  // Store in shift_briefings under a special key — same table as briefings, always accessible
-  await dbSet('stafflist:' + branch, { names: sorted, branch, updated: Date.now() });
+  return state.allStaff
+    .filter(s => s.branch === branch || s.branch === 'Both')
+    .map(s => s.name);
 }
 
 async function getStaffList(briefingsFallback = []) {
   const branch = localStorage.getItem('selectedBranch') || 'Safari';
-  // 1. Try shift_staff table (may be RLS-blocked on anon key)
+  // 1. Try stafflist:all in shift_briefings (primary store)
   try {
-    const { data } = await db.from('shift_staff').select('*').order('name');
-    if (data && data.length > 0) {
-      const names = data.map(r => r.name).filter(Boolean);
-      if (names.length > 0) {
-        localStorage.setItem('pb_staff', JSON.stringify(names));
-        return names;
-      }
+    const saved = await dbGet('stafflist:all');
+    if (saved && Array.isArray(saved.staff) && saved.staff.length > 0) {
+      localStorage.setItem('pb_staff_all', JSON.stringify(saved.staff));
+      return saved.staff;
     }
   } catch {}
-  // 2. Try stafflist key in shift_briefings — same table as briefings, guaranteed accessible
+  // 2. Try localStorage pb_staff_all
   try {
-    const saved = await dbGet('stafflist:' + branch);
-    if (saved && Array.isArray(saved.names) && saved.names.length > 0) {
-      localStorage.setItem('pb_staff', JSON.stringify(saved.names));
-      return saved.names;
-    }
-  } catch {}
-  // 3. Try localStorage cache
-  try {
-    const cached = JSON.parse(localStorage.getItem('pb_staff') || '[]');
+    const cached = JSON.parse(localStorage.getItem('pb_staff_all') || '[]');
     if (cached.length > 0) return cached;
   } catch {}
-  // 4. Extract unique names from past briefing attendance records (recover "staff from before")
+  // 3. Migrate old per-branch stafflist keys (stafflist:Safari / stafflist:Nilai Desa Jati)
+  const migrated = [];
+  for (const br of ['Safari', 'Nilai Desa Jati']) {
+    try {
+      const old = await dbGet('stafflist:' + br);
+      if (old && Array.isArray(old.names)) {
+        old.names.forEach(n => { if (n && !migrated.find(s => s.name === n)) migrated.push({ name: n, branch: br }); });
+      }
+    } catch {}
+  }
+  if (migrated.length > 0) {
+    localStorage.setItem('pb_staff_all', JSON.stringify(migrated));
+    dbSet('stafflist:all', { staff: migrated, updated: Date.now() });
+    return migrated;
+  }
+  // 4. Try old pb_staff names-only cache
+  try {
+    const old = JSON.parse(localStorage.getItem('pb_staff') || '[]');
+    if (old.length > 0) {
+      const list = old.map(n => ({ name: n, branch }));
+      localStorage.setItem('pb_staff_all', JSON.stringify(list));
+      return list;
+    }
+  } catch {}
+  // 5. Extract unique names from past briefing attendance (recover staff from old briefings)
   if (briefingsFallback.length > 0) {
-    const names = new Set();
-    briefingsFallback.forEach(b => (b.attendance || []).forEach(n => { if (n) names.add(n); }));
-    if (names.size > 0) {
-      const list = [...names].sort();
-      localStorage.setItem('pb_staff', JSON.stringify(list));
-      // Persist recovered list so future loads don't need to re-scan briefings
-      dbSet('stafflist:' + branch, { names: list, branch, updated: Date.now() });
+    const byName = {};
+    briefingsFallback.forEach(b => {
+      const br = b.branch || branch;
+      (b.attendance || []).forEach(n => { if (n && !byName[n]) byName[n] = br; });
+    });
+    if (Object.keys(byName).length > 0) {
+      const list = Object.entries(byName).sort((a, b) => a[0].localeCompare(b[0])).map(([name, br]) => ({ name, branch: br }));
+      localStorage.setItem('pb_staff_all', JSON.stringify(list));
+      dbSet('stafflist:all', { staff: list, updated: Date.now() });
       return list;
     }
   }
   return [];
 }
-async function addStaffDb(name) {
-  // state.staffList is already updated by addStaff() before this is called
+async function addStaffDb(name, branch) {
   try { await db.from('shift_staff').upsert({ name }, { onConflict: 'name' }); } catch {}
-  await saveStaffToDb(state.staffList);
+  await saveStaffToDb(state.allStaff);
 }
 async function removeStaffDb(name) {
-  // state.staffList is already updated by removeStaff() before this is called
   try { await db.from('shift_staff').delete().eq('name', name); } catch {}
-  await saveStaffToDb(state.staffList);
+  await saveStaffToDb(state.allStaff);
+}
+async function updateStaffBranch(name, newBranch) {
+  const s = state.allStaff.find(s => s.name === name);
+  if (!s) return;
+  s.branch = newBranch;
+  state.staffList = deriveStaffList();
+  await saveStaffToDb(state.allStaff);
+  renderBriefing();
 }
 
 // ─── CHECKLIST DATA ──────────────────────────────────────────────────────────
@@ -430,7 +459,7 @@ let state = {
   attendance:[], checklist:{}, adhoc:'',
   issues:[], carriedIssues:[],
   feedback:[], remarks:'', photos:[],
-  staffList:[], showManage:false,
+  allStaff:[], staffList:[], showManage:false,
   motivLine:'', closingMotiv:''
 };
 let dbFilter = 'All';
@@ -465,10 +494,10 @@ function buildCarriedIssues(briefings) {
 async function init() {
   pruneOldLocal();
   renderHome();
-  // Load all briefings once — used for carried issues AND staff extraction fallback
   const allBriefings = await dbListAll('briefing:');
   state.carriedIssues = buildCarriedIssues(allBriefings);
-  state.staffList = await getStaffList(allBriefings);
+  state.allStaff = await getStaffList(allBriefings);
+  state.staffList = deriveStaffList();
   if (state.view === 'home') renderHome();
 }
 
@@ -490,10 +519,15 @@ function showLoading(show) {
 }
 
 // ─── HOME ────────────────────────────────────────────────────────────────────
+function todayStr() {
+  return new Date().toLocaleDateString('en-MY', { day:'numeric', month:'short', year:'numeric' });
+}
+
 function renderHome() {
   state.view = 'home';
   document.getElementById('topTitle').textContent = 'Shift Briefing';
-  document.getElementById('topShiftBadge').innerHTML = '';
+  document.getElementById('topShiftBadge').innerHTML =
+    `<span style="color:var(--p-text2);font-size:0.78rem;white-space:nowrap">${todayStr()}</span>`;
   document.getElementById('stepPills').innerHTML = '';
   document.getElementById('progFill').style.width = '0%';
   document.getElementById('bottomNav').style.display = 'none';
@@ -582,24 +616,41 @@ function renderBriefing() {
 
 // ── STEP 0: Attendance ───────────────────────────────────────────────────────
 function renderAttendance() {
+  const currentBranch = localStorage.getItem('selectedBranch') || 'Safari';
+  const otherBranch = currentBranch === 'Safari' ? 'Nilai Desa Jati' : 'Safari';
+
   const manageHtml = state.showManage ? `
     <div class="manage-panel">
-      <div style="color:var(--p-text2);font-size:0.82rem;font-weight:600;margin-bottom:10px">Add / Remove Staff</div>
-      <div class="flex mb-12">
-        <input class="inp" id="newStaffInput" placeholder="Staff name..." style="flex:1" onkeydown="if(event.key==='Enter')addStaff()">
+      <div style="color:var(--p-text2);font-size:0.82rem;font-weight:600;margin-bottom:10px">Manage Staff</div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        <input class="inp" id="newStaffInput" placeholder="Staff name..." style="flex:1;min-width:120px" onkeydown="if(event.key==='Enter')addStaff()">
+        <select class="inp" id="newStaffBranch" style="width:auto;flex-shrink:0">
+          <option value="${currentBranch}">${currentBranch}</option>
+          <option value="${otherBranch}">${otherBranch}</option>
+          <option value="Both">Both Branches</option>
+        </select>
         <button class="btn btn-primary btn-sm" onclick="addStaff()">+ Add</button>
       </div>
-      <div style="display:flex;flex-wrap:wrap;gap:8px">
-        ${state.staffList.map(n => `
-          <div style="background:var(--p-btn-sec);border:1px solid var(--p-border);border-radius:6px;padding:5px 10px;font-size:0.8rem;color:var(--p-text2);display:flex;align-items:center;gap:8px">
-            ${escHtml(n)}<span onclick="removeStaff(this)" data-name="${escHtml(n)}" style="color:var(--p-red);cursor:pointer;font-weight:700">x</span>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        ${state.allStaff.length === 0
+          ? '<span style="color:var(--p-text3);font-size:0.8rem">No staff yet.</span>'
+          : state.allStaff.map(s => `
+          <div style="background:var(--p-btn-sec);border:1px solid var(--p-border);border-radius:6px;padding:7px 10px;font-size:0.8rem;color:var(--p-text2);display:flex;align-items:center;gap:8px">
+            <span style="flex:1;font-weight:600">${escHtml(s.name)}</span>
+            <select onchange="updateStaffBranch('${escHtml(s.name)}',this.value)"
+              style="background:var(--p-bg);border:1px solid var(--p-border);border-radius:4px;color:var(--p-text2);padding:3px 6px;font-size:0.75rem;cursor:pointer;outline:none">
+              <option value="Safari" ${s.branch==='Safari'?'selected':''}>Safari</option>
+              <option value="Nilai Desa Jati" ${s.branch==='Nilai Desa Jati'?'selected':''}>Nilai</option>
+              <option value="Both" ${s.branch==='Both'?'selected':''}>Both</option>
+            </select>
+            <span onclick="removeStaff(this)" data-name="${escHtml(s.name)}"
+              style="color:var(--p-red);cursor:pointer;font-weight:700;padding:2px 4px">x</span>
           </div>`).join('')}
-        ${state.staffList.length === 0 ? '<span style="color:var(--p-text3);font-size:0.8rem">No staff yet.</span>' : ''}
       </div>
     </div>` : '';
 
   const staffRows = state.staffList.length === 0
-    ? '<div class="empty-state">No staff added yet.<br>Click Manage Staff List to add staff.</div>'
+    ? `<div class="empty-state">No staff for <strong style="color:var(--p-text)">${escHtml(currentBranch)}</strong> yet.<br>Open Manage Staff to add.</div>`
     : state.staffList.map(name => {
         const present = state.attendance.includes(name);
         const initials = name.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
@@ -612,9 +663,9 @@ function renderAttendance() {
 
   return `
     <div class="section-hd">Attendance</div>
-    <div class="section-sub">Tick staff who are present for this shift</div>
+    <div class="section-sub">Tap staff present · showing <strong style="color:var(--p-text)">${escHtml(currentBranch)}</strong></div>
     <div class="flex mb-12" style="flex-wrap:wrap;gap:8px">
-      <button class="btn btn-ghost btn-sm" onclick="toggleManage()">${state.showManage ? 'Close' : 'Manage Staff List'}</button>
+      <button class="btn btn-ghost btn-sm" onclick="toggleManage()">${state.showManage ? 'Close' : 'Manage Staff'}</button>
       <span class="badge badge-green">${state.attendance.length} Present</span>
     </div>
     ${manageHtml}${staffRows}`;
@@ -629,18 +680,19 @@ function toggleAttendance(el) {
 }
 function toggleManage() { state.showManage = !state.showManage; renderBriefing(); }
 async function addStaff() {
-  const inp = document.getElementById('newStaffInput');
-  const n = inp ? inp.value.trim() : '';
-  if (n && !state.staffList.includes(n)) {
-    state.staffList.push(n);
-    await addStaffDb(n);
-  }
+  const n = (document.getElementById('newStaffInput')?.value || '').trim();
+  const b = document.getElementById('newStaffBranch')?.value || (localStorage.getItem('selectedBranch') || 'Safari');
+  if (!n || state.allStaff.find(s => s.name === n)) { renderBriefing(); return; }
+  state.allStaff.push({ name: n, branch: b });
+  state.staffList = deriveStaffList();
+  await addStaffDb(n, b);
   renderBriefing();
 }
 async function removeStaff(el) {
   const name = el.dataset.name;
-  state.staffList = state.staffList.filter(n => n !== name);
+  state.allStaff = state.allStaff.filter(s => s.name !== name);
   state.attendance = state.attendance.filter(n => n !== name);
+  state.staffList = deriveStaffList();
   await removeStaffDb(name);
   renderBriefing();
 }
@@ -1077,7 +1129,8 @@ function paintDashboard(allBriefings, syncing) {
 async function renderDashboard() {
   state.view = 'dashboard';
   document.getElementById('topTitle').textContent = 'All Briefings';
-  document.getElementById('topShiftBadge').innerHTML = '';
+  document.getElementById('topShiftBadge').innerHTML =
+    `<span style="color:var(--p-text2);font-size:0.78rem;white-space:nowrap">${todayStr()}</span>`;
   document.getElementById('stepPills').innerHTML = '';
   document.getElementById('progFill').style.width = '100%';
   document.getElementById('bottomNav').style.display = 'none';
