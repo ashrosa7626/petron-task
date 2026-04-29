@@ -201,7 +201,7 @@ async function dbList(prefix) {
 async function dbListAll(prefix, limit = null) {
   const merged = {};
 
-  // Load local backups first (instant, always available)
+  // 1. Load local backups first (instant, always available)
   if (prefix === 'briefing:') {
     try {
       for (let i = 0; i < localStorage.length; i++) {
@@ -213,45 +213,64 @@ async function dbListAll(prefix, limit = null) {
     } catch {}
   }
 
-  // Merge from Supabase (adds briefings from other devices not in localStorage)
+  // 2. Fetch only keys from Supabase (lightweight — no value column)
+  //    Then individually fetch briefings whose keys are NOT yet in localStorage.
+  //    This avoids the huge-payload failure caused by fetching all base64 photos at once.
   try {
-    let q = db.from('shift_briefings')
-      .select('key,value')
-      .like('key', prefix + '%')
-      .order('key', { ascending: false });
-    if (limit) q = q.limit(limit);
-    const { data, error } = await q;
-    if (!error && data && data.length > 0) {
-      data.forEach(r => {
-        try { const b = JSON.parse(r.value); if (b && b.timestamp && !merged[b.timestamp]) merged[b.timestamp] = b; } catch {}
-      });
-    } else {
-      const keys = await dbList(prefix);
-      const recent = limit ? keys.slice(-limit) : keys;
-      const results = await Promise.all(recent.map(k => dbGet(k)));
-      results.filter(Boolean).forEach(b => { if (b.timestamp && !merged[b.timestamp]) merged[b.timestamp] = b; });
+    const allKeys = await dbList(prefix);
+    const keysToCheck = limit ? allKeys.slice(-limit) : allKeys;
+    const missing = keysToCheck.filter(k => {
+      const ts = parseInt(k.slice(prefix.length));
+      return !merged[ts];
+    });
+    if (missing.length > 0) {
+      // Fetch in small batches to stay within API limits
+      const BATCH = 8;
+      for (let i = 0; i < missing.length; i += BATCH) {
+        const results = await Promise.all(missing.slice(i, i + BATCH).map(k => dbGet(k)));
+        results.filter(Boolean).forEach(b => {
+          if (b && b.timestamp) {
+            merged[b.timestamp] = b;
+            // Cache to localStorage so next load is instant
+            try { localStorage.setItem('pb_b_' + b.timestamp, JSON.stringify(b)); } catch {
+              try { localStorage.setItem('pb_b_' + b.timestamp, JSON.stringify({ ...b, photos: [] })); } catch {}
+            }
+          }
+        });
+      }
     }
-  } catch {
-    try {
-      const keys = await dbList(prefix);
-      const recent = limit ? keys.slice(-limit) : keys;
-      const results = await Promise.all(recent.map(k => dbGet(k)));
-      results.filter(Boolean).forEach(b => { if (b.timestamp && !merged[b.timestamp]) merged[b.timestamp] = b; });
-    } catch {}
-  }
+  } catch {}
 
   return Object.values(merged).sort((a, b) => b.timestamp - a.timestamp);
 }
-async function getStaffList() {
+async function getStaffList(briefingsFallback = []) {
+  // 1. Try shift_staff table
   try {
-    const { data } = await db.from('shift_staff').select('name').order('name');
+    const { data } = await db.from('shift_staff').select('*').order('name');
     if (data && data.length > 0) {
-      const names = data.map(r => r.name);
-      localStorage.setItem('pb_staff', JSON.stringify(names));
-      return names;
+      const names = data.map(r => r.name).filter(Boolean);
+      if (names.length > 0) {
+        localStorage.setItem('pb_staff', JSON.stringify(names));
+        return names;
+      }
     }
   } catch {}
-  try { return JSON.parse(localStorage.getItem('pb_staff') || '[]'); } catch { return []; }
+  // 2. Try localStorage cache
+  try {
+    const cached = JSON.parse(localStorage.getItem('pb_staff') || '[]');
+    if (cached.length > 0) return cached;
+  } catch {}
+  // 3. Extract unique names from past briefing attendance records
+  if (briefingsFallback.length > 0) {
+    const names = new Set();
+    briefingsFallback.forEach(b => (b.attendance || []).forEach(n => { if (n) names.add(n); }));
+    if (names.size > 0) {
+      const list = [...names].sort();
+      localStorage.setItem('pb_staff', JSON.stringify(list));
+      return list;
+    }
+  }
+  return [];
 }
 async function addStaffDb(name) {
   try { await db.from('shift_staff').upsert({ name }, { onConflict: 'name' }); } catch {}
@@ -403,33 +422,43 @@ let dbFilter = 'All';
 let allBriefingsCache = {};
 
 // ─── INIT ────────────────────────────────────────────────────────────────────
+function pruneOldLocal() {
+  const cutoff = Date.now() - 14 * 24 * 60 * 60 * 1000; // 2 weeks
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('pb_b_')) {
+        const ts = parseInt(k.slice(5));
+        if (ts && ts < cutoff) localStorage.removeItem(k);
+      }
+    }
+  } catch {}
+}
+
+function buildCarriedIssues(briefings) {
+  const currentBranch = localStorage.getItem('selectedBranch') || 'Safari';
+  const issueMap = {};
+  for (const b of briefings.slice(0, 60)) {
+    if (b.branch && b.branch !== currentBranch) continue;
+    for (const issue of (b.issues || [])) {
+      if (!(issue.id in issueMap)) issueMap[issue.id] = { ...issue, carriedFrom: b.timestamp };
+    }
+  }
+  return Object.values(issueMap).filter(i => i.resolved !== true).map(i => ({ ...i, isCarried: true }));
+}
+
 async function init() {
-  renderHome(); // Show home immediately — no loading wait
-  const [staffList, issues] = await Promise.all([
-    getStaffList(),
-    loadAllUnresolvedIssues(),
-  ]);
-  state.staffList = staffList;
-  state.carriedIssues = issues;
-  if (state.view === 'home') renderHome(); // Refresh with carried issues + staff
+  pruneOldLocal();
+  renderHome();
+  // Load all briefings once — used for carried issues AND staff extraction fallback
+  const allBriefings = await dbListAll('briefing:');
+  state.carriedIssues = buildCarriedIssues(allBriefings);
+  state.staffList = await getStaffList(allBriefings);
+  if (state.view === 'home') renderHome();
 }
 
 async function loadAllUnresolvedIssues() {
-  const briefings = await dbListAll('briefing:', 60);
-  const issueMap = {};
-  const currentBranch = localStorage.getItem('selectedBranch') || 'Safari';
-  const sorted = [...briefings].sort((a, b) => b.timestamp - a.timestamp);
-  for (const b of sorted) {
-    if (b.branch && b.branch !== currentBranch) continue;
-    for (const issue of (b.issues || [])) {
-      if (!(issue.id in issueMap)) {
-        issueMap[issue.id] = { ...issue, carriedFrom: b.timestamp };
-      }
-    }
-  }
-  return Object.values(issueMap)
-    .filter(i => i.resolved !== true)
-    .map(i => ({ ...i, isCarried: true }));
+  return buildCarriedIssues(await dbListAll('briefing:', 60));
 }
 
 function showLoading(show) {
