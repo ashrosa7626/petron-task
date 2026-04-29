@@ -243,8 +243,17 @@ async function dbListAll(prefix, limit = null) {
 
   return Object.values(merged).sort((a, b) => b.timestamp - a.timestamp);
 }
+async function saveStaffToDb(names) {
+  const branch = localStorage.getItem('selectedBranch') || 'Safari';
+  const sorted = [...names].sort();
+  localStorage.setItem('pb_staff', JSON.stringify(sorted));
+  // Store in shift_briefings under a special key — same table as briefings, always accessible
+  await dbSet('stafflist:' + branch, { names: sorted, branch, updated: Date.now() });
+}
+
 async function getStaffList(briefingsFallback = []) {
-  // 1. Try shift_staff table
+  const branch = localStorage.getItem('selectedBranch') || 'Safari';
+  // 1. Try shift_staff table (may be RLS-blocked on anon key)
   try {
     const { data } = await db.from('shift_staff').select('*').order('name');
     if (data && data.length > 0) {
@@ -255,36 +264,42 @@ async function getStaffList(briefingsFallback = []) {
       }
     }
   } catch {}
-  // 2. Try localStorage cache
+  // 2. Try stafflist key in shift_briefings — same table as briefings, guaranteed accessible
+  try {
+    const saved = await dbGet('stafflist:' + branch);
+    if (saved && Array.isArray(saved.names) && saved.names.length > 0) {
+      localStorage.setItem('pb_staff', JSON.stringify(saved.names));
+      return saved.names;
+    }
+  } catch {}
+  // 3. Try localStorage cache
   try {
     const cached = JSON.parse(localStorage.getItem('pb_staff') || '[]');
     if (cached.length > 0) return cached;
   } catch {}
-  // 3. Extract unique names from past briefing attendance records
+  // 4. Extract unique names from past briefing attendance records (recover "staff from before")
   if (briefingsFallback.length > 0) {
     const names = new Set();
     briefingsFallback.forEach(b => (b.attendance || []).forEach(n => { if (n) names.add(n); }));
     if (names.size > 0) {
       const list = [...names].sort();
       localStorage.setItem('pb_staff', JSON.stringify(list));
+      // Persist recovered list so future loads don't need to re-scan briefings
+      dbSet('stafflist:' + branch, { names: list, branch, updated: Date.now() });
       return list;
     }
   }
   return [];
 }
 async function addStaffDb(name) {
+  // state.staffList is already updated by addStaff() before this is called
   try { await db.from('shift_staff').upsert({ name }, { onConflict: 'name' }); } catch {}
-  try {
-    const list = JSON.parse(localStorage.getItem('pb_staff') || '[]');
-    if (!list.includes(name)) { list.push(name); list.sort(); localStorage.setItem('pb_staff', JSON.stringify(list)); }
-  } catch {}
+  await saveStaffToDb(state.staffList);
 }
 async function removeStaffDb(name) {
+  // state.staffList is already updated by removeStaff() before this is called
   try { await db.from('shift_staff').delete().eq('name', name); } catch {}
-  try {
-    const list = JSON.parse(localStorage.getItem('pb_staff') || '[]');
-    localStorage.setItem('pb_staff', JSON.stringify(list.filter(n => n !== name)));
-  } catch {}
+  await saveStaffToDb(state.staffList);
 }
 
 // ─── CHECKLIST DATA ──────────────────────────────────────────────────────────
