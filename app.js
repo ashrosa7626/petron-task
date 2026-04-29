@@ -5,7 +5,14 @@ const { createClient } = supabase;
 const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 function today() {
-  return new Date().toISOString().split('T')[0];
+  // Use Malaysia time (UTC+8). The operational day starts at 7am MYT,
+  // so before 7am we return the previous date (night shift belongs to yesterday).
+  const myt = new Date(Date.now() + 8 * 60 * 60 * 1000); // shift to MYT
+  if (myt.getUTCHours() < 7) myt.setUTCDate(myt.getUTCDate() - 1);
+  const y = myt.getUTCFullYear();
+  const m = String(myt.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(myt.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
 function formatTime(isoString) {
