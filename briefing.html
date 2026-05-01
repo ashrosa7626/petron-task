@@ -205,38 +205,40 @@ async function dbListAll(prefix, limit = null) {
   const merged = {};
 
   // 1. Load local backups first (instant, always available)
+  //    Skip _photosStripped entries — Supabase has the full version with photos.
   if (prefix === 'briefing:') {
     try {
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
         if (k && k.startsWith('pb_b_')) {
-          try { const b = JSON.parse(localStorage.getItem(k)); if (b && b.timestamp) merged[b.timestamp] = b; } catch {}
+          try {
+            const b = JSON.parse(localStorage.getItem(k));
+            if (b && b.timestamp && !b._photosStripped) merged[b.timestamp] = b;
+          } catch {}
         }
       }
     } catch {}
   }
 
-  // 2. Fetch only keys from Supabase (lightweight — no value column)
-  //    Then individually fetch briefings whose keys are NOT yet in localStorage.
-  //    This avoids the huge-payload failure caused by fetching all base64 photos at once.
+  // 2. Fetch only keys from Supabase (lightweight — no value column), then
+  //    individually fetch briefings not yet in merged (missing entirely, or photos-stripped).
   try {
     const allKeys = await dbList(prefix);
     const keysToCheck = limit ? allKeys.slice(-limit) : allKeys;
     const missing = keysToCheck.filter(k => {
       const ts = parseInt(k.slice(prefix.length));
-      return !merged[ts];
+      return !merged[ts]; // not in merged = either new or had photos stripped
     });
     if (missing.length > 0) {
-      // Fetch in small batches to stay within API limits
       const BATCH = 8;
       for (let i = 0; i < missing.length; i += BATCH) {
         const results = await Promise.all(missing.slice(i, i + BATCH).map(k => dbGet(k)));
         results.filter(Boolean).forEach(b => {
           if (b && b.timestamp) {
             merged[b.timestamp] = b;
-            // Cache to localStorage so next load is instant
+            // Overwrite localStorage — Supabase version has full photos
             try { localStorage.setItem('pb_b_' + b.timestamp, JSON.stringify(b)); } catch {
-              try { localStorage.setItem('pb_b_' + b.timestamp, JSON.stringify({ ...b, photos: [] })); } catch {}
+              try { localStorage.setItem('pb_b_' + b.timestamp, JSON.stringify({ ...b, photos: [], _photosStripped: true })); } catch {}
             }
           }
         });
@@ -762,6 +764,14 @@ function renderAdhoc() {
 }
 
 // ── STEP 4: Issues ───────────────────────────────────────────────────────────
+// Shared handler — avoids passing booleans/large IDs as inline onclick args
+function btnSetResolved(btn) {
+  const id = Number(btn.dataset.id);
+  const val = btn.dataset.val === 'true';
+  if (btn.dataset.kind === 'carried') updateCarried(id, 'resolved', val);
+  else updateIssue(id, 'resolved', val);
+}
+
 function renderIssues() {
   const carriedHtml = state.carriedIssues.map(issue => `
     <div class="issue-card carried">
@@ -771,8 +781,10 @@ function renderIssues() {
       </div>
       <div class="issue-text">${escHtml(issue.text)}</div>
       <div class="flex mb-8" style="flex-wrap:wrap;gap:8px">
-        <button class="btn btn-sm btn-success ${issue.resolved === true ? 'active' : ''}" onclick="updateCarried(${issue.id},'resolved',true)">Resolved</button>
-        <button class="btn btn-sm btn-danger ${issue.resolved !== true ? 'active' : ''}" onclick="updateCarried(${issue.id},'resolved',false)">Not Resolved</button>
+        <button class="btn btn-sm btn-success ${issue.resolved === true ? 'active' : ''}"
+          data-kind="carried" data-id="${issue.id}" data-val="true" onclick="btnSetResolved(this)">Resolved</button>
+        <button class="btn btn-sm btn-danger ${issue.resolved !== true ? 'active' : ''}"
+          data-kind="carried" data-id="${issue.id}" data-val="false" onclick="btnSetResolved(this)">Not Resolved</button>
       </div>
       <textarea class="inp" rows="2" placeholder="Add update or notes..." oninput="updateCarried(${issue.id},'update',this.value)">${escHtml(issue.update || '')}</textarea>
     </div>`).join('');
@@ -784,8 +796,10 @@ function renderIssues() {
         <button onclick="removeIssue(${issue.id})" style="background:none;border:none;color:var(--p-red);cursor:pointer;font-size:1.1rem;padding:0;margin-left:10px">x</button>
       </div>
       <div class="flex mb-8" style="flex-wrap:wrap;gap:8px">
-        <button class="btn btn-sm btn-success ${issue.resolved === true ? 'active' : ''}" onclick="updateIssue(${issue.id},'resolved',true)">Resolved</button>
-        <button class="btn btn-sm btn-danger ${issue.resolved === false ? 'active' : ''}" onclick="updateIssue(${issue.id},'resolved',false)">Not Resolved</button>
+        <button class="btn btn-sm btn-success ${issue.resolved === true ? 'active' : ''}"
+          data-kind="new" data-id="${issue.id}" data-val="true" onclick="btnSetResolved(this)">Resolved</button>
+        <button class="btn btn-sm btn-danger ${issue.resolved === false ? 'active' : ''}"
+          data-kind="new" data-id="${issue.id}" data-val="false" onclick="btnSetResolved(this)">Not Resolved</button>
       </div>
       <textarea class="inp" rows="2" placeholder="Add update or notes..." oninput="updateIssue(${issue.id},'update',this.value)">${escHtml(issue.update || '')}</textarea>
     </div>`).join('');
@@ -971,7 +985,8 @@ async function saveBriefing() {
   try {
     localStorage.setItem('pb_b_' + ts, JSON.stringify(data));
   } catch {
-    try { localStorage.setItem('pb_b_' + ts, JSON.stringify({ ...data, photos: [] })); } catch {}
+    // Photos too large for localStorage — mark so Supabase version is fetched next load
+    try { localStorage.setItem('pb_b_' + ts, JSON.stringify({ ...data, photos: [], _photosStripped: true })); } catch {}
   }
 
   // Save to Supabase (sync across devices)
