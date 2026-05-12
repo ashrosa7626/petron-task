@@ -60,7 +60,7 @@
     .signoff-summary { display:flex;gap:8px;margin-bottom:24px; }
     .so-pill { flex:1;background:var(--p-card);border:1px solid var(--p-border);border-radius:var(--radius-sm);padding:12px 10px;text-align:center; }
     .so-pill__num { font-size:1.4rem;font-weight:700;font-family:var(--mono); }
-    .so-pill__lbl { font-size:0.68rem;color:var(--p-text3);text-transform:uppercase;letter-spacing:0.5px;margin-top:2px; }
+    .so-pill__lbl { font-size:0.78rem;color:var(--p-text3);text-transform:uppercase;letter-spacing:0.5px;margin-top:2px; }
     .so-pill.approved .so-pill__num { color:var(--p-green); }
     .so-pill.flagged  .so-pill__num { color:var(--p-red); }
     .so-pill.pending  .so-pill__num { color:var(--p-blue); }
@@ -97,9 +97,9 @@
     .ac-grp-bd.open { display:block; }
 
     /* ── Chevron & pill ───────────────────────── */
-    .chev { font-size:0.7rem;color:var(--p-text3);transition:transform 0.2s;margin-left:6px; }
+    .chev { font-size:0.78rem;color:var(--p-text3);transition:transform 0.2s;margin-left:6px; }
     .chev.open { transform:rotate(180deg); }
-    .cpill { font-size:0.72rem;font-family:var(--mono);padding:2px 8px;border-radius:99px;background:rgba(59,130,246,0.15);color:var(--p-blue);margin-right:4px; }
+    .cpill { font-size:0.80rem;font-family:var(--mono);padding:2px 8px;border-radius:99px;background:rgba(59,130,246,0.15);color:var(--p-blue);margin-right:4px; }
     .cpill.done { background:rgba(34,197,94,0.15);color:var(--p-green); }
 
     /* ── Mini task row ────────────────────────── */
@@ -110,11 +110,23 @@
     .mdot.done { background:var(--p-blue); }
     .mdot.approved { background:var(--p-green);box-shadow:0 0 0 2px rgba(34,197,94,0.2); }
     .mdot.flagged { background:var(--p-red); }
-    .sbadge { font-size:0.68rem;font-weight:600;padding:2px 8px;border-radius:99px;font-family:var(--mono); }
+    .sbadge { font-size:0.78rem;font-weight:600;padding:2px 8px;border-radius:99px;font-family:var(--mono); }
     .sbadge.approved { background:rgba(34,197,94,0.12);color:var(--p-green); }
     .sbadge.flagged  { background:rgba(255,77,79,0.15);color:var(--p-red); }
     .sbadge.pending  { background:rgba(59,130,246,0.12);color:var(--p-blue); }
     .badge--pending  { background:rgba(245,158,11,0.15) !important;color:var(--p-amber) !important; }
+
+    /* ── Day task list ─────────────────────────── */
+    .dtcat-hdr{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--p-card);border:1px solid var(--p-border);border-radius:var(--radius);margin-bottom:2px;cursor:pointer;user-select:none;transition:border-color 0.15s}
+    .dtcat-hdr:hover{border-color:var(--p-blue-lt)}
+    .dtcat-hdr.open{border-radius:var(--radius) var(--radius) 0 0;border-bottom-color:transparent}
+    .dtcat-nm{font-weight:700;font-size:0.95rem;color:var(--p-text)}
+    .dtcat-bd{display:none;border:1px solid var(--p-border);border-top:none;border-radius:0 0 var(--radius) var(--radius);margin-bottom:12px;overflow:hidden}
+    .dtcat-bd.open{display:block}
+    .dtrow{display:flex;align-items:center;gap:10px;padding:11px 16px;border-bottom:1px solid var(--p-border)}
+    .dtrow:last-child{border-bottom:none}
+    .dtrow-name{flex:1;font-size:0.92rem;color:var(--p-text)}
+    .dt-staff{font-size:0.78rem;font-weight:600;padding:3px 10px;border-radius:99px;background:rgba(59,130,246,0.12);color:var(--p-blue-lt);white-space:nowrap;flex-shrink:0}
 
     /* ── Buttons ──────────────────────────────── */
     .refresh-btn { position:fixed;bottom:90px;right:24px;width:52px;height:52px;border-radius:50%;background:var(--p-btn-sec);border:1px solid var(--p-border);color:var(--p-text);font-size:1.3rem;cursor:pointer;box-shadow:var(--shadow);transition:all 0.2s; }
@@ -181,7 +193,10 @@
       <div class="so-pill pending"><div class="so-pill__num" id="soPending">–</div><div class="so-pill__lbl">Awaiting Review</div></div>
     </div>
 
-    <div class="section-title">Staff Progress</div>
+    <div class="section-title">Tasks of the Day</div>
+    <div id="taskListRows"><div class="empty-state">Loading...</div></div>
+
+    <div class="section-title" style="margin-top:24px">Staff Completion Journey</div>
     <div id="staffRows"><div class="empty-state">Loading...</div></div>
   </div>
 </div>
@@ -278,7 +293,7 @@
       : '';
     return `<div class="mtask">
       <div class="${dotCls}"></div>
-      <div style="flex:1;font-size:0.85rem">${t.name}</div>
+      <div style="flex:1;font-size:0.92rem">${t.name}</div>
       ${t.done ? `<span class="text-sm text-muted">${formatTime(t.completed_at)}</span>` : '<span class="badge badge--pending" style="font-size:0.7rem">Pending</span>'}
       ${badge}
       ${t.photo_url ? `<a href="${t.photo_url}" target="_blank" class="btn btn--ghost btn--sm" style="padding:3px 7px;font-size:0.7rem">Photo</a>` : ''}
@@ -287,6 +302,7 @@
 
   async function loadDashboard() {
     document.getElementById('staffRows').innerHTML = '<div class="empty-state">Loading...</div>';
+    document.getElementById('taskListRows').innerHTML = '<div class="empty-state">Loading...</div>';
     const selectedDate = getSelectedDate();
 
     const { data: assignments, error } = await db
@@ -363,6 +379,8 @@
       });
     }
 
+    renderTaskList(assignments2);
+
     let totalDone=0, totalAll=0;
     const container = document.getElementById('staffRows');
     const entries = Object.entries(byStaff);
@@ -404,7 +422,7 @@
             const gd=grp.tasks.filter(t=>t.done).length;
             const gr=grp.tasks.map(t=>mtask(t)).join('');
             sc+=`<div class="ac-grp-hdr" onclick="tog('gb-${sid}-${gid}','gc-${sid}-${gid}')">
-              <span style="font-size:0.78rem;font-weight:600;color:var(--accent)">${grp.name}</span>
+              <span style="font-size:0.85rem;font-weight:600;color:var(--accent)">${grp.name}</span>
               <div style="display:flex;align-items:center">${pill(gd,grp.tasks.length)}<span class="chev" id="gc-${sid}-${gid}">▼</span></div>
             </div>
             <div class="ac-grp-bd" id="gb-${sid}-${gid}">${gr}</div>`;
@@ -412,7 +430,7 @@
           if(subid==='__none__') { subHtml+=sc; }
           else {
             subHtml+=`<div class="ac-sub-hdr" onclick="tog('sb-${sid}-${subid}','sc-${sid}-${subid}')">
-              <span style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted)">${sub.name||''}</span>
+              <span style="font-size:0.82rem;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted)">${sub.name||''}</span>
               <div style="display:flex;align-items:center">${pill(sd,subTasks.length)}<span class="chev" id="sc-${sid}-${subid}">▼</span></div>
             </div>
             <div class="ac-sub-bd" id="sb-${sid}-${subid}">${sc}</div>`;
@@ -421,7 +439,7 @@
         if(cid==='__none__') { tiered+=subHtml; }
         else {
           tiered+=`<div class="ac-cat-hdr" onclick="tog('cb-${sid}-${cid}','cc-${sid}-${cid}')">
-            <span style="font-size:0.88rem;font-weight:700;color:var(--text)">${cat.name}</span>
+            <span style="font-size:0.95rem;font-weight:700;color:var(--text)">${cat.name}</span>
             <div style="display:flex;align-items:center">${pill(cd,catTasks.length)}<span class="chev" id="cc-${sid}-${cid}">▼</span></div>
           </div>
           <div class="ac-cat-bd" id="cb-${sid}-${cid}">${subHtml}</div>`;
@@ -453,6 +471,69 @@
     document.getElementById('soApproved').textContent  = soApproved;
     document.getElementById('soFlagged').textContent   = soFlagged;
     document.getElementById('soPending').textContent   = soPending;
+  }
+
+  function togDt(cid) {
+    document.getElementById('dth-'+cid)?.classList.toggle('open');
+    document.getElementById('dtchev-'+cid)?.classList.toggle('open');
+    document.getElementById('dtb-'+cid)?.classList.toggle('open');
+  }
+
+  function renderTaskList(data) {
+    const container = document.getElementById('taskListRows');
+    if (!container) return;
+    if (!data || !data.length) { container.innerHTML = '<div class="empty-state">No tasks assigned.</div>'; return; }
+
+    const catMap = {};
+    for (const a of data) {
+      const comp = a.completions?.[0] || null;
+      const ss   = comp?.signoff_status || null;
+      const tpl  = a.task_templates;
+      const raw  = a.custom_task_name || '';
+      const isStock = a.is_adhoc && raw.startsWith('TOPUP:');
+      const name = isStock ? raw.split(':').slice(3).join(':') : (a.is_adhoc ? raw : (tpl?.name || 'Task'));
+      const cname  = isStock ? 'Stocks & Merchandise (Top-up)' : (tpl?.categories?.name || 'Other');
+      const corder = isStock ? 2 : (tpl?.categories?.sort_order ?? 99);
+      if (!catMap[cname]) catMap[cname] = { order: corder, tasks: [] };
+      catMap[cname].tasks.push({
+        name, staffName: a.users?.name || 'Unknown',
+        done: !!comp, completedAt: comp?.completed_at, signoffStatus: ss
+      });
+    }
+
+    const sorted = Object.entries(catMap).sort((a,b) => a[1].order - b[1].order);
+    container.innerHTML = sorted.map(([cname, cat], ci) => {
+      const done  = cat.tasks.filter(t => t.done).length;
+      const total = cat.tasks.length;
+      const pillCls = (done === total && total > 0) ? 'cpill done' : 'cpill';
+      const cid = 'dtc' + ci;
+      const rows = cat.tasks.map(t => {
+        const dotCls = !t.done ? 'mdot'
+          : t.signoffStatus === 'approved' ? 'mdot approved'
+          : t.signoffStatus === 'flagged'  ? 'mdot flagged'
+          : 'mdot done';
+        const soBadge = t.done
+          ? (t.signoffStatus === 'approved' ? '<span class="sbadge approved">Approved</span>'
+            : t.signoffStatus === 'flagged'  ? '<span class="sbadge flagged">Flagged</span>'
+            : '<span class="sbadge pending">Awaiting</span>')
+          : '<span class="sbadge" style="background:rgba(245,158,11,0.12);color:#F59E0B">Pending</span>';
+        return `<div class="dtrow">
+          <div class="${dotCls}"></div>
+          <div class="dtrow-name">${t.name}</div>
+          <span class="dt-staff">${t.staffName}</span>
+          ${t.done ? `<span style="font-size:0.78rem;color:var(--p-text3)">${formatTime(t.completedAt)}</span>` : ''}
+          ${soBadge}
+        </div>`;
+      }).join('');
+      return `<div class="dtcat-hdr open" id="dth-${cid}" onclick="togDt('${cid}')">
+        <span class="dtcat-nm">${cname}</span>
+        <div style="display:flex;align-items:center;gap:4px">
+          <span class="${pillCls}">${done}/${total}</span>
+          <span class="chev open" id="dtchev-${cid}">▼</span>
+        </div>
+      </div>
+      <div class="dtcat-bd open" id="dtb-${cid}">${rows}</div>`;
+    }).join('');
   }
 
   // Initialise date and load

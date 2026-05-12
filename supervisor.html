@@ -37,7 +37,7 @@
     }
     .completion-meta { flex: 1; min-width: 0; }
     .completion-task { font-weight: 700; font-size: 0.97rem; margin-bottom: 3px; }
-    .completion-info { font-size: 0.8rem; color: var(--muted); display: flex; gap: 10px; flex-wrap: wrap; }
+    .completion-info { font-size: 0.88rem; color: var(--muted); display: flex; gap: 10px; flex-wrap: wrap; }
 
     .photo-thumb {
       width: 100%; max-height: 220px; object-fit: cover;
@@ -94,26 +94,26 @@
     .ac-cat:last-child { border-bottom:none; }
     .ac-cat-header { display:flex;align-items:center;justify-content:space-between;padding:11px 16px;background:var(--surface2);cursor:pointer;user-select:none;transition:background 0.1s; }
     .ac-cat-header:hover,.ac-cat-header.open { background:var(--surface); }
-    .ac-cat-name { font-size:0.88rem;font-weight:700;color:var(--text); }
+    .ac-cat-name { font-size:0.95rem;font-weight:700;color:var(--text); }
     .ac-cat-body { display:none; }
     .ac-cat-body.open { display:block; }
     .ac-sub { border-bottom:1px solid var(--border); }
     .ac-sub:last-child { border-bottom:none; }
     .ac-sub-header { display:flex;align-items:center;justify-content:space-between;padding:8px 20px;background:var(--surface);cursor:pointer;user-select:none;border-left:3px solid var(--border); }
     .ac-sub-header:hover { background:var(--surface2); }
-    .ac-sub-name { font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted); }
+    .ac-sub-name { font-size:0.82rem;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted); }
     .ac-sub-body { display:none; }
     .ac-sub-body.open { display:block; }
     .ac-grp { border-bottom:1px solid var(--border); }
     .ac-grp:last-child { border-bottom:none; }
     .ac-grp-header { display:flex;align-items:center;justify-content:space-between;padding:8px 28px;background:var(--surface2);cursor:pointer;user-select:none;border-left:3px solid var(--accent); }
     .ac-grp-header:hover { background:var(--surface); }
-    .ac-grp-name { font-size:0.78rem;font-weight:600;color:var(--accent); }
+    .ac-grp-name { font-size:0.85rem;font-weight:600;color:var(--accent); }
     .ac-grp-body { display:none; }
     .ac-grp-body.open { display:block; }
     .ac-chev { font-size:0.7rem;color:var(--muted);transition:transform 0.2s;margin-left:6px; }
     .ac-chev.open { transform:rotate(180deg); }
-    .count-pill { font-size:0.72rem;font-family:var(--mono);padding:2px 8px;border-radius:99px;background:rgba(79,138,255,0.15);color:var(--accent);margin-right:4px; }
+    .count-pill { font-size:0.80rem;font-family:var(--mono);padding:2px 8px;border-radius:99px;background:rgba(79,138,255,0.15);color:var(--accent);margin-right:4px; }
     .count-pill.done { background:rgba(34,197,94,0.15);color:var(--success); }
     .sup-staff-block { margin-bottom:12px; }
     .sup-staff-header { display:flex;align-items:center;gap:10px;padding:13px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;user-select:none;transition:border-color 0.15s; }
@@ -236,7 +236,7 @@ window.addEventListener('DOMContentLoaded', function() {
       <button class="filter-btn" onclick="setFilter('flagged', this)">Flagged</button>
     </div>
 
-    <div class="section-title" style="margin-bottom:14px">Completions for today</div>
+    <div class="section-title" style="margin-bottom:14px">Completions — Today &amp; Yesterday</div>
     <div id="completionList"><div class="empty-state">Loading...</div></div>
   </div>
 </div>
@@ -256,8 +256,7 @@ window.addEventListener('DOMContentLoaded', function() {
   let allCompletions = [];
   let activeFilter = 'all';
 
-  document.getElementById('dateLabel').textContent =
-    new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+  document.getElementById('dateLabel').textContent = 'Showing completions for today & yesterday';
 
   // Check existing session
   (async () => {
@@ -328,7 +327,27 @@ window.addEventListener('DOMContentLoaded', function() {
     window.location.reload();
   }
 
+  function yesterday() {
+    const myt = new Date(Date.now() + 8 * 60 * 60 * 1000);
+    if (myt.getUTCHours() < 7) myt.setUTCDate(myt.getUTCDate() - 1);
+    myt.setUTCDate(myt.getUTCDate() - 1);
+    const y = myt.getUTCFullYear();
+    const m = String(myt.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(myt.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  function operationalDate(isoStr) {
+    const myt = new Date(new Date(isoStr).getTime() + 8 * 60 * 60 * 1000);
+    if (myt.getUTCHours() < 7) myt.setUTCDate(myt.getUTCDate() - 1);
+    const y = myt.getUTCFullYear();
+    const m = String(myt.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(myt.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
   async function loadCompletions() {
+    const utcCutoff = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const { data, error } = await db
       .from('completions')
       .select(`
@@ -340,8 +359,7 @@ window.addEventListener('DOMContentLoaded', function() {
         ),
         sign_offs(id, status, notes, signed_at, supervisor_id)
       `)
-      .gte('completed_at', today() + 'T00:00:00')
-      .lte('completed_at', today() + 'T23:59:59')
+      .gte('completed_at', utcCutoff + 'T00:00:00')
       .order('completed_at', { ascending: false });
 
     if (error) {
@@ -383,6 +401,7 @@ window.addEventListener('DOMContentLoaded', function() {
         area: assign?.area || 'any',
         status: c.signoff_status || 'pending',
         signoffNotes: existingSignoff?.notes || '',
+        operationalDay: operationalDate(c.completed_at),
       };
     });
 
@@ -417,20 +436,9 @@ window.addEventListener('DOMContentLoaded', function() {
     document.getElementById(chevId)?.classList.toggle('open', opening);
   }
 
-  function renderCompletions() {
-    const list = document.getElementById('completionList');
-    const filtered = activeFilter === 'all'
-      ? allCompletions
-      : allCompletions.filter(c => c.status === activeFilter);
-
-    if (filtered.length === 0) {
-      list.innerHTML = `<div class="empty-state">No ${activeFilter === 'all' ? '' : activeFilter + ' '}completions yet.</div>`;
-      return;
-    }
-
-    // Group by staff → category → subcategory → subgroup → tasks
+  function buildStaffHtml(comps, pfx) {
     const staffMap = {};
-    for (const c of filtered) {
+    for (const c of comps) {
       const sname = c.staffName;
       if (!staffMap[sname]) staffMap[sname] = { initial: c.staffInitial, cats: {} };
       const cname = c.cat_name || 'Other';
@@ -444,21 +452,17 @@ window.addEventListener('DOMContentLoaded', function() {
         staffMap[sname].cats[cname].subs[subname].direct.push(c);
       }
     }
-
-    list.innerHTML = Object.entries(staffMap).map(([sname, sdata], si) => {
-      const sid = 'sup-s' + si;
+    return Object.entries(staffMap).map(([sname, sdata], si) => {
+      const sid = pfx + 'sup-s' + si;
       let catHtml = '';
       const sortedCats = Object.entries(sdata.cats).sort((a,b) => a[1].order - b[1].order);
-
       for (const [cname, cat] of sortedCats) {
         const cid = sid + '-c' + cname.replace(/\W/g,'');
         let subHtml = '';
         const sortedSubs = Object.entries(cat.subs).sort((a,b) => a[1].order - b[1].order);
-
         for (const [subname, sub] of sortedSubs) {
           const subid = cid + '-s' + subname.replace(/\W/g,'');
           let subContent = sub.direct.map(c => completionCard(c)).join('');
-
           for (const [grpname, grpItems] of Object.entries(sub.grps)) {
             const gid = subid + '-g' + grpname.replace(/\W/g,'');
             subContent += `
@@ -470,7 +474,6 @@ window.addEventListener('DOMContentLoaded', function() {
                 <div class="ac-grp-body" id="${gid}-body">${grpItems.map(c => completionCard(c)).join('')}</div>
               </div>`;
           }
-
           if (subname === '__none__') {
             subHtml += subContent;
           } else {
@@ -484,7 +487,6 @@ window.addEventListener('DOMContentLoaded', function() {
               </div>`;
           }
         }
-
         catHtml += `
           <div class="ac-cat">
             <div class="ac-cat-header" onclick="tog('${cid}-body','${cid}-chev')">
@@ -494,7 +496,6 @@ window.addEventListener('DOMContentLoaded', function() {
             <div class="ac-cat-body" id="${cid}-body">${subHtml}</div>
           </div>`;
       }
-
       return `
         <div class="sup-staff-block">
           <div class="sup-staff-header" id="${sid}-hdr" onclick="togBlock('${sid}-body','${sid}-hdr','${sid}-chev')">
@@ -504,6 +505,39 @@ window.addEventListener('DOMContentLoaded', function() {
           </div>
           <div class="sup-staff-body" id="${sid}-body">${catHtml}</div>
         </div>`;
+    }).join('');
+  }
+
+  function renderCompletions() {
+    const list = document.getElementById('completionList');
+    const todayDate = today();
+    const yesterdayDate = yesterday();
+
+    const baseFiltered = activeFilter === 'all'
+      ? allCompletions
+      : allCompletions.filter(c => c.status === activeFilter);
+    const filtered = baseFiltered.filter(c => c.operationalDay === todayDate || c.operationalDay === yesterdayDate);
+
+    if (filtered.length === 0) {
+      list.innerHTML = `<div class="empty-state">No ${activeFilter === 'all' ? '' : activeFilter + ' '}completions yet.</div>`;
+      return;
+    }
+
+    const dayGroups = [
+      { label: 'Today', date: todayDate },
+      { label: 'Yesterday', date: yesterdayDate },
+    ].map(g => ({ ...g, comps: filtered.filter(c => c.operationalDay === g.date) }))
+     .filter(g => g.comps.length > 0);
+
+    list.innerHTML = dayGroups.map(group => {
+      const pfx = group.date.replace(/-/g, '') + '-';
+      const d = new Date(group.date + 'T12:00:00');
+      const dStr = d.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' });
+      const staffHtml = buildStaffHtml(group.comps, pfx);
+      return `<div style="margin-bottom:28px">
+        <div style="font-size:0.88rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid var(--border)">${group.label} — ${dStr}</div>
+        ${staffHtml || '<div class="empty-state" style="padding:16px 0">No completions.</div>'}
+      </div>`;
     }).join('');
   }
 
