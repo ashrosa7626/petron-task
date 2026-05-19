@@ -498,18 +498,20 @@ window.addEventListener('DOMContentLoaded', function() {
         selectedTaskIds.add(tplId);
         taskAssignments[tplId] = s.id;
       }
-      // Restore stock items into s1 store using simple 'stock||Section' key
+      // Restore stock items at item-level keys so Step 2 dropdowns pre-populate
       if (!stockItems['s1']) stockItems['s1'] = {};
+      if (!stockItems['__assign__']) stockItems['__assign__'] = {};
       for (const sa of stockAssignments) {
         const parts   = sa.custom_task_name.split(':');
-        const section = parts[2] || 'Gondola'; // parts[2] is Gondola or Cafe
+        const section = parts[2] || 'Gondola';
         const item    = parts.slice(3).join(':');
         const key     = 'stock||' + section;
         if (!stockItems['s1'][key]) stockItems['s1'][key] = [];
-        if (item) stockItems['s1'][key].push(item);
-        // Also restore assign
-        if (!stockItems['__assign__']) stockItems['__assign__'] = {};
-        stockItems['__assign__'][key] = s.id;
+        if (item) {
+          const idx = stockItems['s1'][key].length;
+          stockItems['s1'][key].push(item);
+          stockItems['__assign__'][key + '||' + idx] = s.id;
+        }
       }
     }
 
