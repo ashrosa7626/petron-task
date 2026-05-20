@@ -484,6 +484,7 @@ window.addEventListener('DOMContentLoaded', function() {
     stockItems = {};
     selectedTaskIds = new Set();
     taskAssignments = {};
+    selectedAdhocTasks = [];
 
     for (const s of allStaff) {
       const mine = existing.filter(a => a.staff_id === s.id);
@@ -497,6 +498,10 @@ window.addEventListener('DOMContentLoaded', function() {
       for (const tplId of staffSelections[s.id].templateIds) {
         selectedTaskIds.add(tplId);
         taskAssignments[tplId] = s.id;
+      }
+      // Restore ad-hoc tasks into wizard array with assigned staffId
+      for (const a of realAdhoc) {
+        selectedAdhocTasks.push({ name: a.custom_task_name, photoRequired: true, staffId: s.id });
       }
       // Restore stock items at item-level keys so Step 2 dropdowns pre-populate
       if (!stockItems['s1']) stockItems['s1'] = {};

@@ -251,7 +251,16 @@ async function dbListAll(prefix, limit = null) {
 // Staff stored as [{ name, branch }] in 'stafflist:all' key of shift_briefings
 async function saveStaffToDb(allStaff) {
   localStorage.setItem('pb_staff_all', JSON.stringify(allStaff));
-  await dbSet('stafflist:all', { staff: allStaff, updated: Date.now() });
+  const val = JSON.stringify({ staff: allStaff, updated: Date.now() });
+  // Try upsert first; if it fails (e.g. no unique constraint), fall back to delete+insert
+  const { error: upsertErr } = await db.from('shift_briefings')
+    .upsert({ key: 'stafflist:all', value: val }, { onConflict: 'key' });
+  if (upsertErr) {
+    try {
+      await db.from('shift_briefings').delete().eq('key', 'stafflist:all');
+      await db.from('shift_briefings').insert({ key: 'stafflist:all', value: val });
+    } catch(e) { console.error('saveStaffToDb fallback failed', e); }
+  }
 }
 
 function deriveStaffList() {
@@ -263,12 +272,20 @@ function deriveStaffList() {
 
 async function getStaffList(briefingsFallback = []) {
   const branch = localStorage.getItem('selectedBranch') || 'Safari';
-  // 1. Try stafflist:all in shift_briefings (primary store)
+  // 1. Try stafflist:all in shift_briefings — fetch all rows to handle duplicates
   try {
-    const saved = await dbGet('stafflist:all');
-    if (saved && Array.isArray(saved.staff) && saved.staff.length > 0) {
-      localStorage.setItem('pb_staff_all', JSON.stringify(saved.staff));
-      return saved.staff;
+    const { data: rows } = await db.from('shift_briefings')
+      .select('value')
+      .eq('key', 'stafflist:all');
+    if (rows && rows.length > 0) {
+      const parsed = rows
+        .map(r => { try { return JSON.parse(r.value); } catch { return null; } })
+        .filter(p => p && Array.isArray(p.staff) && p.staff.length > 0)
+        .sort((a, b) => (b.updated || 0) - (a.updated || 0));
+      if (parsed.length > 0) {
+        localStorage.setItem('pb_staff_all', JSON.stringify(parsed[0].staff));
+        return parsed[0].staff;
+      }
     }
   } catch {}
   // 2. Try localStorage pb_staff_all
@@ -495,6 +512,14 @@ function buildCarriedIssues(briefings) {
 
 async function init() {
   pruneOldLocal();
+  // Load staff from localStorage immediately — no async wait
+  try {
+    const cached = JSON.parse(localStorage.getItem('pb_staff_all') || '[]');
+    if (cached.length > 0) {
+      state.allStaff = cached;
+      state.staffList = deriveStaffList();
+    }
+  } catch {}
   renderHome();
   const allBriefings = await dbListAll('briefing:');
   state.carriedIssues = buildCarriedIssues(allBriefings);
