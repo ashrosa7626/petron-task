@@ -933,8 +933,38 @@ function renderPhotos() {
       <div style="color:var(--p-text3);font-size:0.78rem;margin-top:4px">JPG, PNG, HEIC supported</div>
     </div>${grid}`;
 }
-function handlePhotos(e) {
-  Array.from(e.target.files).forEach(async file => {
+// Downscale image to maxDim px on longest side, return a JPEG Blob (quality 0.8).
+// Non-images and files already under 200 KB pass through unchanged.
+async function downscaleImage(file, maxDim = 1600, quality = 0.8) {
+  if (!file.type.startsWith('image/') || file.size < 200_000) return file;
+
+  const img = await new Promise((resolve, reject) => {
+    const i = new Image();
+    i.onload = () => resolve(i);
+    i.onerror = reject;
+    i.src = URL.createObjectURL(file);
+  });
+
+  let { width, height } = img;
+  if (width > maxDim || height > maxDim) {
+    const ratio = Math.min(maxDim / width, maxDim / height);
+    width  = Math.round(width  * ratio);
+    height = Math.round(height * ratio);
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width  = width;
+  canvas.height = height;
+  canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+  URL.revokeObjectURL(img.src);
+
+  return new Promise(resolve =>
+    canvas.toBlob(b => resolve(b || file), 'image/jpeg', quality)
+  );
+}
+
+async function handlePhotos(e) {
+  for (const file of Array.from(e.target.files)) {
     const scaled = await downscaleImage(file);
     const reader = new FileReader();
     reader.onload = ev => {
@@ -942,7 +972,7 @@ function handlePhotos(e) {
       renderBriefing();
     };
     reader.readAsDataURL(scaled);
-  });
+  }
   e.target.value = '';
 }
 function removePhoto(id) { state.photos = state.photos.filter(p => p.id !== id); renderBriefing(); }
