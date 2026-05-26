@@ -33,3 +33,33 @@ function setLoading(btnEl, loading) {
   btnEl.disabled = loading;
   btnEl.style.opacity = loading ? '0.6' : '1';
 }
+
+// Downscale image to maxDim px on longest side, return a JPEG Blob (quality 0.8).
+// Non-images and files already under 200 KB pass through unchanged.
+async function downscaleImage(file, maxDim = 1600, quality = 0.8) {
+  if (!file.type.startsWith('image/') || file.size < 200_000) return file;
+
+  const img = await new Promise((resolve, reject) => {
+    const i = new Image();
+    i.onload = () => resolve(i);
+    i.onerror = reject;
+    i.src = URL.createObjectURL(file);
+  });
+
+  let { width, height } = img;
+  if (width > maxDim || height > maxDim) {
+    const ratio = Math.min(maxDim / width, maxDim / height);
+    width  = Math.round(width  * ratio);
+    height = Math.round(height * ratio);
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width  = width;
+  canvas.height = height;
+  canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+  URL.revokeObjectURL(img.src);
+
+  return new Promise(resolve =>
+    canvas.toBlob(b => resolve(b || file), 'image/jpeg', quality)
+  );
+}

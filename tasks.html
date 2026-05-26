@@ -655,9 +655,10 @@
     if (!selectedFile || !currentAssignmentId) return;
     const btn = document.getElementById('confirmPhotoBtn');
     setLoading(btn, true);
-    const ext  = selectedFile.name.split('.').pop();
+    const fileToUpload = await downscaleImage(selectedFile);
+    const ext  = fileToUpload.type === 'image/jpeg' ? 'jpg' : selectedFile.name.split('.').pop();
     const path = `completions/${currentAssignmentId}_${Date.now()}.${ext}`;
-    const { error: ue } = await db.storage.from('task-photos').upload(path, selectedFile);
+    const { error: ue } = await db.storage.from('task-photos').upload(path, fileToUpload);
     if (ue) { showToast('Photo upload failed.', 'error'); setLoading(btn, false); return; }
     const { data: ud } = db.storage.from('task-photos').getPublicUrl(path);
     await markComplete(currentAssignmentId, ud?.publicUrl || path);
