@@ -89,13 +89,38 @@ Hosted on GitHub Pages: https://ashrosa7626.github.io/petron-task/
 - Inline boolean/large-int onclick args are unreliable — use data-* attributes + a named handler
 - Supabase batch select may silently return empty on some RLS configs — dbListAll uses keys-first approach
 
+## Supervisor Sign-off Page (supervisor.html)
+- Shows completions for **Today & Yesterday** (48h UTC window, grouped by MYT operational date)
+- `yesterday()` function: same 7am MYT rollover as `today()`, then subtract one more day
+- `operationalDate(isoStr)` converts any UTC ISO string to MYT operational date (used to group completions)
+- Fetch range: `gte(utcCutoff + 'T00:00:00')` where utcCutoff = 48h ago UTC date — no upper bound needed
+- `buildStaffHtml(comps, pfx)` renders staff accordions; `pfx` is date-derived (e.g. `20260519-`) to keep DOM IDs unique across day groups
+- `renderCompletions()` splits filtered completions into Today/Yesterday groups, renders each with a day header
+
+## Dashboard (dashboard.html)
+- **Tasks of the Day** section (`#taskListRows`) appears above Staff Completion Journey
+- `renderTaskList(data)` groups assignments by category, shows task name + assigned staff + done/pending status + signoff badge
+- `togDt(cid)` collapses/expands task categories; chevron flips on toggle
+- CSS classes: `.dtcat-hdr`, `.dtcat-nm`, `.dtcat-bd`, `.dtrow`, `.dtrow-name`, `.dt-staff`
+- `renderTaskList` reuses the same `assignments2` array already fetched — no extra DB query
+
+## Stock Assignment Memory (lead.html)
+- Stock item key format: `TOPUP:Stocks:{section}:{item}` (e.g. `TOPUP:Stocks:Gondola:Milo 3in1`)
+- Assignment key in `stockItems['__assign__']`: `stock||{section}||{itemIndex}` (e.g. `stock||Gondola||0`)
+- Restore loop in `loadAssignView()` must store at item-index level (`key + '||' + idx`) — section-level key never matches Step 2 lookup
+- Housekeeping uses template IDs (`taskAssignments[tplId]`) — completely separate code path, works correctly
+
 ## Recent Fixes (Apr–May 2026)
 - **lead.html**: dead `leadBranchLabel` reference caused tasks stuck on "Loading..."
+- **lead.html**: stock assignment restore used section-level key; fixed to item-index key (`stock||Gondola||0`) matching Step 2
 - **briefing.html dashboard**: instant load from localStorage, Supabase syncs in background
 - **briefing.html storage**: localStorage-first with Supabase fallback; _photosStripped flag ensures photos are recovered
 - **briefing.html staff**: per-branch staff list with branch selector on add and per-row branch editing
 - **briefing.html issues**: Resolved/Not Resolved use data-* + btnSetResolved() handler
 - **app.js today()**: rolls over at 7am MYT (UTC+8, hour < 7 → use previous date)
+- **supervisor.html**: two-day sign-off with operationalDate() grouping; unique accordion IDs via date prefix
+- **dashboard.html**: Tasks of the Day flat list above staff completion journey; font sizes bumped across all pages
+- **style.css**: base font bumped 16px → 17px; small labels bumped proportionally in briefing.html and dashboard.html
 
 ## Deployment
 - git add . → git commit -m "message" → git push

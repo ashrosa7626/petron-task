@@ -934,13 +934,14 @@ function renderPhotos() {
     </div>${grid}`;
 }
 function handlePhotos(e) {
-  Array.from(e.target.files).forEach(file => {
+  Array.from(e.target.files).forEach(async file => {
+    const scaled = await downscaleImage(file);
     const reader = new FileReader();
     reader.onload = ev => {
-      state.photos.push({ id: String(Date.now() + Math.random()), src: ev.target.result, name: file.name });
+      state.photos.push({ id: String(Date.now() + Math.random()), src: ev.target.result, file: scaled, name: file.name });
       renderBriefing();
     };
-    reader.readAsDataURL(file);
+    reader.readAsDataURL(scaled);
   });
   e.target.value = '';
 }
@@ -991,6 +992,20 @@ function prevStep() {
 async function saveBriefing() {
   showLoading(true);
   const ts = Date.now();
+
+  // Upload each new photo to storage and swap base64 src for a public URL
+  for (const photo of state.photos) {
+    if (photo.file && !photo.src.startsWith('http')) {
+      const path = `briefings/${ts}_${photo.id}.jpg`;
+      const { error } = await db.storage.from('task-photos').upload(path, photo.file);
+      if (!error) {
+        const { data: urlData } = db.storage.from('task-photos').getPublicUrl(path);
+        photo.src = urlData.publicUrl;
+      }
+    }
+    delete photo.file; // never serialise the Blob to JSON
+  }
+
   const data = {
     timestamp: ts, shift: state.shift,
     attendance: [...state.attendance],
