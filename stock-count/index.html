@@ -610,6 +610,7 @@ function paintMeta(version, branches, fellBack, derived, facings, maxPos, missin
   } else {
     chips.push(`<div class="chip go" id="chipStart">Start a count &rarr;</div>`);
     chips.push(`<div class="chip">read only</div>`);
+    if (frozenNote) chips.push(`<div class="chip warn">${esc(frozenNote)}</div>`);
     el('pgLabel').textContent = 'Cigarette Planogram';
   }
   chips.push(`<div class="chip"><b>${derived.productCount}</b> products</div>`);
@@ -695,8 +696,6 @@ function syncProduct(pid, exclude) {
       if (ad !== exclude) ad.value = l.add_in || 0;
       ad.classList.toggle('set', (l.add_in || 0) > 0);
     }
-    const nb = b.querySelector('.nosb');
-    if (nb) nb.textContent = l.nos ? 'NOS' : 'NOS';
   }
 }
 function syncAll() {
@@ -853,8 +852,30 @@ function logBlocks(derived, facings, maxPos, missingProd, overflowing) {
 }
 
 /* ============================= load ============================= */
+let frozenNote = '';
+
 async function load() {
   loadDraft();
+
+  // A stale session can point at a count that has since been submitted and
+  // frozen. Writing to it would fail at the very end of a ten minute count,
+  // so check first and fall back to read-only.
+  if (session) {
+    const { data, error } = await db.from('stock_count')
+      .select('count_id,status,title,count_date,staff_name')
+      .eq('count_id', session.count_id).limit(1);
+    const row = (data || [])[0];
+    if (!error && !row) {
+      frozenNote = 'That count no longer exists — showing the planogram read-only.';
+      readonly = true; session = null;
+    } else if (row && row.status !== 'draft') {
+      frozenNote = 'That count is already submitted and frozen.';
+      readonly = true;
+      localStorage.removeItem(draftKey());
+      localStorage.removeItem('cig_count');
+      session = null;
+    }
+  }
 
   const selected = (session && session.branch_name) ||
     localStorage.getItem('selectedBranch') || 'Safari';
