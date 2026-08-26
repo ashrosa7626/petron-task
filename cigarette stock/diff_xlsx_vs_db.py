@@ -263,8 +263,17 @@ lines += [
     "",
 ]
 
-with open("04_sync_to_spreadsheet.sql", "w") as fh:
-    fh.write("\n".join(lines))
+MIGRATION = "04_sync_to_spreadsheet.sql"
+has_changes = bool(missing_products or missing_alias or facing_diff)
+
+if has_changes:
+    with open(MIGRATION, "w") as fh:
+        fh.write("\n".join(lines))
+    print(f"\nwrote {MIGRATION}")
+else:
+    # Never overwrite an applied migration with an empty one — the file is the
+    # record of what was run. Once the database matches, there is nothing to write.
+    print(f"\ndatabase already matches the spreadsheet — {MIGRATION} left untouched")
 
 # The layout the page will read once the migration is applied, so the block
 # derivation can be checked before touching the database.
@@ -281,5 +290,6 @@ with open("expected_facings.json", "w") as fh:
 
 print()
 print("=" * 68)
-print("wrote 04_sync_to_spreadsheet.sql")
+print("IN SYNC — no migration needed" if not has_changes
+      else "ACTION NEEDED — run %s in the Supabase SQL editor" % MIGRATION)
 print("=" * 68)
