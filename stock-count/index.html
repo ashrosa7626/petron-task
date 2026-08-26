@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cigarette Planogram – Petron Tasks</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --p-bg:#0B0F1A; --p-card:#121826; --p-border:#1F2A44; --p-header:#0F1B3D;
+      --p-blue:#3B82F6; --p-blue-lt:#60A5FA; --p-green:#22C55E; --p-amber:#F59E0B;
+      --p-red:#FF4D4F; --p-orange:#F97316; --p-indigo:#6366F1;
+      --p-text:#E6EDF7; --p-text2:#94A3B8; --p-text3:#64748B;
+      --p-btn-sec:#1F2A44;
+      --font:'IBM Plex Sans',sans-serif; --mono:'IBM Plex Mono',monospace;
+      --radius:12px; --radius-sm:8px;
+      /* The planogram geometry. Column width is fixed; blocks span their facings. */
+      --col-w:76px; --row-h:96px; --gutter-w:46px; --gap:4px;
+    }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{background:var(--p-bg);color:var(--p-text);font-family:var(--font);min-height:100vh;font-size:17px}
+
+    .topbar{background:var(--p-header);border-bottom:1px solid var(--p-border);padding:0 20px;height:56px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100}
+    .topbar-title{font-size:1.1rem;font-weight:800;font-family:'Syne',sans-serif;flex:1;text-align:center}
+    .topbar-title .br{color:var(--p-blue-lt)}
+    .topbar a{color:var(--p-text2);text-decoration:none;font-size:0.85rem}
+    .topbar a:hover{color:var(--p-text)}
+    .topbar .spacer{min-width:110px}
+
+    .wrap{padding:18px 20px 60px}
+    .meta{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+    .chip{background:var(--p-card);border:1px solid var(--p-border);border-radius:99px;padding:5px 13px;font-size:0.8rem;color:var(--p-text2)}
+    .chip b{color:var(--p-text);font-weight:700}
+    .chip.warn{border-color:rgba(245,158,11,0.35);background:rgba(245,158,11,0.08);color:var(--p-amber)}
+
+    .status{padding:14px 16px;border-radius:var(--radius);background:var(--p-card);border:1px solid var(--p-border);color:var(--p-text2);font-size:0.9rem}
+    .status.err{border-color:rgba(255,77,79,0.35);background:rgba(255,77,79,0.08);color:var(--p-red)}
+
+    /* Horizontal scroll only. The 6 shelves fit vertically, so the page itself
+       never needs to scroll sideways — only this canvas does. */
+    .scroller{overflow-x:auto;overflow-y:hidden;padding-bottom:10px}
+    .grid{display:grid;gap:var(--gap);width:max-content;align-items:stretch}
+
+    .colnum{height:22px;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:0.72rem;color:var(--p-text3)}
+    .shelf{position:sticky;left:0;z-index:3;background:var(--p-bg);display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-weight:800;font-size:1rem;color:var(--p-text3);width:var(--gutter-w)}
+    .corner{position:sticky;left:0;z-index:4;background:var(--p-bg)}
+
+    /* A block is one connected region of one product's facings. */
+    .blk{position:relative;background:var(--p-card);border:1px solid var(--p-border);border-radius:var(--radius-sm);padding:11px 8px 8px;overflow:hidden;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;min-width:0}
+    .blk-brand{position:absolute;top:0;left:0;right:0;height:3px}
+    /* Type size is identical in a 1-column and a 5-column block. Wide blocks
+       get more whitespace, not bigger text. */
+    .blk-nm{font-size:12.5px;line-height:1.28;font-weight:600;color:var(--p-text);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;width:100%;word-break:break-word}
+    .blk-plu{font-family:var(--mono);font-size:10.5px;color:var(--p-text3);margin-top:4px;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .blk-pos{font-family:var(--mono);font-size:9.5px;color:var(--p-border);margin-top:3px}
+    /* A lone piece of a split product has to announce it is part of something
+       bigger, or it reads as fully counted. */
+    .blk-of{position:absolute;top:5px;right:6px;font-family:var(--mono);font-size:9px;font-weight:600;color:var(--p-amber);background:rgba(245,158,11,0.13);border:1px solid rgba(245,158,11,0.3);border-radius:99px;padding:1px 5px}
+    .blk.split{border-color:rgba(245,158,11,0.4)}
+    .blk.long .blk-nm{font-size:11.5px}
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="../index.html">&larr; Back</a>
+  <div class="topbar-title"><span class="br" id="brLabel">Safari</span> Cigarette Planogram</div>
+  <div class="spacer"></div>
+</div>
+
+<div class="wrap">
+  <div class="meta" id="meta"></div>
+  <div id="status" class="status">Loading planogram…</div>
+  <div class="scroller" id="scroller" hidden>
+    <div class="grid" id="grid"></div>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://vwffiuciogthfzekkkkz.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ3ZmZpdWNpb2d0aGZ6ZWtra2t6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4NzcwMTAsImV4cCI6MjA5MTQ1MzAxMH0.OTEyOMn1fmUNV7pR51KMOLsMTNAfytt62uGS_AkQXyw';
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const el = id => document.getElementById(id);
+const setStatus = (msg, isErr) => {
+  const s = el('status');
+  s.hidden = false; s.textContent = msg;
+  s.className = 'status' + (isErr ? ' err' : '');
+};
+
+/* ------------------------------------------------------------------
+   Block derivation.
+   Facings are grouped by product_id — never by shelf position — then
+   split into connected regions using 4-way adjacency. One product may
+   own several regions; they share one identity and, later, one input.
+   ------------------------------------------------------------------ */
+function deriveBlocks(facings, shelves) {
+  const rowOf = {};
+  shelves.forEach((s, i) => { rowOf[s] = i; });
+
+  const byProduct = new Map();
+  for (const f of facings) {
+    if (!byProduct.has(f.product_id)) byProduct.set(f.product_id, []);
+    byProduct.get(f.product_id).push([rowOf[f.shelf], f.position]);
+  }
+
+  const blocks = [];
+  const nonRect = [];
+
+  for (const [productId, cells] of byProduct) {
+    const key = (r, c) => r + ':' + c;
+    const grid = new Set(cells.map(([r, c]) => key(r, c)));
+    const seen = new Set();
+    const regions = [];
+
+    // Flood fill, 4-way. Sorted so region order is stable run to run.
+    const sorted = [...cells].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    for (const start of sorted) {
+      if (seen.has(key(start[0], start[1]))) continue;
+      const queue = [start];
+      const region = [];
+      seen.add(key(start[0], start[1]));
+      while (queue.length) {
+        const [r, c] = queue.pop();
+        region.push([r, c]);
+        for (const [nr, nc] of [[r + 1, c], [r - 1, c], [r, c + 1], [r, c - 1]]) {
+          if (grid.has(key(nr, nc)) && !seen.has(key(nr, nc))) {
+            seen.add(key(nr, nc));
+            queue.push([nr, nc]);
+          }
+        }
+      }
+      regions.push(region);
+    }
+
+    regions.forEach((region, i) => {
+      const rows = region.map(c => c[0]);
+      const cols = region.map(c => c[1]);
+      const minRow = Math.min(...rows), maxRow = Math.max(...rows);
+      const minCol = Math.min(...cols), maxCol = Math.max(...cols);
+      const h = maxRow - minRow + 1, w = maxCol - minCol + 1;
+
+      // A region that is not a solid rectangle cannot be drawn as its
+      // bounding box — the box would cover another product's facings.
+      // Fall back to one rectangle per contiguous run within each row.
+      if (h * w !== region.length) {
+        nonRect.push({ productId, cells: region.length, box: h + 'x' + w });
+        for (const rect of rowRuns(region)) {
+          blocks.push(makeBlock(productId, rect, i, regions.length, shelves, true));
+        }
+      } else {
+        blocks.push(makeBlock(productId, region, i, regions.length, shelves, false));
+      }
+    });
+  }
+
+  return { blocks, nonRect, productCount: byProduct.size };
+}
+
+// Split a region into maximal horizontal runs, one rectangle each.
+function rowRuns(region) {
+  const byRow = new Map();
+  for (const [r, c] of region) {
+    if (!byRow.has(r)) byRow.set(r, []);
+    byRow.get(r).push(c);
+  }
+  const runs = [];
+  for (const [r, cols] of byRow) {
+    cols.sort((a, b) => a - b);
+    let run = [[r, cols[0]]];
+    for (let i = 1; i < cols.length; i++) {
+      if (cols[i] === cols[i - 1] + 1) run.push([r, cols[i]]);
+      else { runs.push(run); run = [[r, cols[i]]]; }
+    }
+    runs.push(run);
+  }
+  return runs;
+}
+
+function makeBlock(productId, region, regionIndex, regionTotal, shelves, fragment) {
+  const rows = region.map(c => c[0]);
+  const cols = region.map(c => c[1]);
+  const minRow = Math.min(...rows), maxRow = Math.max(...rows);
+  const minCol = Math.min(...cols), maxCol = Math.max(...cols);
+  return {
+    productId,
+    row: minRow, col: minCol,
+    h: maxRow - minRow + 1,
+    w: maxCol - minCol + 1,
+    facings: region.length,
+    regionIndex, regionTotal, fragment,
+    // Human-readable footprint, e.g. "A1-5, B1-5"
+    label: [...new Set(rows)].sort((a, b) => a - b).map(r => {
+      const rc = region.filter(c => c[0] === r).map(c => c[1]).sort((a, b) => a - b);
+      return shelves[r] + (rc[0] === rc[rc.length - 1] ? rc[0] : rc[0] + '-' + rc[rc.length - 1]);
+    }).join(', ')
+  };
+}
+
+/* Stable colour per brand, derived from the name — no hard-coded brand list,
+   so a new brand in the data needs no code change. */
+function brandColour(brand) {
+  if (!brand) return 'var(--p-border)';
+  let h = 0;
+  for (let i = 0; i < brand.length; i++) h = (h * 31 + brand.charCodeAt(i)) % 360;
+  return `hsl(${h} 62% 55%)`;
+}
+
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+/* ------------------------------------------------------------------ */
+
+async function load() {
+  // Branch comes from the shared toggle used by the rest of the app.
+  const selected = localStorage.getItem('selectedBranch') || 'Safari';
+  el('brLabel').textContent = selected;
+
+  // RLS exposes only active planogram versions to the anon key, but filter
+  // explicitly so this does not depend on the policy staying that way.
+  const [verRes, brRes] = await Promise.all([
+    db.from('planogram_version').select('version_id,branch_id,effective_from,note').eq('status', 'active'),
+    db.from('branch').select('branch_id,name')
+  ]);
+  if (verRes.error) return setStatus('Could not read planogram_version: ' + verRes.error.message, true);
+
+  const versions = verRes.data || [];
+  if (!versions.length) return setStatus('No active planogram version found.', true);
+
+  const branches = brRes.data || [];
+  const norm = s => String(s || '').toLowerCase().replace(/[^a-z]/g, '');
+  const match = branches.find(b =>
+    norm(b.branch_id) === norm(selected) || norm(b.name).includes(norm(selected)));
+  let version = match && versions.find(v => v.branch_id === match.branch_id);
+
+  let fellBack = false;
+  if (!version) { version = versions[0]; fellBack = true; }
+
+  const [facRes, prodRes] = await Promise.all([
+    db.from('planogram_facing').select('shelf,position,product_id').eq('version_id', version.version_id),
+    db.from('product').select('product_id,short_name,plu,brand')
+  ]);
+  if (facRes.error) return setStatus('Could not read planogram_facing: ' + facRes.error.message, true);
+  if (prodRes.error) return setStatus('Could not read product: ' + prodRes.error.message, true);
+
+  const facings = facRes.data || [];
+  if (!facings.length) return setStatus('Active version ' + version.version_id + ' has no facings.', true);
+
+  const products = new Map((prodRes.data || []).map(p => [p.product_id, p]));
+  render(facings, products, version, branches, fellBack);
+}
+
+function render(facings, products, version, branches, fellBack) {
+  // Geometry comes from the data. Nothing about the shelf is hard-coded.
+  const shelves = [...new Set(facings.map(f => f.shelf))].sort();
+  const maxPos = Math.max(...facings.map(f => f.position));
+
+  const { blocks, nonRect, productCount } = deriveBlocks(facings, shelves);
+  blocks.sort((a, b) => a.row - b.row || a.col - b.col);
+
+  const grid = el('grid');
+  grid.style.gridTemplateColumns = `var(--gutter-w) repeat(${maxPos}, var(--col-w))`;
+  grid.style.gridTemplateRows = `22px repeat(${shelves.length}, var(--row-h))`;
+
+  let html = '<div class="corner"></div>';
+  for (let p = 1; p <= maxPos; p++) {
+    html += `<div class="colnum" style="grid-column:${p + 1};grid-row:1">${p}</div>`;
+  }
+  shelves.forEach((s, i) => {
+    html += `<div class="shelf" style="grid-column:1;grid-row:${i + 2}">${esc(s)}</div>`;
+  });
+
+  const missing = [];
+  const overflowing = [];
+  for (const b of blocks) {
+    const p = products.get(b.productId);
+    if (!p) missing.push(b.productId);
+    const name = p ? p.short_name : b.productId;
+    const plu = p ? p.plu : '';
+    if (name.length > 18) overflowing.push(name);
+
+    const split = b.regionTotal > 1;
+    const cls = 'blk' + (split ? ' split' : '') + (name.length > 18 ? ' long' : '');
+    const badge = split
+      ? `<div class="blk-of">${b.regionIndex + 1} of ${b.regionTotal}</div>` : '';
+
+    html += `<div class="${cls}" title="${esc(name)} · PLU ${esc(plu)} · ${esc(b.label)}"
+        style="grid-column:${b.col + 1} / span ${b.w};grid-row:${b.row + 2} / span ${b.h}">
+        <div class="blk-brand" style="background:${brandColour(p && p.brand)}"></div>
+        ${badge}
+        <div class="blk-nm">${esc(name)}</div>
+        <div class="blk-plu">${esc(plu)}</div>
+        <div class="blk-pos">${esc(b.label)}</div>
+      </div>`;
+  }
+  grid.innerHTML = html;
+
+  el('status').hidden = true;
+  el('scroller').hidden = false;
+
+  const branchName = (branches.find(b => b.branch_id === version.branch_id) || {}).name || version.branch_id;
+  const splitProducts = new Set(blocks.filter(b => b.regionTotal > 1).map(b => b.productId));
+  const chips = [
+    `<div class="chip"><b>${esc(branchName)}</b></div>`,
+    `<div class="chip">version <b>${version.version_id}</b></div>`,
+    `<div class="chip"><b>${productCount}</b> products</div>`,
+    `<div class="chip"><b>${facings.length}</b> facings</div>`,
+    `<div class="chip"><b>${blocks.length}</b> blocks</div>`,
+    `<div class="chip">${shelves.length} shelves &times; ${maxPos} positions</div>`
+  ];
+  if (splitProducts.size) chips.push(`<div class="chip warn"><b>${splitProducts.size}</b> split across blocks</div>`);
+  if (missing.length) chips.push(`<div class="chip warn"><b>${missing.length}</b> facings with no product row</div>`);
+  if (fellBack) chips.push(`<div class="chip warn">no active version for the selected branch &mdash; showing ${esc(branchName)}</div>`);
+  el('meta').innerHTML = chips.join('');
+
+  logBlocks(blocks, products, { version, shelves, maxPos, facings, productCount, nonRect, missing, overflowing, splitProducts });
+}
+
+function logBlocks(blocks, products, ctx) {
+  console.clear();
+  console.log('%cCigarette planogram — derived blocks',
+    'font-weight:700;font-size:13px;color:#60A5FA');
+  console.log(
+    `branch ${ctx.version.branch_id} · version ${ctx.version.version_id}` +
+    ` · ${ctx.shelves.join('')} × 1..${ctx.maxPos}` +
+    ` · ${ctx.productCount} products · ${ctx.facings.length} facings · ${blocks.length} blocks`
+  );
+
+  console.table(blocks.map(b => {
+    const p = products.get(b.productId) || {};
+    return {
+      product_id: b.productId,
+      short_name: p.short_name || '(no product row)',
+      plu: p.plu || '',
+      brand: p.brand || '',
+      at: b.label,
+      facings: b.facings,
+      w: b.w,
+      h: b.h,
+      block: b.regionTotal > 1 ? `${b.regionIndex + 1} of ${b.regionTotal}` : '1 of 1',
+      fragment: b.fragment || false
+    };
+  }));
+
+  // Facings and blocks must reconcile, or a region was dropped or double-drawn.
+  const drawn = blocks.reduce((n, b) => n + b.facings, 0);
+  console.log(drawn === ctx.facings.length
+    ? `%c✓ ${drawn} facings drawn, matches the ${ctx.facings.length} rows read`
+    : `%c✗ drew ${drawn} facings but read ${ctx.facings.length} — regions do not reconcile`,
+    'color:' + (drawn === ctx.facings.length ? '#22C55E' : '#FF4D4F'));
+
+  if (ctx.splitProducts.size) {
+    console.groupCollapsed(`%c${ctx.splitProducts.size} product(s) split across blocks`, 'color:#F59E0B');
+    for (const pid of ctx.splitProducts) {
+      const parts = blocks.filter(b => b.productId === pid);
+      const p = products.get(pid) || {};
+      console.log(`${p.short_name || pid} — ${parts.length} blocks: ${parts.map(b => b.label).join(' | ')}`);
+    }
+    console.groupEnd();
+  }
+
+  if (ctx.nonRect.length) {
+    console.warn('Non-rectangular regions, drawn as row runs instead of one rectangle:', ctx.nonRect);
+  }
+  if (ctx.missing.length) {
+    console.warn('Facings whose product_id has no row in product:', ctx.missing);
+  }
+  if (ctx.overflowing.length) {
+    console.warn(`short_name over 18 chars (will clamp in a narrow block): ${ctx.overflowing.length}`,
+      ctx.overflowing);
+  }
+
+  window.blocks = blocks;
+  console.log('%cwindow.blocks holds the derived blocks', 'color:#64748B');
+}
+
+load().catch(e => { console.error(e); setStatus('Failed to load: ' + e.message, true); });
+</script>
+
+<script src="../sidebar.js"></script>
+</body>
+</html>

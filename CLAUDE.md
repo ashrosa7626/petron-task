@@ -110,6 +110,60 @@ Hosted on GitHub Pages: https://ashrosa7626.github.io/petron-task/
 - Restore loop in `loadAssignView()` must store at item-index level (`key + '||' + idx`) — section-level key never matches Step 2 lookup
 - Housekeeping uses template IDs (`taskAssignments[tplId]`) — completely separate code path, works correctly
 
+## Cigarette Stock Count Module
+Daily physical count of the cigarette gondola (Safari: 6 shelves A–F × 27 positions,
+162 facings, 54 products). Spec and SQL live in `cigarette stock/` — `BRIEF.md`,
+`01_schema.sql`, `02_seed.sql`, `03_daily_count.sql`, `products_reference.csv`.
+Run the SQL in order 01 → 02 → 03. Counts are in **packs**; cartons are out of scope.
+
+Three rules that must never be broken:
+
+- **Counts key on `product_id` (the POS Item ID), never on shelf position.**
+  `stock_count_line` PK is `(count_id, product_id)`. Staff enter one number per
+  product — all facings of a product counted together — so 54 inputs, not 162.
+  Keying on shelf/position would mean re-merchandising the gondola silently
+  corrupts every historical count.
+- **`plu` is display-only and must never be used as a join key.**
+  It is shown to staff so they can verify the pack in hand, nothing more. The POS
+  export contains the same PLU with and without a leading zero on several lines,
+  so joining on it produces duplicate and missing rows. Join on `product_id`.
+- **The planogram layout comes from the database, never from code.**
+  Build the count grid from `planogram_facing` rows for the branch's `active`
+  `planogram_version`. Blocks are derived at runtime: group facings by product,
+  find connected regions (4-way adjacency), one rectangle per region. Never
+  hard-code shelves, positions, or block spans. Shelf changes are a data change
+  (spreadsheet upload → new `planogram_version`, old one archived, never edited in
+  place). If a change to the shelf requires a code change, the design is wrong.
+
+Supporting notes:
+- `product_alias` maps spreadsheet grid names → `product_id`; this is how the
+  importer resolves a cell. A cell with no alias must stop the import and ask for
+  the POS Item ID.
+- `count_date` is the **trading day being closed**, not the clock date. A count
+  taken just after midnight ending the 26th has `count_date = 26th`; its closing
+  becomes the 27th's opening. Never derive it from `now()` — default deliberately
+  and let staff correct it. The `title` field ("Cig Count of DD/MM/YYYY") is a
+  label only — never parse it for the date.
+- One count per branch per trading day (`stock_count_one_per_day`). A duplicate
+  tap must resume the existing draft, not error.
+- Split products are real, not hypothetical: LD Red (C21, C23, C25 — 3 blocks),
+  LD 100 Red (C22, C24 — 2 blocks), Marlboro Black (B18, C16 — 2 blocks,
+  diagonally offset and never visually adjacent). Each piece needs a "1 of 3"
+  marker, sibling highlighting with off-screen direction hints, and the progress
+  footer counts products (54), not blocks.
+- **Blind count** — never display the expected or previous quantity anywhere on
+  the count screen.
+- Drafts write every keystroke to localStorage and sync on submit; submit requires
+  all 54 products to have a number or a "not on shelf" tick, then sets
+  `status = 'submitted'` and RLS freezes the count. No delete path for a submitted
+  count.
+- `vw_daily_reconciliation` computes `sold_physical = opening + add_in − closing`
+  and the variance against `pos_sales_daily`. Excel/Power Query reads it directly
+  — do not rename its columns.
+- Open items: `short_name` values are drafts (nine exceed 18 chars); the POS daily
+  sales export format is unseen so `pos_sales_daily` has no loader; only Safari is
+  seeded — Nilai Desa Jati needs its own planogram version.
+
 ## Recent Fixes (Apr–May 2026)
 - **lead.html**: dead `leadBranchLabel` reference caused tasks stuck on "Loading..."
 - **lead.html**: stock assignment restore used section-level key; fixed to item-index key (`stock||Gondola||0`) matching Step 2
