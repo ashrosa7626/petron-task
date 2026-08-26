@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 
 const html = readFileSync(new URL('../stock-count/index.html', import.meta.url), 'utf8');
 const start = html.indexOf('function deriveBlocks');
-const end = html.indexOf('/* Stable colour per brand');
+const end = html.indexOf('function brandColour');
 if (start < 0 || end < 0) throw new Error('could not locate the derivation functions');
 const { deriveBlocks } = await import(
   'data:text/javascript,' + encodeURIComponent(html.slice(start, end) + '\nexport { deriveBlocks };')

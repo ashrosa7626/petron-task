@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Start Cigarette Count – Petron Tasks</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --p-bg:#0B0F1A; --p-card:#121826; --p-border:#1F2A44; --p-header:#0F1B3D;
+      --p-blue:#3B82F6; --p-blue-lt:#60A5FA; --p-green:#22C55E; --p-amber:#F59E0B;
+      --p-red:#FF4D4F; --p-orange:#F97316;
+      --p-text:#E6EDF7; --p-text2:#94A3B8; --p-text3:#64748B; --p-btn-sec:#1F2A44;
+      --font:'IBM Plex Sans',sans-serif; --mono:'IBM Plex Mono',monospace;
+      --radius:12px; --radius-sm:8px;
+    }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{background:var(--p-bg);color:var(--p-text);font-family:var(--font);min-height:100vh;font-size:17px}
+    .topbar{background:var(--p-header);border-bottom:1px solid var(--p-border);padding:0 20px;height:56px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100}
+    .topbar-title{font-size:1.1rem;font-weight:800;font-family:'Syne',sans-serif;flex:1;text-align:center}
+    .topbar-title .br{color:var(--p-blue-lt)}
+    .topbar a{color:var(--p-text2);text-decoration:none;font-size:0.85rem}
+    .topbar a:hover{color:var(--p-text)}
+    .spacer{min-width:70px}
+
+    .content{max-width:520px;margin:0 auto;padding:22px 16px 80px}
+    .card{background:var(--p-card);border:1px solid var(--p-border);border-radius:var(--radius);padding:18px;margin-bottom:14px}
+    .section-hd{font-size:1.3rem;font-weight:800;margin-bottom:4px}
+    .section-sub{font-size:0.95rem;color:var(--p-text3);margin-bottom:18px}
+    .fld{margin-bottom:16px}
+    .lbl{display:block;font-size:0.8rem;font-weight:700;color:var(--p-amber);text-transform:uppercase;letter-spacing:0.7px;margin-bottom:6px}
+    .hint{font-size:0.8rem;color:var(--p-text3);margin-top:6px;line-height:1.5}
+    .inp{width:100%;background:var(--p-btn-sec);border:1px solid var(--p-border);border-radius:var(--radius-sm);color:var(--p-text);padding:12px 14px;font-size:1rem;font-family:var(--font);outline:none}
+    .inp:focus{border-color:var(--p-blue)}
+    .inp[type=date]{font-family:var(--mono)}
+    .btn{width:100%;border:none;border-radius:var(--radius);padding:15px;font-family:var(--font);font-weight:800;font-size:1rem;cursor:pointer;background:linear-gradient(135deg,var(--p-orange),var(--p-amber));color:#0B0F1A}
+    .btn:disabled{opacity:0.5;cursor:default}
+    .btn.sec{background:var(--p-btn-sec);color:var(--p-text);margin-top:10px}
+
+    .note{border-radius:var(--radius-sm);padding:12px 14px;font-size:0.87rem;line-height:1.55;margin-bottom:14px}
+    .note.info{background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.3);color:var(--p-blue-lt)}
+    .note.warn{background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);color:var(--p-amber)}
+    .note.err{background:rgba(255,77,79,0.08);border:1px solid rgba(255,77,79,0.3);color:var(--p-red)}
+    .note.ok{background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.3);color:var(--p-green)}
+    .note b{font-weight:700}
+    [hidden]{display:none !important}
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="../index.html">&larr; Back</a>
+  <div class="topbar-title"><span class="br" id="brLabel">Safari</span> Cigarette Count</div>
+  <div class="spacer"></div>
+</div>
+
+<div class="content">
+  <div class="section-hd">Start a count</div>
+  <div class="section-sub">One count per branch per trading day.</div>
+
+  <div id="notes"></div>
+
+  <div class="card">
+    <div class="fld">
+      <label class="lbl" for="fTitle">Title</label>
+      <input class="inp" id="fTitle" type="text" autocomplete="off" placeholder="Cig Count of DD/MM/YYYY">
+      <div class="hint">A label only. The date below is the one the system trusts.</div>
+    </div>
+
+    <div class="fld">
+      <label class="lbl" for="fDate">Trading day being closed</label>
+      <input class="inp" id="fDate" type="date">
+      <div class="hint" id="dateHint"></div>
+    </div>
+
+    <div class="fld">
+      <label class="lbl" for="fStaff">Staff name</label>
+      <input class="inp" id="fStaff" type="text" autocomplete="off" placeholder="Who is counting">
+    </div>
+
+    <button class="btn" id="btnGo" disabled>Loading…</button>
+    <button class="btn sec" id="btnOpen" hidden>Open the planogram read-only</button>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://vwffiuciogthfzekkkkz.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ3ZmZpdWNpb2d0aGZ6ZWtra2t6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4NzcwMTAsImV4cCI6MjA5MTQ1MzAxMH0.OTEyOMn1fmUNV7pR51KMOLsMTNAfytt62uGS_AkQXyw';
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const el = id => document.getElementById(id);
+
+/* The trading day being closed — NOT the clock date.
+   The count is taken at the POS rollover just after midnight, so a count
+   made in the small hours of the 27th is closing the 26th. This is the same
+   7am MYT rollover app.js uses, which lands on exactly that day. It is only
+   a default: staff can correct it, and the field is what the system trusts. */
+function tradingDay() {
+  const myt = new Date(Date.now() + 8 * 60 * 60 * 1000);
+  if (myt.getUTCHours() < 7) myt.setUTCDate(myt.getUTCDate() - 1);
+  return myt.toISOString().slice(0, 10);
+}
+const ddmmyyyy = iso => {
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+};
+const defaultTitle = iso => 'Cig Count of ' + ddmmyyyy(iso);
+
+function note(kind, html) {
+  el('notes').insertAdjacentHTML('beforeend', `<div class="note ${kind}">${html}</div>`);
+}
+const clearNotes = () => { el('notes').innerHTML = ''; };
+
+let ctx = { branchId: null, branchName: '', versionId: null };
+let titleDirty = false;
+
+el('fTitle').addEventListener('input', () => { titleDirty = true; });
+el('fDate').addEventListener('input', () => {
+  const iso = el('fDate').value;
+  if (!iso) return;
+  if (!titleDirty) el('fTitle').value = defaultTitle(iso);
+  updateDateHint();
+  checkExisting();
+});
+
+function updateDateHint() {
+  const iso = el('fDate').value;
+  if (!iso) { el('dateHint').textContent = ''; return; }
+  const today = tradingDay();
+  let msg = 'Closing figures for this day become the opening for the next.';
+  if (iso === today) msg = 'Today&rsquo;s trading day. ' + msg;
+  else if (iso < today) msg = '<b>Back-dated.</b> ' + msg;
+  else msg = '<b>In the future.</b> Check this is the day you mean. ' + msg;
+  el('dateHint').innerHTML = msg;
+}
+
+async function init() {
+  const selected = localStorage.getItem('selectedBranch') || 'Safari';
+  el('brLabel').textContent = selected;
+
+  const iso = tradingDay();
+  el('fDate').value = iso;
+  el('fTitle').value = defaultTitle(iso);
+  el('fStaff').value = localStorage.getItem('cig_last_staff') || '';
+  updateDateHint();
+
+  const [verRes, brRes] = await Promise.all([
+    db.from('planogram_version').select('version_id,branch_id').eq('status', 'active'),
+    db.from('branch').select('branch_id,name')
+  ]);
+  if (verRes.error) return fail('Could not read planogram_version: ' + verRes.error.message);
+
+  const versions = verRes.data || [];
+  const branches = brRes.data || [];
+  const norm = s => String(s || '').toLowerCase().replace(/[^a-z]/g, '');
+  const match = branches.find(b => norm(b.branch_id) === norm(selected) || norm(b.name).includes(norm(selected)));
+  let version = match && versions.find(v => v.branch_id === match.branch_id);
+  if (!version) {
+    version = versions[0];
+    if (!version) return fail('No active planogram version. Seed one before counting.');
+    note('warn', `No active planogram for <b>${selected}</b> — using <b>${version.branch_id}</b>.`);
+  }
+  ctx.branchId = version.branch_id;
+  ctx.versionId = version.version_id;
+  ctx.branchName = (branches.find(b => b.branch_id === version.branch_id) || {}).name || version.branch_id;
+
+  el('btnGo').disabled = false;
+  el('btnGo').textContent = 'Start count';
+  await checkExisting();
+}
+
+function fail(msg) {
+  clearNotes();
+  note('err', msg);
+  el('btnGo').disabled = true;
+  el('btnGo').textContent = 'Unavailable';
+}
+
+/* One count per branch per trading day. Show what already exists for the
+   chosen date so a second tap resumes rather than surprises. */
+let existing = null;
+async function checkExisting() {
+  if (!ctx.branchId || !el('fDate').value) return;
+  clearNotes();
+  existing = null;
+  const { data, error } = await db.from('stock_count')
+    .select('count_id,status,staff_name,title,started_at,submitted_at')
+    .eq('branch_id', ctx.branchId).eq('count_date', el('fDate').value).limit(1);
+  if (error) { note('warn', 'Could not check for an existing count: ' + error.message); return; }
+
+  existing = (data || [])[0] || null;
+  el('btnOpen').hidden = true;
+  if (!existing) {
+    el('btnGo').textContent = 'Start count';
+    el('btnGo').disabled = false;
+    return;
+  }
+  if (existing.status === 'submitted') {
+    note('ok', `A count for <b>${ddmmyyyy(el('fDate').value)}</b> was already submitted by ` +
+      `<b>${escapeHtml(existing.staff_name)}</b>. Submitted counts are frozen and cannot be reopened.`);
+    el('btnGo').textContent = 'Already submitted';
+    el('btnGo').disabled = true;
+    el('btnOpen').hidden = false;
+  } else {
+    note('info', `A draft for <b>${ddmmyyyy(el('fDate').value)}</b> is already open ` +
+      `(started by <b>${escapeHtml(existing.staff_name)}</b>). You will pick up where it left off.`);
+    el('btnGo').textContent = 'Resume draft';
+    el('btnGo').disabled = false;
+  }
+}
+
+const escapeHtml = s => String(s == null ? '' : s)
+  .replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+el('btnOpen').addEventListener('click', () => { location.href = 'index.html?readonly=1'; });
+
+el('btnGo').addEventListener('click', async () => {
+  const date = el('fDate').value;
+  const staff = el('fStaff').value.trim();
+  const title = el('fTitle').value.trim() || defaultTitle(date);
+  if (!date) return note('err', 'Pick the trading day being closed.');
+  if (!staff) { el('fStaff').focus(); return note('err', 'Enter the staff name.'); }
+
+  el('btnGo').disabled = true;
+  el('btnGo').textContent = 'Working…';
+  localStorage.setItem('cig_last_staff', staff);
+
+  try {
+    const count = await openOrCreate(date, staff, title);
+    localStorage.setItem('cig_count', JSON.stringify({
+      count_id: count.count_id, branch_id: ctx.branchId, branch_name: ctx.branchName,
+      version_id: ctx.versionId, count_date: date, title: count.title, staff_name: count.staff_name
+    }));
+    location.href = 'index.html';
+  } catch (e) {
+    el('btnGo').disabled = false;
+    el('btnGo').textContent = 'Start count';
+    note('err', 'Could not start the count: ' + escapeHtml(e.message));
+  }
+});
+
+/* Resume beats create. The database enforces one count per branch per day,
+   so a duplicate tap is a normal outcome, not an error — if the insert trips
+   the unique constraint we simply read back the row that won. */
+async function openOrCreate(date, staff, title) {
+  if (existing && existing.status === 'draft') return existing;
+
+  const ins = await db.from('stock_count').insert({
+    branch_id: ctx.branchId, version_id: ctx.versionId, count_date: date,
+    title, staff_name: staff, status: 'draft'
+  }).select().single();
+
+  if (!ins.error) return ins.data;
+
+  // 23505 = unique violation: someone else created it between our check and insert.
+  const dup = ins.error.code === '23505' || /duplicate key|already exists/i.test(ins.error.message || '');
+  if (!dup) throw new Error(ins.error.message);
+
+  const { data, error } = await db.from('stock_count')
+    .select('count_id,status,staff_name,title')
+    .eq('branch_id', ctx.branchId).eq('count_date', date).limit(1);
+  if (error) throw new Error(error.message);
+  const row = (data || [])[0];
+  if (!row) throw new Error('The count exists but could not be read back.');
+  if (row.status === 'submitted') throw new Error('That day has already been submitted.');
+  return row;
+}
+
+init().catch(e => { console.error(e); fail('Failed to load: ' + e.message); });
+</script>
+
+<script src="../sidebar.js"></script>
+</body>
+</html>
