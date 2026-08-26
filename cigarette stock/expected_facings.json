@@ -1,0 +1,1086 @@
+{
+ "facings": [
+  {
+   "shelf": "A",
+   "position": 1,
+   "product_id": "103732"
+  },
+  {
+   "shelf": "A",
+   "position": 2,
+   "product_id": "103732"
+  },
+  {
+   "shelf": "A",
+   "position": 3,
+   "product_id": "103732"
+  },
+  {
+   "shelf": "A",
+   "position": 4,
+   "product_id": "103732"
+  },
+  {
+   "shelf": "A",
+   "position": 5,
+   "product_id": "103732"
+  },
+  {
+   "shelf": "A",
+   "position": 6,
+   "product_id": "104923"
+  },
+  {
+   "shelf": "A",
+   "position": 7,
+   "product_id": "104923"
+  },
+  {
+   "shelf": "A",
+   "position": 8,
+   "product_id": "104923"
+  },
+  {
+   "shelf": "A",
+   "position": 9,
+   "product_id": "104924"
+  },
+  {
+   "shelf": "A",
+   "position": 10,
+   "product_id": "104924"
+  },
+  {
+   "shelf": "A",
+   "position": 11,
+   "product_id": "105168"
+  },
+  {
+   "shelf": "A",
+   "position": 12,
+   "product_id": "105168"
+  },
+  {
+   "shelf": "A",
+   "position": 13,
+   "product_id": "105168"
+  },
+  {
+   "shelf": "A",
+   "position": 14,
+   "product_id": "105168"
+  },
+  {
+   "shelf": "A",
+   "position": 15,
+   "product_id": "105168"
+  },
+  {
+   "shelf": "A",
+   "position": 16,
+   "product_id": "100634"
+  },
+  {
+   "shelf": "A",
+   "position": 17,
+   "product_id": "100634"
+  },
+  {
+   "shelf": "A",
+   "position": 18,
+   "product_id": "100634"
+  },
+  {
+   "shelf": "A",
+   "position": 19,
+   "product_id": "100628"
+  },
+  {
+   "shelf": "A",
+   "position": 20,
+   "product_id": "100628"
+  },
+  {
+   "shelf": "A",
+   "position": 21,
+   "product_id": "100628"
+  },
+  {
+   "shelf": "A",
+   "position": 22,
+   "product_id": "100740"
+  },
+  {
+   "shelf": "A",
+   "position": 23,
+   "product_id": "100740"
+  },
+  {
+   "shelf": "A",
+   "position": 24,
+   "product_id": "100738"
+  },
+  {
+   "shelf": "A",
+   "position": 25,
+   "product_id": "100738"
+  },
+  {
+   "shelf": "A",
+   "position": 26,
+   "product_id": "100750"
+  },
+  {
+   "shelf": "A",
+   "position": 27,
+   "product_id": "100760"
+  },
+  {
+   "shelf": "B",
+   "position": 1,
+   "product_id": "103732"
+  },
+  {
+   "shelf": "B",
+   "position": 2,
+   "product_id": "103732"
+  },
+  {
+   "shelf": "B",
+   "position": 3,
+   "product_id": "103732"
+  },
+  {
+   "shelf": "B",
+   "position": 4,
+   "product_id": "103732"
+  },
+  {
+   "shelf": "B",
+   "position": 5,
+   "product_id": "103732"
+  },
+  {
+   "shelf": "B",
+   "position": 6,
+   "product_id": "104923"
+  },
+  {
+   "shelf": "B",
+   "position": 7,
+   "product_id": "104923"
+  },
+  {
+   "shelf": "B",
+   "position": 8,
+   "product_id": "104923"
+  },
+  {
+   "shelf": "B",
+   "position": 9,
+   "product_id": "104924"
+  },
+  {
+   "shelf": "B",
+   "position": 10,
+   "product_id": "104924"
+  },
+  {
+   "shelf": "B",
+   "position": 11,
+   "product_id": "105169"
+  },
+  {
+   "shelf": "B",
+   "position": 12,
+   "product_id": "105169"
+  },
+  {
+   "shelf": "B",
+   "position": 13,
+   "product_id": "105171"
+  },
+  {
+   "shelf": "B",
+   "position": 14,
+   "product_id": "105171"
+  },
+  {
+   "shelf": "B",
+   "position": 15,
+   "product_id": "105171"
+  },
+  {
+   "shelf": "B",
+   "position": 16,
+   "product_id": "100632"
+  },
+  {
+   "shelf": "B",
+   "position": 17,
+   "product_id": "100632"
+  },
+  {
+   "shelf": "B",
+   "position": 18,
+   "product_id": "100626"
+  },
+  {
+   "shelf": "B",
+   "position": 19,
+   "product_id": "100624"
+  },
+  {
+   "shelf": "B",
+   "position": 20,
+   "product_id": "100624"
+  },
+  {
+   "shelf": "B",
+   "position": 21,
+   "product_id": "100624"
+  },
+  {
+   "shelf": "B",
+   "position": 22,
+   "product_id": "100740"
+  },
+  {
+   "shelf": "B",
+   "position": 23,
+   "product_id": "100740"
+  },
+  {
+   "shelf": "B",
+   "position": 24,
+   "product_id": "100738"
+  },
+  {
+   "shelf": "B",
+   "position": 25,
+   "product_id": "100738"
+  },
+  {
+   "shelf": "B",
+   "position": 26,
+   "product_id": "100750"
+  },
+  {
+   "shelf": "B",
+   "position": 27,
+   "product_id": "100760"
+  },
+  {
+   "shelf": "C",
+   "position": 1,
+   "product_id": "104922"
+  },
+  {
+   "shelf": "C",
+   "position": 2,
+   "product_id": "104922"
+  },
+  {
+   "shelf": "C",
+   "position": 3,
+   "product_id": "104922"
+  },
+  {
+   "shelf": "C",
+   "position": 4,
+   "product_id": "104922"
+  },
+  {
+   "shelf": "C",
+   "position": 5,
+   "product_id": "104922"
+  },
+  {
+   "shelf": "C",
+   "position": 6,
+   "product_id": "104923"
+  },
+  {
+   "shelf": "C",
+   "position": 7,
+   "product_id": "104923"
+  },
+  {
+   "shelf": "C",
+   "position": 8,
+   "product_id": "104923"
+  },
+  {
+   "shelf": "C",
+   "position": 9,
+   "product_id": "104924"
+  },
+  {
+   "shelf": "C",
+   "position": 10,
+   "product_id": "104924"
+  },
+  {
+   "shelf": "C",
+   "position": 11,
+   "product_id": "105170"
+  },
+  {
+   "shelf": "C",
+   "position": 12,
+   "product_id": "105170"
+  },
+  {
+   "shelf": "C",
+   "position": 13,
+   "product_id": "105170"
+  },
+  {
+   "shelf": "C",
+   "position": 14,
+   "product_id": "105170"
+  },
+  {
+   "shelf": "C",
+   "position": 15,
+   "product_id": "105170"
+  },
+  {
+   "shelf": "C",
+   "position": 16,
+   "product_id": "100626"
+  },
+  {
+   "shelf": "C",
+   "position": 17,
+   "product_id": "100630"
+  },
+  {
+   "shelf": "C",
+   "position": 18,
+   "product_id": "100630"
+  },
+  {
+   "shelf": "C",
+   "position": 19,
+   "product_id": "106880"
+  },
+  {
+   "shelf": "C",
+   "position": 20,
+   "product_id": "106879"
+  },
+  {
+   "shelf": "C",
+   "position": 21,
+   "product_id": "100756"
+  },
+  {
+   "shelf": "C",
+   "position": 22,
+   "product_id": "107628"
+  },
+  {
+   "shelf": "C",
+   "position": 23,
+   "product_id": "100756"
+  },
+  {
+   "shelf": "C",
+   "position": 24,
+   "product_id": "107628"
+  },
+  {
+   "shelf": "C",
+   "position": 25,
+   "product_id": "100756"
+  },
+  {
+   "shelf": "C",
+   "position": 26,
+   "product_id": "100762"
+  },
+  {
+   "shelf": "C",
+   "position": 27,
+   "product_id": "104330"
+  },
+  {
+   "shelf": "D",
+   "position": 1,
+   "product_id": "100128"
+  },
+  {
+   "shelf": "D",
+   "position": 2,
+   "product_id": "100128"
+  },
+  {
+   "shelf": "D",
+   "position": 3,
+   "product_id": "100128"
+  },
+  {
+   "shelf": "D",
+   "position": 4,
+   "product_id": "100128"
+  },
+  {
+   "shelf": "D",
+   "position": 5,
+   "product_id": "100128"
+  },
+  {
+   "shelf": "D",
+   "position": 6,
+   "product_id": "100127"
+  },
+  {
+   "shelf": "D",
+   "position": 7,
+   "product_id": "100127"
+  },
+  {
+   "shelf": "D",
+   "position": 8,
+   "product_id": "100127"
+  },
+  {
+   "shelf": "D",
+   "position": 9,
+   "product_id": "100127"
+  },
+  {
+   "shelf": "D",
+   "position": 10,
+   "product_id": "100125"
+  },
+  {
+   "shelf": "D",
+   "position": 11,
+   "product_id": "100125"
+  },
+  {
+   "shelf": "D",
+   "position": 12,
+   "product_id": "100125"
+  },
+  {
+   "shelf": "D",
+   "position": 13,
+   "product_id": "100125"
+  },
+  {
+   "shelf": "D",
+   "position": 14,
+   "product_id": "100125"
+  },
+  {
+   "shelf": "D",
+   "position": 15,
+   "product_id": "100125"
+  },
+  {
+   "shelf": "D",
+   "position": 16,
+   "product_id": "100640"
+  },
+  {
+   "shelf": "D",
+   "position": 17,
+   "product_id": "100640"
+  },
+  {
+   "shelf": "D",
+   "position": 18,
+   "product_id": "100640"
+  },
+  {
+   "shelf": "D",
+   "position": 19,
+   "product_id": "100642"
+  },
+  {
+   "shelf": "D",
+   "position": 20,
+   "product_id": "100642"
+  },
+  {
+   "shelf": "D",
+   "position": 21,
+   "product_id": "100758"
+  },
+  {
+   "shelf": "D",
+   "position": 22,
+   "product_id": "100758"
+  },
+  {
+   "shelf": "D",
+   "position": 23,
+   "product_id": "100758"
+  },
+  {
+   "shelf": "D",
+   "position": 24,
+   "product_id": "100758"
+  },
+  {
+   "shelf": "D",
+   "position": 25,
+   "product_id": "100758"
+  },
+  {
+   "shelf": "D",
+   "position": 26,
+   "product_id": "100762"
+  },
+  {
+   "shelf": "D",
+   "position": 27,
+   "product_id": "104330"
+  },
+  {
+   "shelf": "E",
+   "position": 1,
+   "product_id": "100155"
+  },
+  {
+   "shelf": "E",
+   "position": 2,
+   "product_id": "100155"
+  },
+  {
+   "shelf": "E",
+   "position": 3,
+   "product_id": "100155"
+  },
+  {
+   "shelf": "E",
+   "position": 4,
+   "product_id": "100155"
+  },
+  {
+   "shelf": "E",
+   "position": 5,
+   "product_id": "100155"
+  },
+  {
+   "shelf": "E",
+   "position": 6,
+   "product_id": "100156"
+  },
+  {
+   "shelf": "E",
+   "position": 7,
+   "product_id": "100156"
+  },
+  {
+   "shelf": "E",
+   "position": 8,
+   "product_id": "104385"
+  },
+  {
+   "shelf": "E",
+   "position": 9,
+   "product_id": "104385"
+  },
+  {
+   "shelf": "E",
+   "position": 10,
+   "product_id": "104429"
+  },
+  {
+   "shelf": "E",
+   "position": 11,
+   "product_id": "104429"
+  },
+  {
+   "shelf": "E",
+   "position": 12,
+   "product_id": "104555"
+  },
+  {
+   "shelf": "E",
+   "position": 13,
+   "product_id": "103630"
+  },
+  {
+   "shelf": "E",
+   "position": 14,
+   "product_id": "103630"
+  },
+  {
+   "shelf": "E",
+   "position": 15,
+   "product_id": "103630"
+  },
+  {
+   "shelf": "E",
+   "position": 16,
+   "product_id": "103361"
+  },
+  {
+   "shelf": "E",
+   "position": 17,
+   "product_id": "100638"
+  },
+  {
+   "shelf": "E",
+   "position": 18,
+   "product_id": "100638"
+  },
+  {
+   "shelf": "E",
+   "position": 19,
+   "product_id": "103526"
+  },
+  {
+   "shelf": "E",
+   "position": 20,
+   "product_id": "103526"
+  },
+  {
+   "shelf": "E",
+   "position": 21,
+   "product_id": "100730"
+  },
+  {
+   "shelf": "E",
+   "position": 22,
+   "product_id": "100730"
+  },
+  {
+   "shelf": "E",
+   "position": 23,
+   "product_id": "100730"
+  },
+  {
+   "shelf": "E",
+   "position": 24,
+   "product_id": "100730"
+  },
+  {
+   "shelf": "E",
+   "position": 25,
+   "product_id": "100736"
+  },
+  {
+   "shelf": "E",
+   "position": 26,
+   "product_id": "107114"
+  },
+  {
+   "shelf": "E",
+   "position": 27,
+   "product_id": "100724"
+  },
+  {
+   "shelf": "F",
+   "position": 1,
+   "product_id": "100155"
+  },
+  {
+   "shelf": "F",
+   "position": 2,
+   "product_id": "100155"
+  },
+  {
+   "shelf": "F",
+   "position": 3,
+   "product_id": "100155"
+  },
+  {
+   "shelf": "F",
+   "position": 4,
+   "product_id": "100155"
+  },
+  {
+   "shelf": "F",
+   "position": 5,
+   "product_id": "100155"
+  },
+  {
+   "shelf": "F",
+   "position": 6,
+   "product_id": "100156"
+  },
+  {
+   "shelf": "F",
+   "position": 7,
+   "product_id": "100156"
+  },
+  {
+   "shelf": "F",
+   "position": 8,
+   "product_id": "104385"
+  },
+  {
+   "shelf": "F",
+   "position": 9,
+   "product_id": "104385"
+  },
+  {
+   "shelf": "F",
+   "position": 10,
+   "product_id": "104726"
+  },
+  {
+   "shelf": "F",
+   "position": 11,
+   "product_id": "104726"
+  },
+  {
+   "shelf": "F",
+   "position": 12,
+   "product_id": "104727"
+  },
+  {
+   "shelf": "F",
+   "position": 13,
+   "product_id": "104727"
+  },
+  {
+   "shelf": "F",
+   "position": 14,
+   "product_id": "100144"
+  },
+  {
+   "shelf": "F",
+   "position": 15,
+   "product_id": "100144"
+  },
+  {
+   "shelf": "F",
+   "position": 16,
+   "product_id": "105158"
+  },
+  {
+   "shelf": "F",
+   "position": 17,
+   "product_id": "105159"
+  },
+  {
+   "shelf": "F",
+   "position": 18,
+   "product_id": "100648"
+  },
+  {
+   "shelf": "F",
+   "position": 19,
+   "product_id": "100646"
+  },
+  {
+   "shelf": "F",
+   "position": 20,
+   "product_id": "100646"
+  },
+  {
+   "shelf": "F",
+   "position": 21,
+   "product_id": "100734"
+  },
+  {
+   "shelf": "F",
+   "position": 22,
+   "product_id": "100734"
+  },
+  {
+   "shelf": "F",
+   "position": 23,
+   "product_id": "100734"
+  },
+  {
+   "shelf": "F",
+   "position": 24,
+   "product_id": "106489"
+  },
+  {
+   "shelf": "F",
+   "position": 25,
+   "product_id": "100726"
+  },
+  {
+   "shelf": "F",
+   "position": 26,
+   "product_id": "100726"
+  },
+  {
+   "shelf": "F",
+   "position": 27,
+   "product_id": "100732"
+  }
+ ],
+ "products": [
+  {
+   "product_id": "103732",
+   "short_name": "Dunhill Classic",
+   "plu": "9556109106958"
+  },
+  {
+   "product_id": "104922",
+   "short_name": "Dunhill Red",
+   "plu": "9556109109171"
+  },
+  {
+   "product_id": "100128",
+   "short_name": "Peter Stuyvesant Red",
+   "plu": "9556109105715"
+  },
+  {
+   "product_id": "100155",
+   "short_name": "Rothmans Red",
+   "plu": "9556109106330"
+  },
+  {
+   "product_id": "104923",
+   "short_name": "Dunhill Blue",
+   "plu": "9556109109386"
+  },
+  {
+   "product_id": "100127",
+   "short_name": "Peter Stuyvesant Blue",
+   "plu": "9556109105722"
+  },
+  {
+   "product_id": "100156",
+   "short_name": "Rothmans Blue",
+   "plu": "9556109106712"
+  },
+  {
+   "product_id": "104385",
+   "short_name": "Rothmans Charcoal",
+   "plu": "9556109108006"
+  },
+  {
+   "product_id": "104924",
+   "short_name": "Dunhill Menthol",
+   "plu": "9556109109393"
+  },
+  {
+   "product_id": "100125",
+   "short_name": "Peter Stuyvesant Remix",
+   "plu": "9556109106675"
+  },
+  {
+   "product_id": "104429",
+   "short_name": "Rothmans Menthol",
+   "plu": "9556109108334"
+  },
+  {
+   "product_id": "104726",
+   "short_name": "Kyo Original",
+   "plu": "9556109109355"
+  },
+  {
+   "product_id": "105168",
+   "short_name": "Dunhill Switch",
+   "plu": "9556109109409"
+  },
+  {
+   "product_id": "105169",
+   "short_name": "Dunhill Boost",
+   "plu": "9556109109416"
+  },
+  {
+   "product_id": "105170",
+   "short_name": "Dunhill Mix",
+   "plu": "9556109109423"
+  },
+  {
+   "product_id": "104555",
+   "short_name": "Rothmans Kool Hokkaido Mint",
+   "plu": "9556109108358"
+  },
+  {
+   "product_id": "104727",
+   "short_name": "Kyo Silver",
+   "plu": "9556109109362"
+  },
+  {
+   "product_id": "105171",
+   "short_name": "Dunhill Zest",
+   "plu": "9556109109430"
+  },
+  {
+   "product_id": "103630",
+   "short_name": "Rothmans Purple",
+   "plu": "9556109108310"
+  },
+  {
+   "product_id": "100144",
+   "short_name": "Benson & Hedges",
+   "plu": "95502397"
+  },
+  {
+   "product_id": "100634",
+   "short_name": "Marlboro Red",
+   "plu": "76164217"
+  },
+  {
+   "product_id": "100632",
+   "short_name": "Marlboro Menthol",
+   "plu": "76239427"
+  },
+  {
+   "product_id": "100630",
+   "short_name": "Marlboro Double Burst",
+   "plu": "45163012"
+  },
+  {
+   "product_id": "100640",
+   "short_name": "Chesterfield Red",
+   "plu": "88823386"
+  },
+  {
+   "product_id": "103361",
+   "short_name": "Chesterfield Charcoal",
+   "plu": "9555277315254"
+  },
+  {
+   "product_id": "105158",
+   "short_name": "Bond Red",
+   "plu": "9555277316251"
+  },
+  {
+   "product_id": "100638",
+   "short_name": "Chesterfield Menthol",
+   "plu": "95510354"
+  },
+  {
+   "product_id": "105159",
+   "short_name": "Bond Light",
+   "plu": "9555277316275"
+  },
+  {
+   "product_id": "100626",
+   "short_name": "Marlboro Black",
+   "plu": "95508788"
+  },
+  {
+   "product_id": "100648",
+   "short_name": "Sampoerna Red",
+   "plu": "89990568"
+  },
+  {
+   "product_id": "100628",
+   "short_name": "Marlboro Gold",
+   "plu": "76239878"
+  },
+  {
+   "product_id": "100624",
+   "short_name": "Marlboro Ice",
+   "plu": "95509839"
+  },
+  {
+   "product_id": "106880",
+   "short_name": "Marlboro Summer",
+   "plu": "7622100700364"
+  },
+  {
+   "product_id": "100642",
+   "short_name": "Chesterfield Blue",
+   "plu": "88823393"
+  },
+  {
+   "product_id": "103526",
+   "short_name": "Chesterfield Purple",
+   "plu": "9555277315094"
+  },
+  {
+   "product_id": "100646",
+   "short_name": "Sampoerna Menthol",
+   "plu": "89990469"
+  },
+  {
+   "product_id": "106879",
+   "short_name": "Marlboro Tropical",
+   "plu": "7622100698937"
+  },
+  {
+   "product_id": "100756",
+   "short_name": "LD Red",
+   "plu": "8885004830004"
+  },
+  {
+   "product_id": "107628",
+   "short_name": "LD 100 RED",
+   "plu": "9555900301227"
+  },
+  {
+   "product_id": "100758",
+   "short_name": "LD Blue",
+   "plu": "8885004830028"
+  },
+  {
+   "product_id": "100730",
+   "short_name": "Mevius Blue",
+   "plu": "49401196"
+  },
+  {
+   "product_id": "100734",
+   "short_name": "Mevius Sky Blue",
+   "plu": "490221200804"
+  },
+  {
+   "product_id": "100740",
+   "short_name": "Winston Red",
+   "plu": "01231233"
+  },
+  {
+   "product_id": "100738",
+   "short_name": "Winston Blue",
+   "plu": "01231932"
+  },
+  {
+   "product_id": "106489",
+   "short_name": "Mevius Kiwami",
+   "plu": "9555900301326"
+  },
+  {
+   "product_id": "100736",
+   "short_name": "Mevius Wind Blue",
+   "plu": "40329383"
+  },
+  {
+   "product_id": "100726",
+   "short_name": "Mevius Menthol",
+   "plu": "01232135"
+  },
+  {
+   "product_id": "100750",
+   "short_name": "Winston Duo Berry",
+   "plu": "403310034268"
+  },
+  {
+   "product_id": "100762",
+   "short_name": "LD Zoom",
+   "plu": "9555900300121"
+  },
+  {
+   "product_id": "107114",
+   "short_name": "Mevius Yellow",
+   "plu": "95510569"
+  },
+  {
+   "product_id": "100760",
+   "short_name": "LD Menthol",
+   "plu": "8885004830042"
+  },
+  {
+   "product_id": "104330",
+   "short_name": "LD Purple",
+   "plu": "9555900300565"
+  },
+  {
+   "product_id": "100724",
+   "short_name": "Mevius Menthol White",
+   "plu": "01239730"
+  },
+  {
+   "product_id": "100732",
+   "short_name": "Mevius Duo",
+   "plu": "4033100054556"
+  }
+ ]
+}

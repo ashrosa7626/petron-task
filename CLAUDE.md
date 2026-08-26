@@ -112,9 +112,15 @@ Hosted on GitHub Pages: https://ashrosa7626.github.io/petron-task/
 
 ## Cigarette Stock Count Module
 Daily physical count of the cigarette gondola (Safari: 6 shelves A–F × 27 positions,
-162 facings, 54 products). Spec and SQL live in `cigarette stock/` — `BRIEF.md`,
-`01_schema.sql`, `02_seed.sql`, `03_daily_count.sql`, `products_reference.csv`.
-Run the SQL in order 01 → 02 → 03. Counts are in **packs**; cartons are out of scope.
+162 facings, 54 products, **58 blocks**). Spec, workbook and SQL live in
+`cigarette stock/` — `BRIEF.md`, `01_schema.sql`, `02_seed.sql`, `03_daily_count.sql`,
+`04_sync_to_spreadsheet.sql`, `CIGARETTES PLANOGRAM.xlsx`, `products_reference.csv`.
+Run the SQL in order 01 → 02 → 03 → 04. Counts are in **packs**; cartons are out of scope.
+
+**`CIGARETTES PLANOGRAM.xlsx` is the source of truth for the layout**, not the seed
+and not the database. `Planogram` sheet = the 6×27 grid; `Full Stock List` = product
+id, PLU and positions. When they disagree, the workbook wins and the database gets a
+migration.
 
 Three rules that must never be broken:
 
@@ -138,7 +144,15 @@ Three rules that must never be broken:
 Supporting notes:
 - `product_alias` maps spreadsheet grid names → `product_id`; this is how the
   importer resolves a cell. A cell with no alias must stop the import and ask for
-  the POS Item ID.
+  the POS Item ID. **Alias count is not product count** — `RED Winston` is a stale
+  label kept alongside `WINSTON RED`, both → `100740`. Counting alias rows is what
+  produced the wrong "54 products" figure when the database only had 53.
+- **The database drifted from the workbook once already** (Aug 2026): LD 100 Red
+  (`107628`) was missing entirely — no product row, no alias, no facings — and its
+  two facings `C22`/`C24` had been absorbed into LD Red, making `C21-25` look like
+  one contiguous 5-facing block. `02_seed.sql` was correct; the database had been
+  hand-edited. `04_sync_to_spreadsheet.sql` restores it. Verify with
+  `python3 diff_xlsx_vs_db.py` before trusting either side.
 - `count_date` is the **trading day being closed**, not the clock date. A count
   taken just after midnight ending the 26th has `count_date = 26th`; its closing
   becomes the 27th's opening. Never derive it from `now()` — default deliberately
@@ -146,11 +160,12 @@ Supporting notes:
   label only — never parse it for the date.
 - One count per branch per trading day (`stock_count_one_per_day`). A duplicate
   tap must resume the existing draft, not error.
-- Split products are real, not hypothetical: LD Red (C21, C23, C25 — 3 blocks),
-  LD 100 Red (C22, C24 — 2 blocks), Marlboro Black (B18, C16 — 2 blocks,
-  diagonally offset and never visually adjacent). Each piece needs a "1 of 3"
-  marker, sibling highlighting with off-screen direction hints, and the progress
-  footer counts products (54), not blocks.
+- Split products are real, not hypothetical — verified against the workbook:
+  LD Red (C21, C23, C25 — 3 blocks), LD 100 Red (C22, C24 — 2 blocks),
+  Marlboro Black (B18, C16 — 2 blocks, diagonally offset and never visually
+  adjacent). Each piece needs a "1 of 3" marker, sibling highlighting with
+  off-screen direction hints, and the progress footer counts products (54), not
+  blocks (58).
 - **Blind count** — never display the expected or previous quantity anywhere on
   the count screen.
 - Drafts write every keystroke to localStorage and sync on submit; submit requires
@@ -160,9 +175,25 @@ Supporting notes:
 - `vw_daily_reconciliation` computes `sold_physical = opening + add_in − closing`
   and the variance against `pos_sales_daily`. Excel/Power Query reads it directly
   — do not rename its columns.
-- Open items: `short_name` values are drafts (nine exceed 18 chars); the POS daily
-  sales export format is unseen so `pos_sales_daily` has no loader; only Safari is
-  seeded — Nilai Desa Jati needs its own planogram version.
+- Open items: `short_name` values are drafts; the POS daily sales export format is
+  unseen so `pos_sales_daily` has no loader; only Safari is seeded — Nilai Desa Jati
+  needs its own planogram version. The `short_name` cases that actually bite are the
+  three that land in a **single-facing (76px) block**: `E12` Rothmans Kool Hokkaido
+  Mint (27 chars), `E16` Chesterfield Charcoal, `E27` Mevius Menthol White. Wide
+  blocks absorb long names; these clamp to two lines.
+
+Tooling in `cigarette stock/` (all read-only against Supabase — the anon key cannot
+write, so migrations are run by hand in the Supabase SQL editor):
+- `read_xlsx.py` — minimal xlsx reader (zipfile + ElementTree); openpyxl is not
+  installed. Note the `Positions` column is **one cell** holding `A1-5 | B1-5`, so
+  split on the pipe rather than expecting separate columns.
+- `diff_xlsx_vs_db.py` — diffs the workbook against live Supabase, cross-checks the
+  grid against the `Positions` column, regenerates `04_sync_to_spreadsheet.sql` and
+  writes `expected_facings.json`.
+- `verify_blocks.mjs` / `verify_expected.mjs` — import `deriveBlocks` **straight out
+  of `stock-count/index.html`** so the tests exercise shipped code, then assert
+  facings reconcile, no block overlaps another, every drawn cell matches its facing
+  row, and every split block carries a correct "n of m" marker.
 
 ## Recent Fixes (Apr–May 2026)
 - **lead.html**: dead `leadBranchLabel` reference caused tasks stuck on "Loading..."
