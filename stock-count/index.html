@@ -16,7 +16,7 @@
       --font:'IBM Plex Sans',sans-serif; --mono:'IBM Plex Mono',monospace;
       --radius:12px; --radius-sm:8px;
       /* Planogram geometry at zoom 1. Column width is fixed; blocks span facings. */
-      --base-col:76px; --base-row:150px; --base-gutter:46px; --base-hdr:24px;
+      --base-col:76px; --base-row:126px; --base-gutter:46px; --base-hdr:24px;
     }
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
     html,body{height:100%}
@@ -112,19 +112,10 @@
     .pk:focus{border-color:var(--p-blue);background:#16213A}
     .blk.done .pk{border-color:rgba(34,197,94,0.45)}
 
-    .sub{display:flex;gap:calc(3px * var(--z));width:100%}
-    /* Add-in stays out of the way — most days it is untouched. */
-    .ad{flex:1;min-width:0;background:transparent;border:1px dashed var(--p-border);border-radius:5px;
-        color:var(--p-text3);text-align:center;font-family:var(--mono);font-size:calc(10px * var(--z));
-        padding:calc(3px * var(--z)) 1px;outline:none;-moz-appearance:textfield}
-    .ad::-webkit-outer-spin-button,.ad::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
-    .ad:focus{border-style:solid;border-color:var(--p-blue);color:var(--p-text)}
-    .ad.set{border-style:solid;border-color:var(--p-amber);color:var(--p-amber)}
-
     /* Overview: state colour only, no text. Tap a block to zoom to it. */
     .grid.ov .blk{cursor:pointer;padding:0;gap:0}
     .grid.ov .blk-nm,.grid.ov .blk-plu,.grid.ov .blk-pos,.grid.ov .pk,
-    .grid.ov .sub,.grid.ov .blk-of,.grid.ov .blk-hint,.grid.ov .colnum,.grid.ov .shelf{display:none}
+    .grid.ov .blk-of,.grid.ov .blk-hint,.grid.ov .colnum,.grid.ov .shelf{display:none}
     .grid.ov{gap:2px}
 
     .footer{flex-shrink:0;border-top:1px solid var(--p-border);background:var(--p-header);
@@ -230,9 +221,11 @@ let readonly = params.has('readonly') || !session;
 
 const draftKey = () => 'cig_draft_' + (session && session.count_id);
 
-/* lines: product_id -> { packs:number|null, add_in:number }
-   There is one count control per block. A product with nothing on the shelf
-   is counted as 0 — the schema's not_on_shelf flag is always written false. */
+/* lines: product_id -> { packs:number|null }
+   One input per block, nothing else. A product with nothing on the shelf is
+   counted as 0, so the schema's not_on_shelf flag is always written false, and
+   add_in is always written 0 — the shelf-side count screen no longer collects
+   deliveries. See the note in CLAUDE.md about what that costs reconciliation. */
 let lines = {};
 function loadDraft() {
   if (!session) return;
@@ -245,7 +238,7 @@ function loadDraft() {
       // as 0 rather than losing the entry.
       for (const l of Object.values(lines)) {
         if (l && l.nos && (l.packs === null || l.packs === undefined)) l.packs = 0;
-        if (l) delete l.nos;
+        if (l) { delete l.nos; delete l.add_in; }
       }
     }
   } catch (e) { /* a corrupt draft must not block the count */ }
@@ -259,7 +252,7 @@ function saveDraft() {
   } catch (e) { console.warn('local draft save failed', e); }
 }
 function lineOf(pid) {
-  if (!lines[pid]) lines[pid] = { packs: null, add_in: 0 };
+  if (!lines[pid]) lines[pid] = { packs: null };
   return lines[pid];
 }
 const isDone = pid => {
@@ -582,12 +575,7 @@ function render(facings, products, version, branches, fellBack) {
         <div class="blk-pos">${esc(b.label)}</div>
         ${readonly ? '' : `
         <input class="pk" type="number" inputmode="numeric" min="0" step="1"
-               data-pid="${esc(b.productId)}" aria-label="Packs for ${esc(name)}">
-        <div class="sub">
-          <input class="ad" type="number" inputmode="numeric" min="0" step="1" value="0"
-                 data-pid="${esc(b.productId)}" title="Added to the shelf today"
-                 aria-label="Add-in for ${esc(name)}">
-        </div>`}
+               data-pid="${esc(b.productId)}" aria-label="Packs for ${esc(name)}">`}
       </div>`;
   }
   g.innerHTML = html;
@@ -649,9 +637,6 @@ function wireGrid() {
     if (t.classList.contains('pk')) {
       const v = t.value.trim();
       l.packs = v === '' ? null : Math.max(0, Math.floor(Number(v) || 0));
-    } else if (t.classList.contains('ad')) {
-      const v = t.value.trim();
-      l.add_in = v === '' ? 0 : Math.max(0, Math.floor(Number(v) || 0));
     }
     saveDraft();
     syncProduct(pid, t);
@@ -683,11 +668,6 @@ function syncProduct(pid, exclude) {
     b.classList.remove('miss');
     const pk = b.querySelector('.pk');
     if (pk && pk !== exclude) pk.value = (l.packs === null || l.packs === undefined) ? '' : l.packs;
-    const ad = b.querySelector('.ad');
-    if (ad) {
-      if (ad !== exclude) ad.value = l.add_in || 0;
-      ad.classList.toggle('set', (l.add_in || 0) > 0);
-    }
   }
 }
 function syncAll() {
@@ -755,9 +735,11 @@ async function doSubmit() {
         count_id: session.count_id,
         product_id: pid,
         packs: l.packs,
-        add_in: l.add_in || 0,
-        // Nothing on the shelf is counted as 0, so this flag is never set.
-        // The counted_or_absent constraint is satisfied by packs being present.
+        // The count screen collects one number per product. Deliveries are not
+        // captured here, so add_in is always 0; nothing on the shelf is counted
+        // as 0, so not_on_shelf is never set and counted_or_absent is satisfied
+        // by packs always being present.
+        add_in: 0,
         not_on_shelf: false
       };
     });
@@ -906,14 +888,11 @@ async function load() {
   // has in the database. Never read another day's count — the count is blind.
   if (session && !Object.keys(lines).length) {
     const { data } = await db.from('stock_count_line')
-      .select('product_id,packs,add_in,not_on_shelf').eq('count_id', session.count_id);
+      .select('product_id,packs,not_on_shelf').eq('count_id', session.count_id);
     for (const r of (data || [])) {
       // A line saved before the not-on-shelf tick was removed reads as 0 packs,
       // which is what it always meant.
-      lines[r.product_id] = {
-        packs: r.not_on_shelf && r.packs === null ? 0 : r.packs,
-        add_in: r.add_in || 0
-      };
+      lines[r.product_id] = { packs: r.not_on_shelf && r.packs === null ? 0 : r.packs };
     }
     if (data && data.length) saveDraft();
   }

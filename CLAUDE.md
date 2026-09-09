@@ -172,12 +172,22 @@ Supporting notes:
   all 54 products to have a number, then sets
   `status = 'submitted'` and RLS freezes the count. No delete path for a submitted
   count.
-- **One count control per block.** The "not on shelf" tick was removed (Sep 2026):
-  nothing on the shelf is entered as **0**, so `not_on_shelf` is always written
-  `false` and block state is two-valued — uncounted or counted. The
-  `counted_or_absent` constraint is satisfied by `packs` always being present.
-  The column and constraint stay in the schema; only the UI dropped the tick.
-  Loading a line or local draft that still carries `not_on_shelf` reads it as 0.
+- **Exactly one input per block** (Sep 2026, at Rosa's request). Both the "not on
+  shelf" tick and the secondary add-in field were removed from the count screen.
+  Consequences, all UI-only — the schema is untouched:
+  - nothing on the shelf is entered as **0**, so `not_on_shelf` is always written
+    `false`; block state is two-valued, uncounted or counted
+  - `add_in` is always written **0** — the count screen no longer collects
+    deliveries
+  - `counted_or_absent` is satisfied because `packs` is always present
+  - loading a line or local draft carrying `not_on_shelf` reads it back as 0
+- **Known gap from the above:** `sold_physical = opening + add_in − closing`, and
+  `add_in` is now always 0, so on any day stock was added to the shelf the
+  reconciliation **understates what was sold** by exactly the delivery quantity,
+  and shows it as negative variance. Deliveries must reach `stock_count_line.add_in`
+  some other way (a separate loader, or restoring the field) before variance can be
+  trusted on delivery days. Raised twice and confirmed as intended — do not
+  silently re-add the field.
 - **Schema fixes found by building the count screen** (both in `cigarette stock/`):
   `05_fix_submit_policy.sql` — `update_count` declared only `USING (status =
   'draft')`, and Postgres reuses `USING` as `WITH CHECK` when none is given, so a
