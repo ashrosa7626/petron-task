@@ -169,9 +169,23 @@ Supporting notes:
 - **Blind count** — never display the expected or previous quantity anywhere on
   the count screen.
 - Drafts write every keystroke to localStorage and sync on submit; submit requires
-  all 54 products to have a number or a "not on shelf" tick, then sets
+  all 54 products to have a number, then sets
   `status = 'submitted'` and RLS freezes the count. No delete path for a submitted
   count.
+- **One count control per block.** The "not on shelf" tick was removed (Sep 2026):
+  nothing on the shelf is entered as **0**, so `not_on_shelf` is always written
+  `false` and block state is two-valued — uncounted or counted. The
+  `counted_or_absent` constraint is satisfied by `packs` always being present.
+  The column and constraint stay in the schema; only the UI dropped the tick.
+  Loading a line or local draft that still carries `not_on_shelf` reads it as 0.
+- **Schema fixes found by building the count screen** (both in `cigarette stock/`):
+  `05_fix_submit_policy.sql` — `update_count` declared only `USING (status =
+  'draft')`, and Postgres reuses `USING` as `WITH CHECK` when none is given, so a
+  count could never leave draft; submit failed with `42501`. Fixed by adding
+  `with check (status in ('draft','submitted'))`, which keeps the freeze.
+  `07_fix_opening_coalesce.sql` — the view coalesced closing but not opening, so a
+  `not_on_shelf` night closed at 0 but opened NULL the next day; now
+  `lag(coalesce(f.packs, 0))`. A product's first ever count still opens NULL.
 - `vw_daily_reconciliation` computes `sold_physical = opening + add_in − closing`
   and the variance against `pos_sales_daily`. Excel/Power Query reads it directly
   — do not rename its columns.
