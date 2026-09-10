@@ -124,6 +124,8 @@ Pages, all under `stock-count/`:
   lines in shelf order plus the reconciliation columns, with CSV and print.
   Linked from `start.html` only, **not** from the count grid — the count is blind, and
   a link to previous quantities sitting next to the inputs defeats that.
+- `import-sales.html` — loads the POS Merchandise Sales Report PDF into
+  `pos_sales_daily`. Gated on the PIN session (`sessionStorage.staff_id`).
 
 **`CIGARETTES PLANOGRAM.xlsx` is the source of truth for the layout**, not the seed
 and not the database. `Planogram` sheet = the 6×27 grid; `Full Stock List` = product
@@ -207,6 +209,30 @@ Supporting notes:
 - `vw_daily_reconciliation` computes `sold_physical = opening + add_in − closing`
   and the variance against `pos_sales_daily`. Excel/Power Query reads it directly
   — do not rename its columns.
+- **POS sales loader** (`stock-count/import-sales.html`, Sep 2026). Parses the
+  Merchandise Sales Report PDF with pdf.js and upserts `pos_sales_daily`.
+  - **Absent means zero.** Only products that sold appear in the report; every other
+    active product is written as `qty_sold = 0`. Leaving them out drops them from
+    `vw_daily_reconciliation` entirely — on 09/09 that would have been **24 of 54
+    products with no variance**. This is the single most important behaviour; it is
+    pinned by `verify_sales_payload.mjs` against the known-good day.
+  - **`product_id` comes from the Description prefix** (`100634 - MARLBORO RED 20S`),
+    never the Barcode/PLU column — same leading-zero problem as everywhere else.
+  - Rows are rebuilt from pdf.js **glyph positions** (group by y, sort by x); the raw
+    string order scrambles columns. The Qty column is located from the `Qty` heading's
+    x-position, falls back to first-number-after-description, and is always shown and
+    overridable in the preview.
+  - Business date comes from the **report header**, never today's date or the filename.
+    `09/09/2026` is genuinely ambiguous day/month, so it is flagged for confirmation
+    rather than trusted. No date found → the user must set it; it never defaults.
+  - Unknown Item IDs are listed individually and **never written** — the FK to
+    `product` is the database backstop. `103735 PETER STUYVESANT REMIX PURPLE YELLOW`
+    sells but is not on the planogram; that is information, not noise.
+  - A missing or draft count for that date **warns but does not block** — sales can
+    legitimately arrive before the count.
+  - `08_pos_sales_write_policy.sql` grants anon insert+update on `pos_sales_daily`
+    only, gated `qty_sold >= 0`, with **no delete policy** — a day is corrected by
+    re-uploading, which upserts on `(branch_id, sale_date, product_id)`.
 - **Excel export is pull, not push** (`excel/`): Power Query hits the Supabase REST
   endpoint with the anon key and refreshes on open / every 60 min, so a submitted
   count reaches the workbook with no export step. `counts_query.m` (name the query

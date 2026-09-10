@@ -94,7 +94,7 @@
 <div class="topbar">
   <a href="start.html">&larr; Count</a>
   <div class="topbar-title"><span class="br" id="brLabel">Safari</span> Count Results</div>
-  <div class="spacer"><button class="lnk" id="btnBack" hidden>All counts</button></div>
+  <div class="spacer"><a href="import-sales.html" id="lnkImport">Import sales</a><button class="lnk" id="btnBack" hidden>All counts</button></div>
 </div>
 
 <div class="wrap">
@@ -194,6 +194,7 @@ function renderList() {
   el('status').hidden = true;
   el('detailView').hidden = true;
   el('btnBack').hidden = true;
+  el('lnkImport').hidden = false;
   el('listView').hidden = false;
   history.replaceState(null, '', location.pathname);
 
@@ -266,6 +267,7 @@ function renderDetail(c, rows, hasRec) {
   el('status').hidden = true;
   el('detailView').hidden = false;
   el('btnBack').hidden = false;
+  el('lnkImport').hidden = true;
 
   el('dTitle').textContent = c.title;
   el('dSub').innerHTML = `Trading day <b>${ddmmyyyy(c.count_date)}</b> &middot; ` +
