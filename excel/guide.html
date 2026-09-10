@@ -1,0 +1,774 @@
+<title>Cigarette Counts to Excel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+  /* Dark-first: this lives inside the Petron system, which is dark.
+     :root carries the complete dark palette; light is redefined twice so
+     both an OS preference and an explicit toggle resolve correctly. */
+  :root {
+    --ground:#0B0F1A;
+    --raised:#121826;
+    --raised-2:#0F1B3D;
+    --rule:#1F2A44;
+    --rule-soft:rgba(31,42,68,0.6);
+    --ink:#E6EDF7;
+    --ink-2:#94A3B8;
+    --ink-3:#64748B;
+    --accent:#F97316;
+    --accent-2:#F59E0B;
+    --accent-ink:#F9A03C;
+    --accent-wash:rgba(249,115,22,0.10);
+    --accent-edge:rgba(249,115,22,0.32);
+    --good:#22C55E;
+    --good-wash:rgba(34,197,94,0.09);
+    --good-edge:rgba(34,197,94,0.32);
+    --warn:#F59E0B;
+    --warn-wash:rgba(245,158,11,0.09);
+    --warn-edge:rgba(245,158,11,0.32);
+    --bad:#FF4D4F;
+    --bad-wash:rgba(255,77,79,0.09);
+    --bad-edge:rgba(255,77,79,0.32);
+    --info:#60A5FA;
+    --code-bg:#0A1020;
+    --shadow:0 1px 0 rgba(255,255,255,0.03), 0 12px 32px rgba(0,0,0,0.35);
+
+    --display:'Syne', 'Trebuchet MS', sans-serif;
+    --body:'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --mono:'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+    --measure:70ch;
+  }
+
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --ground:#F7F8FB;
+      --raised:#FFFFFF;
+      --raised-2:#EEF1F7;
+      --rule:#DDE3EE;
+      --rule-soft:rgba(221,227,238,0.9);
+      --ink:#0F172A;
+      --ink-2:#475569;
+      --ink-3:#6B7A90;
+      --accent:#EA6A0B;
+      --accent-2:#C2410C;
+      --accent-ink:#C2410C;
+      --accent-wash:rgba(234,106,11,0.08);
+      --accent-edge:rgba(234,106,11,0.30);
+      --good:#15803D;
+      --good-wash:rgba(21,128,61,0.07);
+      --good-edge:rgba(21,128,61,0.26);
+      --warn:#B45309;
+      --warn-wash:rgba(180,83,9,0.07);
+      --warn-edge:rgba(180,83,9,0.26);
+      --bad:#C81E1E;
+      --bad-wash:rgba(200,30,30,0.06);
+      --bad-edge:rgba(200,30,30,0.24);
+      --info:#1D4ED8;
+      --code-bg:#0F1524;
+      --shadow:0 1px 2px rgba(15,23,42,0.05), 0 10px 28px rgba(15,23,42,0.07);
+    }
+  }
+
+  :root[data-theme="light"] {
+    --ground:#F7F8FB;
+    --raised:#FFFFFF;
+    --raised-2:#EEF1F7;
+    --rule:#DDE3EE;
+    --rule-soft:rgba(221,227,238,0.9);
+    --ink:#0F172A;
+    --ink-2:#475569;
+    --ink-3:#6B7A90;
+    --accent:#EA6A0B;
+    --accent-2:#C2410C;
+    --accent-ink:#C2410C;
+    --accent-wash:rgba(234,106,11,0.08);
+    --accent-edge:rgba(234,106,11,0.30);
+    --good:#15803D;
+    --good-wash:rgba(21,128,61,0.07);
+    --good-edge:rgba(21,128,61,0.26);
+    --warn:#B45309;
+    --warn-wash:rgba(180,83,9,0.07);
+    --warn-edge:rgba(180,83,9,0.26);
+    --bad:#C81E1E;
+    --bad-wash:rgba(200,30,30,0.06);
+    --bad-edge:rgba(200,30,30,0.24);
+    --info:#1D4ED8;
+    --code-bg:#0F1524;
+    --shadow:0 1px 2px rgba(15,23,42,0.05), 0 10px 28px rgba(15,23,42,0.07);
+  }
+
+  *, *::before, *::after { box-sizing:border-box; }
+
+  body {
+    margin:0;
+    background:var(--ground);
+    color:var(--ink);
+    font-family:var(--body);
+    font-size:17px;
+    line-height:1.65;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  .page {
+    max-width:var(--measure);
+    margin:0 auto;
+    padding:56px 22px 96px;
+    display:flex;
+    flex-direction:column;
+    gap:44px;
+  }
+
+  /* ---------- masthead ---------- */
+  .mast { display:flex; flex-direction:column; gap:14px; }
+  .eyebrow {
+    font-family:var(--mono);
+    font-size:0.72rem;
+    letter-spacing:0.16em;
+    text-transform:uppercase;
+    color:var(--accent-ink);
+  }
+  h1 {
+    font-family:var(--display);
+    font-weight:800;
+    font-size:clamp(2rem, 5.5vw, 2.9rem);
+    line-height:1.06;
+    letter-spacing:-0.02em;
+    margin:0;
+    text-wrap:balance;
+  }
+  .standfirst {
+    font-size:1.08rem;
+    color:var(--ink-2);
+    margin:0;
+    max-width:58ch;
+    text-wrap:pretty;
+  }
+
+  /* ---------- the mechanism ---------- */
+  .flow {
+    display:flex;
+    align-items:stretch;
+    gap:10px;
+    flex-wrap:wrap;
+    padding:20px;
+    background:var(--raised);
+    border:1px solid var(--rule);
+    border-radius:14px;
+    box-shadow:var(--shadow);
+  }
+  .node {
+    flex:1 1 150px;
+    min-width:0;
+    padding:13px 14px;
+    border:1px solid var(--rule);
+    border-radius:10px;
+    background:var(--ground);
+    display:flex;
+    flex-direction:column;
+    gap:3px;
+  }
+  .node.is-end { border-color:var(--accent-edge); background:var(--accent-wash); }
+  .node-k {
+    font-family:var(--mono);
+    font-size:0.66rem;
+    letter-spacing:0.13em;
+    text-transform:uppercase;
+    color:var(--ink-3);
+  }
+  .node.is-end .node-k { color:var(--accent-ink); }
+  .node-v { font-weight:600; font-size:0.94rem; line-height:1.35; }
+  .node-s { font-size:0.8rem; color:var(--ink-3); }
+  .arrow {
+    align-self:center;
+    font-family:var(--mono);
+    color:var(--accent);
+    font-size:1.1rem;
+    flex:0 0 auto;
+  }
+  .flow-note {
+    flex:1 1 100%;
+    margin:4px 0 0;
+    font-size:0.86rem;
+    color:var(--ink-2);
+    border-top:1px dashed var(--rule);
+    padding-top:12px;
+  }
+  .flow-note b { color:var(--ink); font-weight:600; }
+
+  /* ---------- sections ---------- */
+  section { display:flex; flex-direction:column; gap:16px; }
+  h2 {
+    font-family:var(--display);
+    font-weight:700;
+    font-size:1.42rem;
+    letter-spacing:-0.01em;
+    margin:0;
+    text-wrap:balance;
+  }
+  h3 {
+    font-family:var(--body);
+    font-weight:600;
+    font-size:1rem;
+    margin:0;
+  }
+  p { margin:0; text-wrap:pretty; }
+  a { color:var(--accent-ink); text-decoration:underline; text-underline-offset:2px; }
+  a:hover { text-decoration-thickness:2px; }
+  :focus-visible { outline:2px solid var(--accent); outline-offset:2px; border-radius:4px; }
+  code {
+    font-family:var(--mono);
+    font-size:0.87em;
+    background:var(--raised-2);
+    border:1px solid var(--rule);
+    border-radius:5px;
+    padding:1px 5px;
+  }
+
+  /* ---------- ordered procedure ---------- */
+  /* Numbers are real here: this is a sequence that must be done in order. */
+  ol.steps { list-style:none; margin:0; padding:0; counter-reset:step; display:flex; flex-direction:column; gap:2px; }
+  ol.steps > li {
+    counter-increment:step;
+    display:grid;
+    grid-template-columns:38px 1fr;
+    gap:0 16px;
+    padding:0 0 22px;
+    position:relative;
+  }
+  ol.steps > li::before {
+    content:counter(step);
+    grid-row:1 / span 2;
+    font-family:var(--mono);
+    font-weight:600;
+    font-size:0.84rem;
+    color:var(--accent-ink);
+    background:var(--accent-wash);
+    border:1px solid var(--accent-edge);
+    border-radius:50%;
+    width:30px; height:30px;
+    display:flex; align-items:center; justify-content:center;
+    margin-top:1px;
+  }
+  /* the connecting spine */
+  ol.steps > li:not(:last-child)::after {
+    content:"";
+    position:absolute;
+    left:15px; top:34px; bottom:4px;
+    width:1px;
+    background:var(--rule);
+  }
+  ol.steps .st { font-weight:600; }
+  ol.steps .sd { color:var(--ink-2); font-size:0.94rem; margin-top:2px; }
+
+  .path {
+    font-family:var(--mono);
+    font-size:0.86rem;
+    color:var(--ink);
+    background:var(--raised-2);
+    border:1px solid var(--rule);
+    border-radius:6px;
+    padding:2px 7px;
+    white-space:nowrap;
+  }
+
+  /* ---------- callouts, placed beside what they threaten ---------- */
+  .call {
+    border-radius:11px;
+    padding:14px 16px;
+    font-size:0.92rem;
+    border:1px solid var(--rule);
+    background:var(--raised);
+    display:flex;
+    flex-direction:column;
+    gap:5px;
+  }
+  .call-k {
+    font-family:var(--mono);
+    font-size:0.67rem;
+    letter-spacing:0.13em;
+    text-transform:uppercase;
+  }
+  .call.warn { border-color:var(--warn-edge); background:var(--warn-wash); }
+  .call.warn .call-k { color:var(--warn); }
+  .call.info { border-color:var(--accent-edge); background:var(--accent-wash); }
+  .call.info .call-k { color:var(--accent-ink); }
+  .call p { font-size:0.92rem; color:var(--ink-2); }
+  .call b { color:var(--ink); font-weight:600; }
+
+  /* ---------- code ---------- */
+  .code {
+    border:1px solid var(--rule);
+    border-radius:12px;
+    overflow:hidden;
+    background:var(--code-bg);
+    box-shadow:var(--shadow);
+  }
+  .code-bar {
+    display:flex; align-items:center; gap:12px;
+    padding:9px 12px 9px 15px;
+    background:rgba(255,255,255,0.03);
+    border-bottom:1px solid var(--rule);
+  }
+  .code-name {
+    font-family:var(--mono); font-size:0.76rem;
+    color:#8FA0BC; flex:1; min-width:0;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  .copy {
+    font-family:var(--body); font-weight:600; font-size:0.76rem;
+    color:#0B0F1A;
+    background:linear-gradient(135deg, #F97316, #F59E0B);
+    border:none; border-radius:6px; padding:5px 11px; cursor:pointer;
+    flex:0 0 auto;
+  }
+  .copy:hover { filter:brightness(1.08); }
+  .copy[data-state="done"] { background:linear-gradient(135deg, #22C55E, #4ADE80); }
+  pre {
+    margin:0; padding:15px;
+    overflow-x:auto;
+    font-family:var(--mono);
+    font-size:0.78rem;
+    line-height:1.6;
+    color:#CBD8EE;
+    tab-size:2;
+  }
+  pre.short { max-height:none; }
+
+  /* ---------- tables ---------- */
+  .tw { overflow-x:auto; border:1px solid var(--rule); border-radius:12px; background:var(--raised); }
+  table { border-collapse:collapse; width:100%; font-size:0.88rem; }
+  th, td { padding:9px 14px; text-align:left; }
+  th {
+    font-family:var(--mono); font-size:0.66rem; letter-spacing:0.1em;
+    text-transform:uppercase; color:var(--ink-3);
+    background:var(--raised-2); border-bottom:1px solid var(--rule);
+    white-space:nowrap;
+  }
+  tbody tr + tr td { border-top:1px solid var(--rule-soft); }
+  td.k { font-family:var(--mono); font-size:0.82rem; color:var(--accent-ink); white-space:nowrap; }
+  td.n { font-variant-numeric:tabular-nums; text-align:right; font-family:var(--mono); }
+  td small { color:var(--ink-3); }
+
+  /* ---------- variance legend ---------- */
+  .legend { display:flex; flex-direction:column; gap:8px; }
+  .lg { display:grid; grid-template-columns:78px 1fr; gap:14px; align-items:baseline;
+        padding:11px 14px; border:1px solid var(--rule); border-radius:10px; background:var(--raised); }
+  .lg-v { font-family:var(--mono); font-weight:600; font-size:0.85rem; text-align:center;
+          border-radius:99px; padding:2px 0; }
+  .lg.ok  .lg-v { color:var(--good); background:var(--good-wash); border:1px solid var(--good-edge); }
+  .lg.pos .lg-v { color:var(--bad);  background:var(--bad-wash);  border:1px solid var(--bad-edge); }
+  .lg.neg .lg-v { color:var(--warn); background:var(--warn-wash); border:1px solid var(--warn-edge); }
+  .lg.nil .lg-v { color:var(--ink-3); background:var(--raised-2); border:1px solid var(--rule); }
+  .lg-t { font-size:0.9rem; color:var(--ink-2); }
+  .lg-t b { color:var(--ink); font-weight:600; }
+
+  details {
+    border:1px solid var(--rule); border-radius:11px;
+    background:var(--raised); padding:0 16px;
+  }
+  details[open] { padding-bottom:14px; }
+  summary {
+    cursor:pointer; padding:13px 0; font-weight:600; font-size:0.94rem;
+    list-style:none;
+  }
+  summary::-webkit-details-marker { display:none; }
+  summary::before { content:"▸ "; color:var(--accent-ink); font-family:var(--mono); }
+  details[open] summary::before { content:"▾ "; }
+
+  .faq { display:flex; flex-direction:column; gap:0; }
+  .faq-row { padding:14px 0; border-top:1px solid var(--rule-soft); }
+  .faq-row:first-child { border-top:none; }
+  .faq-q { font-weight:600; font-size:0.94rem; margin-bottom:3px; }
+  .faq-a { font-size:0.9rem; color:var(--ink-2); }
+
+  footer {
+    border-top:1px solid var(--rule);
+    padding-top:20px;
+    font-size:0.84rem;
+    color:var(--ink-3);
+    display:flex; flex-direction:column; gap:6px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation:none !important; transition:none !important; }
+  }
+  @media (max-width:560px) {
+    .page { padding:38px 16px 72px; gap:36px; }
+    ol.steps > li { grid-template-columns:30px 1fr; gap:0 12px; }
+    ol.steps > li::before { width:26px; height:26px; font-size:0.76rem; }
+    ol.steps > li:not(:last-child)::after { left:13px; }
+    .lg { grid-template-columns:66px 1fr; gap:10px; }
+  }
+</style>
+
+<div class="page">
+
+  <header class="mast">
+    <div class="eyebrow">Petron Safari &middot; Cigarette stock count</div>
+    <h1>Cigarette Counts to Excel</h1>
+    <p class="standfirst">Excel connects to the count system and refreshes itself. Set this up once and
+      every submitted count is in the workbook without anyone exporting anything.</p>
+  </header>
+
+  <div class="flow">
+    <div class="node">
+      <div class="node-k">Phone</div>
+      <div class="node-v">Count screen</div>
+      <div class="node-s">Staff submit</div>
+    </div>
+    <div class="arrow" aria-hidden="true">&rarr;</div>
+    <div class="node">
+      <div class="node-k">Database</div>
+      <div class="node-v">Supabase</div>
+      <div class="node-s">Freezes the count</div>
+    </div>
+    <div class="arrow" aria-hidden="true">&rarr;</div>
+    <div class="node is-end">
+      <div class="node-k">Every 60 min</div>
+      <div class="node-v">Excel pulls</div>
+      <div class="node-s">Power Query</div>
+    </div>
+    <p class="flow-note"><b>Nothing pushes.</b> Excel asks the database for the counts, on open and on a
+      timer. There is no file to send, no export step, and nothing for anyone to forget.</p>
+  </div>
+
+  <section>
+    <h2>What arrives</h2>
+    <p>One row per product per submitted trading day, from the <code>vw_daily_reconciliation</code> view.</p>
+    <div class="tw">
+      <table>
+        <thead>
+          <tr><th>Column</th><th>What it holds</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="k">count_date</td><td>The trading day closed &mdash; not the clock date the count was taken</td></tr>
+          <tr><td class="k">product_id</td><td>The POS Item ID. <b>The only safe join key</b></td></tr>
+          <tr><td class="k">plu</td><td>For reading and checking the pack. <small>Never join on it</small></td></tr>
+          <tr><td class="k">short_name</td><td>Product name as it appears on the shelf block</td></tr>
+          <tr><td class="k">opening_packs</td><td>The previous submitted count&rsquo;s closing</td></tr>
+          <tr><td class="k">add_in</td><td>Stock added to the shelf during the day</td></tr>
+          <tr><td class="k">closing_packs</td><td>What was counted</td></tr>
+          <tr><td class="k">sold_physical</td><td><code>opening + add_in &minus; closing</code></td></tr>
+          <tr><td class="k">sold_pos</td><td>What the POS says it sold</td></tr>
+          <tr><td class="k">variance_packs</td><td><code>sold_physical &minus; sold_pos</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="call info">
+      <div class="call-k">Drafts never arrive</div>
+      <p>A count reaches Excel only once it has been submitted. A half-finished count must never
+        reconcile, so the view reads submitted counts only.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Set it up once</h2>
+    <ol class="steps">
+      <li>
+        <div class="st">Open a blank query</div>
+        <div class="sd">In Excel: <span class="path">Data &rsaquo; Get Data &rsaquo; From Other Sources &rsaquo; Blank Query</span></div>
+      </li>
+      <li>
+        <div class="st">Paste the query below</div>
+        <div class="sd"><span class="path">Home &rsaquo; Advanced Editor</span>, delete what is there, paste all of it, then <b>Done</b>.</div>
+      </li>
+      <li>
+        <div class="st">Name it <code>Counts</code></div>
+        <div class="sd">The sheet formulas further down depend on this exact name.</div>
+      </li>
+      <li>
+        <div class="st">Close &amp; Load</div>
+        <div class="sd">If Excel asks about credentials for <code>supabase.co</code>, choose <b>Anonymous</b>.</div>
+      </li>
+      <li>
+        <div class="st">Turn on automatic refresh</div>
+        <div class="sd"><span class="path">Data &rsaquo; Queries &amp; Connections</span>, right-click <b>Counts &rsaquo; Properties</b>, then tick
+          <b>Refresh data when opening the file</b> and <b>Refresh every 60 minutes</b>. This is the whole automation.</div>
+      </li>
+    </ol>
+
+    <div class="code">
+      <div class="code-bar">
+        <span class="code-name">counts_query.m &mdash; paste into Advanced Editor</span>
+        <button class="copy" type="button" data-target="m-counts">Copy</button>
+      </div>
+      <pre id="m-counts"><code>let
+    BaseUrl  = "https://vwffiuciogthfzekkkkz.supabase.co/rest/v1/",
+    ApiKey   = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ3ZmZpdWNpb2d0aGZ6ZWtra2t6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4NzcwMTAsImV4cCI6MjA5MTQ1MzAxMH0.OTEyOMn1fmUNV7pR51KMOLsMTNAfytt62uGS_AkQXyw",
+    Resource = "vw_daily_reconciliation",
+    Columns  = "branch_id,count_date,staff_name,product_id,plu,short_name,pos_description,opening_packs,add_in,closing_packs,sold_physical,sold_pos,variance_packs",
+    ColumnList = Text.Split(Columns, ","),
+    PageSize = 1000,
+
+    GetPage = (Offset as number) as list =&gt;
+        Json.Document(
+            Web.Contents(
+                BaseUrl,
+                [
+                    RelativePath = Resource,
+                    Query = [
+                        select = Columns,
+                        order  = "count_date.desc,short_name.asc",
+                        limit  = Text.From(PageSize),
+                        offset = Text.From(Offset)
+                    ],
+                    Headers = [
+                        apikey        = ApiKey,
+                        Authorization = "Bearer " &amp; ApiKey,
+                        Accept        = "application/json"
+                    ]
+                ]
+            )
+        ),
+
+    Pages = List.Generate(
+        () =&gt; [Offset = 0, Rows = GetPage(0)],
+        each List.Count([Rows]) &gt; 0,
+        each [Offset = [Offset] + PageSize, Rows = GetPage([Offset] + PageSize)],
+        each [Rows]
+    ),
+    AllRows = List.Combine(Pages),
+
+    AsTable =
+        if List.IsEmpty(AllRows) then
+            #table(ColumnList, {})
+        else
+            Table.ExpandRecordColumn(
+                Table.FromList(AllRows, Splitter.SplitByNothing(), {"rec"}, null, ExtraValues.Error),
+                "rec", ColumnList),
+
+    Typed = Table.TransformColumnTypes(AsTable, {
+        {"branch_id",       type text},
+        {"count_date",      type date},
+        {"staff_name",      type text},
+        {"product_id",      type text},
+        {"plu",             type text},
+        {"short_name",      type text},
+        {"pos_description", type text},
+        {"opening_packs",   Int64.Type},
+        {"add_in",          Int64.Type},
+        {"closing_packs",   Int64.Type},
+        {"sold_physical",   Int64.Type},
+        {"sold_pos",        Int64.Type},
+        {"variance_packs",  Int64.Type}
+    }, "en-US")
+in
+    Typed</code></pre>
+    </div>
+
+    <details>
+      <summary>Also add the product list (optional, but needed for the POS step)</summary>
+      <p style="color:var(--ink-2);font-size:0.92rem;margin-bottom:12px">The 54 products with their POS
+        Item ID, PLU and POS description. Use it to translate a POS export into <code>product_id</code>.
+        Install it the same way and name it <code>Products</code>.</p>
+      <div class="code">
+        <div class="code-bar">
+          <span class="code-name">products_query.m</span>
+          <button class="copy" type="button" data-target="m-products">Copy</button>
+        </div>
+        <pre id="m-products" class="short"><code>let
+    BaseUrl  = "https://vwffiuciogthfzekkkkz.supabase.co/rest/v1/",
+    ApiKey   = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ3ZmZpdWNpb2d0aGZ6ZWtra2t6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4NzcwMTAsImV4cCI6MjA5MTQ1MzAxMH0.OTEyOMn1fmUNV7pR51KMOLsMTNAfytt62uGS_AkQXyw",
+    Resource = "product",
+    Columns  = "product_id,plu,short_name,pos_description,brand,active",
+    ColumnList = Text.Split(Columns, ","),
+
+    Response = Json.Document(
+        Web.Contents(
+            BaseUrl,
+            [
+                RelativePath = Resource,
+                Query = [ select = Columns, order = "short_name.asc", limit = "1000" ],
+                Headers = [
+                    apikey        = ApiKey,
+                    Authorization = "Bearer " &amp; ApiKey,
+                    Accept        = "application/json"
+                ]
+            ]
+        )
+    ),
+
+    AsTable =
+        if List.IsEmpty(Response) then
+            #table(ColumnList, {})
+        else
+            Table.ExpandRecordColumn(
+                Table.FromList(Response, Splitter.SplitByNothing(), {"rec"}, null, ExtraValues.Error),
+                "rec", ColumnList),
+
+    Typed = Table.TransformColumnTypes(AsTable, {
+        {"product_id",      type text},
+        {"plu",             type text},
+        {"short_name",      type text},
+        {"pos_description", type text},
+        {"brand",           type text},
+        {"active",          type logical}
+    })
+in
+    Typed</code></pre>
+      </div>
+    </details>
+  </section>
+
+  <section>
+    <h2>Reconciling against the POS</h2>
+    <p><code>sold_pos</code> and <code>variance_packs</code> come back blank today, because nothing loads
+      the POS sales figures into the database yet. Until something does, do the POS side in the sheet.</p>
+
+    <div class="call info">
+      <div class="call-k">The real fix, when it comes</div>
+      <p>A loader that writes the POS daily sales export into <code>pos_sales_daily</code>. After that,
+        <b>variance arrives already calculated</b> and the two formula columns below become redundant.
+        It needs a sample POS export &mdash; nobody has produced one yet.</p>
+    </div>
+
+    <h3>1. A sheet named <code>POS</code></h3>
+    <p>Three columns, then <span class="path">Insert &rsaquo; Table</span>, named <code>POS</code>.</p>
+    <div class="tw">
+      <table>
+        <thead><tr><th>sale_date</th><th>product_id</th><th>qty_sold</th></tr></thead>
+        <tbody>
+          <tr><td class="k">2026-09-09</td><td class="k">103732</td><td class="n">28</td></tr>
+          <tr><td class="k">2026-09-09</td><td class="k">104922</td><td class="n">22</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="call warn">
+      <div class="call-k">Format product_id as Text first</div>
+      <p>Do this <b>before</b> pasting. If one side is text and the other a number, the lookup returns
+        zero without complaining and every product reads as a perfect match &mdash; a clean sheet that is
+        entirely wrong.</p>
+    </div>
+
+    <h3>2. Two columns beside the <code>Counts</code> table</h3>
+    <p>Click the first empty cell to the right of the table and add these. Columns added inside a query
+      table survive refresh and fill down onto new rows.</p>
+    <div class="code">
+      <div class="code-bar">
+        <span class="code-name">pos_qty</span>
+        <button class="copy" type="button" data-target="f-pos">Copy</button>
+      </div>
+      <pre id="f-pos" class="short"><code>=SUMIFS(POS[qty_sold], POS[sale_date], [@count_date], POS[product_id], [@product_id])</code></pre>
+    </div>
+    <div class="code">
+      <div class="code-bar">
+        <span class="code-name">variance</span>
+        <button class="copy" type="button" data-target="f-var">Copy</button>
+      </div>
+      <pre id="f-var" class="short"><code>=IF([@sold_physical]="", "", [@sold_physical] - [@pos_qty])</code></pre>
+    </div>
+    <p style="font-size:0.9rem;color:var(--ink-2)"><code>SUMIFS</code> is deliberate: it returns 0 for a
+      product the POS never sold rather than an error, and it copes with the POS listing a product twice
+      in one day.</p>
+  </section>
+
+  <section>
+    <h2>Reading the variance</h2>
+    <div class="legend">
+      <div class="lg ok">
+        <div class="lg-v">0</div>
+        <div class="lg-t"><b>Agreed.</b> The shelf and the POS tell the same story.</div>
+      </div>
+      <div class="lg pos">
+        <div class="lg-v">+12</div>
+        <div class="lg-t"><b>More left the shelf than was sold.</b> Shrinkage, a miscount, or stock that
+          went out without being recorded.</div>
+      </div>
+      <div class="lg neg">
+        <div class="lg-v">&minus;40</div>
+        <div class="lg-t"><b>The POS sold more than the shelf lost.</b> Nearly always a delivery that
+          was not recorded as <code>add_in</code>.</div>
+      </div>
+      <div class="lg nil">
+        <div class="lg-v">blank</div>
+        <div class="lg-t"><b>Nothing to compare against.</b> No previous count to open from. Every product
+          shows this on its first count, and it fills in from the second consecutive day.</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Two things that will skew variance</h2>
+    <div class="call warn">
+      <div class="call-k">add_in is always zero</div>
+      <p>The count screen takes one number per product and no longer records deliveries. On any day
+        stock went onto the shelf, <code>sold_physical</code> understates what was sold by the delivery
+        quantity and shows as <b>negative variance</b>. Either record deliveries into
+        <code>add_in</code> another way, or read negative variance on delivery days as expected.</p>
+    </div>
+    <div class="call warn">
+      <div class="call-k">Counts must be consecutive</div>
+      <p><code>opening_packs</code> is the previous <b>submitted</b> count&rsquo;s closing, whatever date
+        that was. Skip a day and two days of sales silently fold into one, which reads as a large
+        variance on the day after the gap.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>If something goes wrong</h2>
+    <div class="faq">
+      <div class="faq-row">
+        <div class="faq-q">Excel keeps asking for credentials</div>
+        <div class="faq-a"><span class="path">Data &rsaquo; Get Data &rsaquo; Data Source Settings</span>,
+          clear permissions for <code>supabase.co</code>, refresh, and choose <b>Anonymous</b>.</div>
+      </div>
+      <div class="faq-row">
+        <div class="faq-q">The table is empty</div>
+        <div class="faq-a">Normal before the first count is submitted. Check the results page shows a
+          count marked <b>Submitted</b> &mdash; a draft will not appear here.</div>
+      </div>
+      <div class="faq-row">
+        <div class="faq-q">It stops at 1000 rows</div>
+        <div class="faq-a">The query pages past that on its own, so this means the M was truncated when
+          pasted. Copy it again and check the last line is <code>Typed</code>.</div>
+      </div>
+      <div class="faq-row">
+        <div class="faq-q">PLUs have lost their leading zero</div>
+        <div class="faq-a">A column was typed as a number somewhere. Cosmetic only &mdash; PLU is never
+          used to match anything &mdash; but the fix is <code>type text</code> in the query.</div>
+      </div>
+      <div class="faq-row">
+        <div class="faq-q">Dates fail to parse</div>
+        <div class="faq-a">The query pins its culture to <code>en-US</code> for this reason. If it still
+          happens, check the <code>"en-US"</code> at the end of the last step survived the paste.</div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div>The key in these queries is read-only and already public in the app&rsquo;s JavaScript. It grants
+      read access and nothing more. Never paste a service key into a workbook.</div>
+    <div>Petron Task System &middot; cigarette stock count</div>
+  </footer>
+
+</div>
+
+<script>
+  // Clipboard is not always available inside a sandboxed frame, so fall back to
+  // selecting the text and telling the reader what to press.
+  document.querySelectorAll('.copy').forEach(function (btn) {
+    btn.addEventListener('click', async function () {
+      var pre = document.getElementById(btn.dataset.target);
+      if (!pre) return;
+      var text = pre.innerText;
+      var done = function (label, state) {
+        btn.textContent = label;
+        btn.dataset.state = state || '';
+        setTimeout(function () { btn.textContent = 'Copy'; btn.dataset.state = ''; }, 2200);
+      };
+      try {
+        await navigator.clipboard.writeText(text);
+        done('Copied', 'done');
+      } catch (e) {
+        var sel = window.getSelection();
+        var range = document.createRange();
+        range.selectNodeContents(pre);
+        sel.removeAllRanges();
+        sel.addRange(range);
+        done(navigator.platform.indexOf('Mac') > -1 ? 'Press ⌘C' : 'Press Ctrl+C');
+      }
+    });
+  });
+</script>
