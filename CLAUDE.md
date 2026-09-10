@@ -113,9 +113,17 @@ Hosted on GitHub Pages: https://ashrosa7626.github.io/petron-task/
 ## Cigarette Stock Count Module
 Daily physical count of the cigarette gondola (Safari: 6 shelves A–F × 27 positions,
 162 facings, 54 products, **58 blocks**). Spec, workbook and SQL live in
-`cigarette stock/` — `BRIEF.md`, `01_schema.sql`, `02_seed.sql`, `03_daily_count.sql`,
-`04_sync_to_spreadsheet.sql`, `CIGARETTES PLANOGRAM.xlsx`, `products_reference.csv`.
-Run the SQL in order 01 → 02 → 03 → 04. Counts are in **packs**; cartons are out of scope.
+`cigarette stock/` — `BRIEF.md`, `01_schema.sql` … `07_fix_opening_coalesce.sql`,
+`CIGARETTES PLANOGRAM.xlsx`, `products_reference.csv`.
+Run the SQL in numbered order. Counts are in **packs**; cartons are out of scope.
+
+Pages, all under `stock-count/`:
+- `start.html` — page 1: title, trading day, staff name. Creates or resumes the draft.
+- `index.html` — the count grid: pan, pinch/button zoom, overview, one input per block.
+- `history.html` — results: every count for the branch, newest first; open one for its
+  lines in shelf order plus the reconciliation columns, with CSV and print.
+  Linked from `start.html` only, **not** from the count grid — the count is blind, and
+  a link to previous quantities sitting next to the inputs defeats that.
 
 **`CIGARETTES PLANOGRAM.xlsx` is the source of truth for the layout**, not the seed
 and not the database. `Planogram` sheet = the 6×27 grid; `Full Stock List` = product
