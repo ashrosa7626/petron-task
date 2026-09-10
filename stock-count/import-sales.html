@@ -174,9 +174,18 @@ pdfjsLib.GlobalWorkerOptions.workerSrc =
 
 // The module's PIN session: identity lives in sessionStorage, set by index.html
 // and verified by pin.html.
+//
+// Deliberately no hard redirect. Bouncing an unsigned visitor to the home page
+// dropped them into the PIN flow, which always finished on tasks.html — so
+// pressing "Import sales" appeared to open the tasks page. Ask in place instead,
+// and hand the PIN screen a ?next= so it returns here.
 const staffName = sessionStorage.getItem('staff_name');
-if (!sessionStorage.getItem('staff_id')) location.href = '../index.html';
+const signedIn = !!sessionStorage.getItem('staff_id');
 el('who').textContent = staffName || '';
+if (!signedIn) {
+  el('who').innerHTML = '<a href="../index.html?next=' +
+    encodeURIComponent('stock-count/import-sales.html') + '">Sign in</a>';
+}
 
 let ctx = { branchId: null, branchName: '', products: new Map(), parsed: null };
 
@@ -542,6 +551,13 @@ el('btnWrite').addEventListener('click', async () => {
   if (!saleDate) {
     el('fDate').focus();
     return note('notes', 'err', 'Set the business date before writing.');
+  }
+  // Reading and checking the report is open; changing the data is not.
+  if (!signedIn) {
+    return note('notes', 'err',
+      'Sign in before writing. <a href="../index.html?next=' +
+      encodeURIComponent('stock-count/import-sales.html') +
+      '" style="color:inherit;font-weight:700">Sign in</a> and you will come straight back here.');
   }
   const btn = el('btnWrite');
   btn.disabled = true;

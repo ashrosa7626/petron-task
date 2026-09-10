@@ -639,7 +639,10 @@
   function go(id, name) {
     sessionStorage.setItem('staff_id', id);
     sessionStorage.setItem('staff_name', name);
-    window.location.href = 'pin.html';
+    // Carry any ?next= through the PIN screen so signing in returns you to the
+    // page you were trying to reach, instead of always landing on tasks.html.
+    const next = new URLSearchParams(location.search).get('next');
+    window.location.href = next ? 'pin.html?next=' + encodeURIComponent(next) : 'pin.html';
   }
 
   loadStaff();

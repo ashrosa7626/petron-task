@@ -83,6 +83,7 @@
     <button class="btn" id="btnGo" disabled>Loading…</button>
     <button class="btn sec" id="btnOpen" hidden>Open the planogram read-only</button>
     <button class="btn sec" id="btnHistory">View past counts</button>
+    <button class="btn sec" id="btnImport">Import POS sales</button>
   </div>
 </div>
 
@@ -216,6 +217,7 @@ const escapeHtml = s => String(s == null ? '' : s)
 
 el('btnOpen').addEventListener('click', () => { location.href = 'index.html?readonly=1'; });
 el('btnHistory').addEventListener('click', () => { location.href = 'history.html'; });
+el('btnImport').addEventListener('click', () => { location.href = 'import-sales.html'; });
 
 el('btnGo').addEventListener('click', async () => {
   const date = el('fDate').value;

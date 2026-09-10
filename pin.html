@@ -83,6 +83,15 @@
 
   if (!staffId) window.location.href = 'index.html';
 
+  // Where to go after a correct PIN. Only same-site relative paths are honoured,
+  // so a crafted ?next= cannot bounce someone off to another host.
+  function safeNext() {
+    const n = new URLSearchParams(location.search).get('next');
+    if (!n) return null;
+    if (/^[a-z]+:/i.test(n) || n.startsWith('//') || n.startsWith('/')) return null;
+    return n;
+  }
+
   document.getElementById('staffName').textContent = staffName || '';
   document.getElementById('avatar').textContent = (staffName || '?').charAt(0).toUpperCase();
 
@@ -124,7 +133,7 @@
 
     // Simple PIN check (stored as plain 4-digit for prototype; hash in production)
     if (data.pin_hash === pin) {
-      window.location.href = 'tasks.html';
+      window.location.href = safeNext() || 'tasks.html';
     } else {
       showError('Incorrect PIN. Try again.');
       pin = '';
