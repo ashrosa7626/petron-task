@@ -207,6 +207,23 @@ Supporting notes:
 - `vw_daily_reconciliation` computes `sold_physical = opening + add_in − closing`
   and the variance against `pos_sales_daily`. Excel/Power Query reads it directly
   — do not rename its columns.
+- **Excel export is pull, not push** (`excel/`): Power Query hits the Supabase REST
+  endpoint with the anon key and refreshes on open / every 60 min, so a submitted
+  count reaches the workbook with no export step. `counts_query.m` (name the query
+  `Counts`) and `products_query.m` (`Products`); `README.md` has the setup and the
+  Excel-side POS reconciliation. Points to note when editing the M:
+  - it **pages** — PostgREST caps responses at 1000 rows, which 54 products/day
+    reaches in under three weeks
+  - `BaseUrl` must stay constant with `RelativePath`/`Query` doing the work, or
+    `Web.Contents` cannot resolve stored credentials and refresh breaks
+  - `plu` and `product_id` are typed `text`; numeric typing eats leading zeros
+  - `Table.TransformColumnTypes` pins culture `"en-US"` so ISO dates parse on a
+    dd/MM locale
+  - the empty-result branch builds the table from `ColumnList`, so formulas
+    survive the period before the first submission
+  - POS reconciliation is done in the sheet only because `pos_sales_daily` has no
+    loader; once one exists, `variance_packs` arrives computed and the sheet
+    columns become redundant
 - Open items: `short_name` values are drafts; the POS daily sales export format is
   unseen so `pos_sales_daily` has no loader; only Safari is seeded — Nilai Desa Jati
   needs its own planogram version. The `short_name` cases that actually bite are the
