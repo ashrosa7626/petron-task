@@ -113,19 +113,35 @@ Hosted on GitHub Pages: https://ashrosa7626.github.io/petron-task/
 ## Cigarette Stock Count Module
 Daily physical count of the cigarette gondola (Safari: 6 shelves A–F × 27 positions,
 162 facings, 54 products, **58 blocks**). Spec, workbook and SQL live in
-`cigarette stock/` — `BRIEF.md`, `01_schema.sql` … `07_fix_opening_coalesce.sql`,
+`cigarette stock/` — `BRIEF.md`, `01_schema.sql` … `08_pos_sales_write_policy.sql`,
 `CIGARETTES PLANOGRAM.xlsx`, `products_reference.csv`.
 Run the SQL in numbered order. Counts are in **packs**; cartons are out of scope.
 
 Pages, all under `stock-count/`:
 - `start.html` — page 1: title, trading day, staff name. Creates or resumes the draft.
+  Also the hub: buttons to *View past counts* and *Import POS sales*.
 - `index.html` — the count grid: pan, pinch/button zoom, overview, one input per block.
 - `history.html` — results: every count for the branch, newest first; open one for its
   lines in shelf order plus the reconciliation columns, with CSV and print.
   Linked from `start.html` only, **not** from the count grid — the count is blind, and
   a link to previous quantities sitting next to the inputs defeats that.
 - `import-sales.html` — loads the POS Merchandise Sales Report PDF into
-  `pos_sales_daily`. Gated on the PIN session (`sessionStorage.staff_id`).
+  `pos_sales_daily`. Reached from `start.html` and `history.html`.
+
+Excel reporting lives in `excel/` — see the export section below. The published
+setup guide is at https://claude.ai/code/artifact/f2489e09-bf24-4782-978b-4ed5cef39172
+(republish `excel/guide.html` to that same URL to update it).
+
+### Sign-in and the `?next=` round trip
+The app's identity is the PIN session: `sessionStorage.staff_id` / `staff_name`, set by
+`index.html` and verified by `pin.html`. Two rules learned the hard way:
+- **Never hard-redirect an unsigned visitor to `index.html`.** `pin.html` used to finish
+  on `tasks.html` unconditionally, so any page that bounced someone to sign in appeared
+  to open My Tasks. Ask in place instead.
+- `pin.html` now honours `?next=`, and `index.html` forwards it, so sign-in returns the
+  user to the page they wanted. `safeNext()` accepts **same-site relative paths only** —
+  anything with a scheme, or starting `//` or `/`, is rejected, so a crafted `next`
+  cannot redirect off-site. No `next` behaves exactly as before.
 
 **`CIGARETTES PLANOGRAM.xlsx` is the source of truth for the layout**, not the seed
 and not the database. `Planogram` sheet = the 6×27 grid; `Full Stock List` = product
@@ -281,6 +297,42 @@ write, so migrations are run by hand in the Supabase SQL editor):
 - **supervisor.html**: two-day sign-off with operationalDate() grouping; unique accordion IDs via date prefix
 - **dashboard.html**: Tasks of the Day flat list above staff completion journey; font sizes bumped across all pages
 - **style.css**: base font bumped 16px → 17px; small labels bumped proportionally in briefing.html and dashboard.html
+
+## Cigarette Module — State as of 11 Sep 2026
+Verified against the live database, not from memory. Re-check before trusting.
+
+**Migrations applied:** 01–08 are all in. `pos_sales_daily` holds 54 rows, so `08`'s
+write policy is live and an import has succeeded.
+
+**Data in the system:**
+
+| count_date | status | opening | sold_physical | sold_pos | variance |
+|---|---|---|---|---|---|
+| 2026-08-26 | draft | — | — | — | — |
+| 2026-09-09 | submitted | 0/54 | 0/54 | **54/54** | 0/54 |
+| 2026-09-10 | submitted | **54/54** | **54/54** | 0/54 | 0/54 |
+
+**Variance is still 0 rows everywhere, and this is the thing to understand.** Each half
+works; they have never overlapped on the same day. `variance_packs` needs *both* a
+previous submitted count (for `opening_packs`) *and* a `pos_sales_daily` row for that
+same day. 09/09 has POS but is the first count so has no opening; 10/09 has an opening
+but no POS yet. **Importing the 10/09 sales report completes the chain** and is the
+single next action that proves the pipeline end to end.
+
+**Two known distortions in the current numbers**, both expected, neither a bug:
+- 09/09 was a **test count** — one product at 7 packs, the other 53 at 0. So 10/09's
+  openings are nearly all 0 and its `sold_physical` comes out negative.
+- `add_in` is always 0 (the count screen has one input), so any day stock went onto the
+  shelf reads as negative variance. See the known-gap note in the module section.
+
+**Not done:**
+- The real Merchandise Sales Report PDF has never been available here
+  (`_handoff/SALES_09SEP2026.xlsx` never arrived). `import-sales.html`'s payload builder
+  is verified exactly against the known-good day, but its **PDF parsing is tested only
+  against synthetic rows**. Most likely to need adjusting: the header date format and
+  the `Qty` column heading.
+- No `pos_sales_daily` loader for Nilai Desa Jati; only Safari has a planogram.
+- `short_name` values are still drafts.
 
 ## Deployment
 - git add . → git commit -m "message" → git push
