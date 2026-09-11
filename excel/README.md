@@ -47,48 +47,26 @@ That is the whole automation. The workbook is now live against the count system.
 
 ## Reconciling against the POS
 
-`sold_pos` and `variance_packs` currently come back blank, because
-`pos_sales_daily` is empty — the POS daily sales export has never been seen, so
-nothing loads it. Until that exists, do the POS side in Excel.
+**Nothing to do in the sheet.** `sold_pos` and `variance_packs` arrive already
+computed, on the same rows as everything else.
 
-**The intended long-term fix is a loader that writes `pos_sales_daily`.** Then
-`variance_packs` arrives already computed and the sheet below becomes redundant.
-Worth doing once someone can hand over a sample POS export.
+This used to need a hand-maintained `POS` sheet and two `SUMIFS` columns, because
+`pos_sales_daily` had no loader. It has one now — the
+[sales import page](https://ashrosa7626.github.io/petron-task/stock-count/import-sales.html)
+reads the printed Merchandise Sales Report and writes the day. Once a day is
+imported and its count submitted, the variance is in the workbook at the next
+refresh.
 
-### 1. A `POS` sheet
+If you have an old workbook carrying the `POS` sheet and the `pos_qty` /
+`variance` columns, delete them — they now sit beside columns that say the same
+thing, and the two will disagree the first time someone forgets to update the
+sheet by hand.
 
-Three columns, then **Insert → Table**, named **`POS`**:
-
-| sale_date | product_id | qty_sold |
-|---|---|---|
-| 2026-09-09 | 103732 | 28 |
-| 2026-09-09 | 104922 | 22 |
-
-Format `product_id` as **Text before pasting**. This matters: if one side is text
-and the other is a number, the lookup silently returns 0 and every product reads
-as a perfect variance. Use the `Products` query to map POS descriptions or PLUs
-to `product_id`.
-
-### 2. Two columns beside the `Counts` table
-
-Click the first empty cell to the right of the table and add:
-
-**`pos_qty`**
-
-```excel
-=SUMIFS(POS[qty_sold], POS[sale_date], [@count_date], POS[product_id], [@product_id])
-```
-
-**`variance`**
-
-```excel
-=IF([@sold_physical]="", "", [@sold_physical] - [@pos_qty])
-```
-
-`SUMIFS` is deliberate — it returns 0 for a product the POS never sold, rather
-than `#N/A`, and it tolerates the POS listing a product twice in a day.
-
-Columns added inside the table survive refresh and fill down onto new rows.
+**What the import guarantees, and why it matters here:** every active product
+gets a row for the day, including the ones that sold nothing, written as an
+explicit `0`. A product left out of `pos_sales_daily` disappears from
+`vw_daily_reconciliation` for that day rather than showing a variance — on 09/09
+that would have been 24 of 54 products silently absent.
 
 ## Reading the result
 
@@ -123,3 +101,6 @@ gap.
 - **Leading zeros gone from PLU** — a column got typed as a number. PLU is
   display-only and never a join key, so this is cosmetic, but the fix is
   `type text` in the M.
+- **`sold_pos` blank but the count is submitted** — that day's sales report has
+  not been imported. Load it on the import page; the variance fills in at the
+  next refresh.

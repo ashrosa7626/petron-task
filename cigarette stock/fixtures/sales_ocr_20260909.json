@@ -1,0 +1,839 @@
+{
+ "source": "20260910155519.pdf",
+ "dpi": 258,
+ "rotation": 90,
+ "pages": [
+  {
+   "page": 1,
+   "lines": [
+    {
+     "text": "Merchandise Sales Report Printed on 10/09/2026 15:49",
+     "bbox": {
+      "x0": 1343,
+      "y0": 145,
+      "x1": 2932,
+      "y1": 207
+     },
+     "confidence": 96
+    },
+    {
+     "text": "Site ID : 304602",
+     "bbox": {
+      "x0": 291,
+      "y0": 232,
+      "x1": 478,
+      "y1": 253
+     },
+     "confidence": 92
+    },
+    {
+     "text": "Site Name : PETRON MRR2 SAFARI",
+     "bbox": {
+      "x0": 291,
+      "y0": 272,
+      "x1": 728,
+      "y1": 292
+     },
+     "confidence": 93
+    },
+    {
+     "text": "Business Date From 09/09/2026 To 09/09/2026",
+     "bbox": {
+      "x0": 292,
+      "y0": 317,
+      "x1": 844,
+      "y1": 339
+     },
+     "confidence": 96
+    },
+    {
+     "text": "Department Code : 02-00-00 Category Code : All Sub-Category : All",
+     "bbox": {
+      "x0": 292,
+      "y0": 365,
+      "x1": 1086,
+      "y1": 392
+     },
+     "confidence": 94
+    },
+    {
+     "text": "Terminal : All Shift : Alt Cashier ID: All",
+     "bbox": {
+      "x0": 291,
+      "y0": 413,
+      "x1": 729,
+      "y1": 433
+     },
+     "confidence": 87
+    },
+    {
+     "text": "Item : Alf",
+     "bbox": {
+      "x0": 297,
+      "y0": 461,
+      "x1": 396,
+      "y1": 482
+     },
+     "confidence": 82
+    },
+    {
+     "text": "Total Total Nett Gross Profit",
+     "bbox": {
+      "x0": 1915,
+      "y0": 566,
+      "x1": 2668,
+      "y1": 601
+     },
+     "confidence": 96
+    },
+    {
+     "text": "Price Cost Cost Sales Sales Profit Margin Tax Tax",
+     "bbox": {
+      "x0": 1648,
+      "y0": 605,
+      "x1": 2936,
+      "y1": 639
+     },
+     "confidence": 92
+    },
+    {
+     "text": "Category Barcode / PLU Description Qty (RM) (RM) (RM) (RM) (RM) (RM) (%) Class (RM)",
+     "bbox": {
+      "x0": 274,
+      "y0": 636,
+      "x1": 2935,
+      "y1": 674
+     },
+     "confidence": 88
+    },
+    {
+     "text": "02-00-00 02-01-00 02-01-01 76164217 100634 - MARLBORO RED 1 17.90 16.70 16.70 17.90 17.90 1.20 7 SR 0.00",
+     "bbox": {
+      "x0": 270,
+      "y0": 698,
+      "x1": 2938,
+      "y1": 727
+     },
+     "confidence": 94
+    },
+    {
+     "text": "CIGARETTES PREMIUM PREMIUM — 20S",
+     "bbox": {
+      "x0": 270,
+      "y0": 739,
+      "x1": 1179,
+      "y1": 764
+     },
+     "confidence": 78
+    },
+    {
+     "text": "PMI 76239427 100632 - MARLBORO 2 17.90 16.70 33.40 35.80 35.80 2.40 7 SR 0.00",
+     "bbox": {
+      "x0": 693,
+      "y0": 777,
+      "x1": 2939,
+      "y1": 805
+     },
+     "confidence": 91
+    },
+    {
+     "text": "MENTHOL 20S",
+     "bbox": {
+      "x0": 1135,
+      "y0": 818,
+      "x1": 1315,
+      "y1": 838
+     },
+     "confidence": 95
+    },
+    {
+     "text": "76239878 100628 - MARLBORO 4 17.90 16.70 66.80 71.60 71.60 4.80 7 SR 0.00",
+     "bbox": {
+      "x0": 911,
+      "y0": 856,
+      "x1": 2938,
+      "y1": 883
+     },
+     "confidence": 94
+    },
+    {
+     "text": "GOLD 20S",
+     "bbox": {
+      "x0": 1134,
+      "y0": 897,
+      "x1": 1260,
+      "y1": 917
+     },
+     "confidence": 86
+    },
+    {
+     "text": "95508788 100626 - MARLBORO 1 17.90 16.70 16.70 17.90 17.90 1.20 7 SR 0.00",
+     "bbox": {
+      "x0": 911,
+      "y0": 936,
+      "x1": 2939,
+      "y1": 963
+     },
+     "confidence": 94
+    },
+    {
+     "text": "BLACK MENTHOL 20S",
+     "bbox": {
+      "x0": 1134,
+      "y0": 976,
+      "x1": 1409,
+      "y1": 997
+     },
+     "confidence": 95
+    },
+    {
+     "text": "95509839 100624 - MARLBORO ICE 3 17.90 16.70 50.10 53.70 53.70 3.60 7 SR 0.00",
+     "bbox": {
+      "x0": 911,
+      "y0": 1015,
+      "x1": 2939,
+      "y1": 1041
+     },
+     "confidence": 94
+    },
+    {
+     "text": "BLAST 20S",
+     "bbox": {
+      "x0": 1134,
+      "y0": 1055,
+      "x1": 1269,
+      "y1": 1075
+     },
+     "confidence": 94
+    },
+    {
+     "text": "02-01-02 01232135 100726 - MEVIUS 5 18.40 17.08 85.40 92.00 92.00 6.60 7 SR 0.00",
+     "bbox": {
+      "x0": 692,
+      "y0": 1094,
+      "x1": 2939,
+      "y1": 1122
+     },
+     "confidence": 92
+    },
+    {
+     "text": "PREMIUM -JTI MENTHOL 20S",
+     "bbox": {
+      "x0": 693,
+      "y0": 1134,
+      "x1": 1314,
+      "y1": 1160
+     },
+     "confidence": 87
+    },
+    {
+     "text": "4033100054556 100732 - MEVIUS 1 18.40 17.08 17.08 18.40 18.40 1.32 7 SR 0.00",
+     "bbox": {
+      "x0": 910,
+      "y0": 1172,
+      "x1": 2939,
+      "y1": 1197
+     },
+     "confidence": 92
+    },
+    {
+     "text": "MENTHOL DUO 20S",
+     "bbox": {
+      "x0": 1134,
+      "y0": 1214,
+      "x1": 1381,
+      "y1": 1234
+     },
+     "confidence": 91
+    },
+    {
+     "text": "4902210200804 100734 - MEVIUS SKY 2 18.40 17.15 34.30 36.80 36.80 2.50 7 SR 0.00",
+     "bbox": {
+      "x0": 909,
+      "y0": 1250,
+      "x1": 2939,
+      "y1": 1285
+     },
+     "confidence": 94
+    },
+    {
+     "text": "BLUE 20S",
+     "bbox": {
+      "x0": 1134,
+      "y0": 1293,
+      "x1": 1254,
+      "y1": 1313
+     },
+     "confidence": 95
+    },
+    {
+     "text": "49401196 100730 - MEVIUS 6 18.40 17.15 102.90 110.40 110.40 7.50 7 SR 0.00",
+     "bbox": {
+      "x0": 909,
+      "y0": 1332,
+      "x1": 2938,
+      "y1": 1356
+     },
+     "confidence": 95
+    },
+    {
+     "text": "ORIGINAL BLUE 20S",
+     "bbox": {
+      "x0": 1133,
+      "y0": 1373,
+      "x1": 1388,
+      "y1": 1393
+     },
+     "confidence": 93
+    },
+    {
+     "text": "95510569 107114 - MEVIUS LBS 1 18.40 17.08 17.08 18.40 18.40 1.32 7 SR 0.00",
+     "bbox": {
+      "x0": 910,
+      "y0": 1411,
+      "x1": 2938,
+      "y1": 1435
+     },
+     "confidence": 95
+    },
+    {
+     "text": "YELLOW",
+     "bbox": {
+      "x0": 1132,
+      "y0": 1451,
+      "x1": 1242,
+      "y1": 1472
+     },
+     "confidence": 96
+    },
+    {
+     "text": "9555900301326 106489 - MEVIUS KIWAMI 1 18.40 17.08 17.08 18.40 18.40 1.32 7 SR 0.00",
+     "bbox": {
+      "x0": 910,
+      "y0": 1491,
+      "x1": 2938,
+      "y1": 1514
+     },
+     "confidence": 91
+    },
+    {
+     "text": "02-01-03 95502397 100144 - BENSON & 1 18.40 17.27 17.27 18.40 18.40 1.13 6 SR 0.00",
+     "bbox": {
+      "x0": 692,
+      "y0": 1537,
+      "x1": 2938,
+      "y1": 1566
+     },
+     "confidence": 95
+    },
+    {
+     "text": "PREMIUM — HEDGES",
+     "bbox": {
+      "x0": 693,
+      "y0": 1578,
+      "x1": 1242,
+      "y1": 1603
+     },
+     "confidence": 91
+    },
+    {
+     "text": "CMD 9556109106958 103732 - DUNHILL 32 18.20 17.07 546.24 582.40 582.40 36.16 6 SR 0.00",
+     "bbox": {
+      "x0": 692,
+      "y0": 1616,
+      "x1": 2939,
+      "y1": 1641
+     },
+     "confidence": 94
+    },
+    {
+     "text": "CLASSIC",
+     "bbox": {
+      "x0": 1133,
+      "y0": 1657,
+      "x1": 1244,
+      "y1": 1677
+     },
+     "confidence": 96
+    },
+    {
+     "text": "9556109108171 104922 - DUNHILL RED 14 18.20 17.07 238.98 254.80 254.80 15.82 6 SR 0.00",
+     "bbox": {
+      "x0": 910,
+      "y0": 1696,
+      "x1": 2939,
+      "y1": 1719
+     },
+     "confidence": 91
+    },
+    {
+     "text": "9556109109386 104923 - DUNHILL BLUE 8 18.20 17.07 136.56 145.60 145.60 9.04 6 SR 0.00",
+     "bbox": {
+      "x0": 910,
+      "y0": 1742,
+      "x1": 2940,
+      "y1": 1765
+     },
+     "confidence": 92
+    },
+    {
+     "text": "9556109109423 105170 - DUNHILL MIX 1 18.20 17.07 17.07 18.20 18.20 1.13 6 SR 0.00",
+     "bbox": {
+      "x0": 910,
+      "y0": 1788,
+      "x1": 2940,
+      "y1": 1812
+     },
+     "confidence": 93
+    },
+    {
+     "text": "02-02-00",
+     "bbox": {
+      "x0": 481,
+      "y0": 1844,
+      "x1": 586,
+      "y1": 1864
+     },
+     "confidence": 96
+    },
+    {
+     "text": "MID-LEVEL",
+     "bbox": {
+      "x0": 482,
+      "y0": 1880,
+      "x1": 620,
+      "y1": 1901
+     },
+     "confidence": 91
+    },
+    {
+     "text": "Page 1 of 2",
+     "bbox": {
+      "x0": 2806,
+      "y0": 1951,
+      "x1": 2938,
+      "y1": 1977
+     },
+     "confidence": 80
+    }
+   ],
+   "text": "Merchandise Sales Report Printed on 10/09/2026 15:49\nSite ID : 304602\nSite Name : PETRON MRR2 SAFARI\nBusiness Date From 09/09/2026 To 09/09/2026\nDepartment Code : 02-00-00 Category Code : All Sub-Category : All\nTerminal : All Shift : Alt Cashier ID: All\nItem : Alf\nTotal Total Nett Gross Profit\nPrice Cost Cost Sales Sales Profit Margin Tax Tax\nCategory Barcode / PLU Description Qty (RM) (RM) (RM) (RM) (RM) (RM) (%) Class (RM)\n02-00-00 02-01-00 02-01-01 76164217 100634 - MARLBORO RED 1 17.90 16.70 16.70 17.90 17.90 1.20 7 SR 0.00\nCIGARETTES PREMIUM PREMIUM — 20S\nPMI 76239427 100632 - MARLBORO 2 17.90 16.70 33.40 35.80 35.80 2.40 7 SR 0.00\nMENTHOL 20S\n76239878 100628 - MARLBORO 4 17.90 16.70 66.80 71.60 71.60 4.80 7 SR 0.00\nGOLD 20S\n95508788 100626 - MARLBORO 1 17.90 16.70 16.70 17.90 17.90 1.20 7 SR 0.00\nBLACK MENTHOL 20S\n95509839 100624 - MARLBORO ICE 3 17.90 16.70 50.10 53.70 53.70 3.60 7 SR 0.00\nBLAST 20S\n02-01-02 01232135 100726 - MEVIUS 5 18.40 17.08 85.40 92.00 92.00 6.60 7 SR 0.00\nPREMIUM -JTI MENTHOL 20S\n4033100054556 100732 - MEVIUS 1 18.40 17.08 17.08 18.40 18.40 1.32 7 SR 0.00\nMENTHOL DUO 20S\n4902210200804 100734 - MEVIUS SKY 2 18.40 17.15 34.30 36.80 36.80 2.50 7 SR 0.00\nBLUE 20S\n49401196 100730 - MEVIUS 6 18.40 17.15 102.90 110.40 110.40 7.50 7 SR 0.00\nORIGINAL BLUE 20S\n95510569 107114 - MEVIUS LBS 1 18.40 17.08 17.08 18.40 18.40 1.32 7 SR 0.00\nYELLOW\n9555900301326 106489 - MEVIUS KIWAMI 1 18.40 17.08 17.08 18.40 18.40 1.32 7 SR 0.00\n02-01-03 95502397 100144 - BENSON & 1 18.40 17.27 17.27 18.40 18.40 1.13 6 SR 0.00\nPREMIUM — HEDGES\nCMD 9556109106958 103732 - DUNHILL 32 18.20 17.07 546.24 582.40 582.40 36.16 6 SR 0.00\nCLASSIC\n9556109108171 104922 - DUNHILL RED 14 18.20 17.07 238.98 254.80 254.80 15.82 6 SR 0.00\n9556109109386 104923 - DUNHILL BLUE 8 18.20 17.07 136.56 145.60 145.60 9.04 6 SR 0.00\n9556109109423 105170 - DUNHILL MIX 1 18.20 17.07 17.07 18.20 18.20 1.13 6 SR 0.00\n02-02-00\nMID-LEVEL\nPage 1 of 2\n"
+  },
+  {
+   "page": 2,
+   "lines": [
+    {
+     "text": "Merchandise Sales Report Printed on 10/09/2026 15:49",
+     "bbox": {
+      "x0": 1139,
+      "y0": 152,
+      "x1": 2727,
+      "y1": 215
+     },
+     "confidence": 96
+    },
+    {
+     "text": "Site ID : 304602",
+     "bbox": {
+      "x0": 88,
+      "y0": 235,
+      "x1": 276,
+      "y1": 256
+     },
+     "confidence": 94
+    },
+    {
+     "text": "Site Name : PETRON MRR2 SAFARI",
+     "bbox": {
+      "x0": 88,
+      "y0": 276,
+      "x1": 524,
+      "y1": 297
+     },
+     "confidence": 92
+    },
+    {
+     "text": "Business Date From 09/09/2026 To 09/09/2026",
+     "bbox": {
+      "x0": 89,
+      "y0": 321,
+      "x1": 640,
+      "y1": 344
+     },
+     "confidence": 96
+    },
+    {
+     "text": "Department Code : 02-00-00 Category Code : All Sub-Category : All",
+     "bbox": {
+      "x0": 90,
+      "y0": 369,
+      "x1": 881,
+      "y1": 398
+     },
+     "confidence": 93
+    },
+    {
+     "text": "Terminal : Ali Shift : All Cashier ID: All",
+     "bbox": {
+      "x0": 87,
+      "y0": 417,
+      "x1": 524,
+      "y1": 439
+     },
+     "confidence": 90
+    },
+    {
+     "text": "Item : All",
+     "bbox": {
+      "x0": 93,
+      "y0": 466,
+      "x1": 192,
+      "y1": 488
+     },
+     "confidence": 83
+    },
+    {
+     "text": "Total Total Nett Gross Profit",
+     "bbox": {
+      "x0": 1710,
+      "y0": 575,
+      "x1": 2462,
+      "y1": 610
+     },
+     "confidence": 96
+    },
+    {
+     "text": "Price Cost Cost Sales Sales Profit Margin Tax Tax",
+     "bbox": {
+      "x0": 1443,
+      "y0": 614,
+      "x1": 2731,
+      "y1": 649
+     },
+     "confidence": 93
+    },
+    {
+     "text": "Category Barcode /PLU Description Qty (RM) (RM) (RM) (RM) (RM) (RM) (%) Class (RM)",
+     "bbox": {
+      "x0": 72,
+      "y0": 640,
+      "x1": 2730,
+      "y1": 684
+     },
+     "confidence": 86
+    },
+    {
+     "text": "_—_— mm eV FE hE BB RM) te) lass (RM)",
+     "bbox": {
+      "x0": 76,
+      "y0": 674,
+      "x1": 2735,
+      "y1": 694
+     },
+     "confidence": 33
+    },
+    {
+     "text": "02-02-01 88823386 100640 - CHESTERFIELD 8 12.80 11.85 94.80 102.40 102.40 7.60 7 SR 0.00",
+     "bbox": {
+      "x0": 488,
+      "y0": 703,
+      "x1": 2733,
+      "y1": 734
+     },
+     "confidence": 95
+    },
+    {
+     "text": "MID-LEVEL — RED 20S",
+     "bbox": {
+      "x0": 489,
+      "y0": 744,
+      "x1": 1038,
+      "y1": 769
+     },
+     "confidence": 85
+    },
+    {
+     "text": "PMI 88823393 100642 - CHESTERFIELD [1 12.80 11.85 82.95 89.60 89.60 6.65 7 SR 0.00",
+     "bbox": {
+      "x0": 489,
+      "y0": 782,
+      "x1": 2733,
+      "y1": 817
+     },
+     "confidence": 89
+    },
+    {
+     "text": "BLUE 20S",
+     "bbox": {
+      "x0": 929,
+      "y0": 823,
+      "x1": 1051,
+      "y1": 843
+     },
+     "confidence": 88
+    },
+    {
+     "text": "95510354 100638 - CHESTERFIELD 8 12.80 11.85 94.80 102.40 102.40 7.60 7 SR 0.00",
+     "bbox": {
+      "x0": 707,
+      "y0": 862,
+      "x1": 2733,
+      "y1": 890
+     },
+     "confidence": 94
+    },
+    {
+     "text": "MENTHOL 20S",
+     "bbox": {
+      "x0": 930,
+      "y0": 901,
+      "x1": 1110,
+      "y1": 922
+     },
+     "confidence": 85
+    },
+    {
+     "text": "9555277315094 103526 - CHESTERFIELD 1 12.80 11.85 11.85 12.80 12.80 0.95 7 SR 0.00",
+     "bbox": {
+      "x0": 707,
+      "y0": 941,
+      "x1": 2733,
+      "y1": 970
+     },
+     "confidence": 92
+    },
+    {
+     "text": "PURPLE 20S",
+     "bbox": {
+      "x0": 929,
+      "y0": 981,
+      "x1": 1087,
+      "y1": 1001
+     },
+     "confidence": 94
+    },
+    {
+     "text": "02-02-02 01231233 100740 - WINSTON RED 3 16.60 15.52 46.56 49.80 49.80 3.24 7 SR 0.00",
+     "bbox": {
+      "x0": 487,
+      "y0": 1019,
+      "x1": 2733,
+      "y1": 1049
+     },
+     "confidence": 95
+    },
+    {
+     "text": "MID-LEVEL — 20",
+     "bbox": {
+      "x0": 487,
+      "y0": 1060,
+      "x1": 973,
+      "y1": 1086
+     },
+     "confidence": 76
+    },
+    {
+     "text": "JTI 01231932 100738 - WINSTON BLUE 3 16.60 15.52 46.56 49.80 49.80 3.24 7 SR 0.00",
+     "bbox": {
+      "x0": 486,
+      "y0": 1098,
+      "x1": 2733,
+      "y1": 1126
+     },
+     "confidence": 94
+    },
+    {
+     "text": "20S",
+     "bbox": {
+      "x0": 928,
+      "y0": 1139,
+      "x1": 973,
+      "y1": 1158
+     },
+     "confidence": 67
+    },
+    {
+     "text": "8885004830004 100756 - LD RED 20S 5 12.70 11.93 59.65 63.50 63.50 3.85 6 SR 0.00",
+     "bbox": {
+      "x0": 706,
+      "y0": 1177,
+      "x1": 2732,
+      "y1": 1206
+     },
+     "confidence": 92
+    },
+    {
+     "text": "8885004830028 100758 - LD BLUE 20S 6 12.70 11.93 71.58 76.20 76.20 4.62 6 SR 0.00",
+     "bbox": {
+      "x0": 705,
+      "y0": 1224,
+      "x1": 2732,
+      "y1": 1252
+     },
+     "confidence": 92
+    },
+    {
+     "text": "8885004830042 100760 - LD MENTHOL 4 12.70 11.91 47.64 50.80 50.80 3.16 6 SR 0.00",
+     "bbox": {
+      "x0": 705,
+      "y0": 1270,
+      "x1": 2732,
+      "y1": 1298
+     },
+     "confidence": 91
+    },
+    {
+     "text": "208",
+     "bbox": {
+      "x0": 927,
+      "y0": 1310,
+      "x1": 973,
+      "y1": 1331
+     },
+     "confidence": 77
+    },
+    {
+     "text": "9555900300121 100762 - LD ZOOM 20S 4 12.70 11.91 47.64 50.80 50.80 3.16 6 SR 0.00",
+     "bbox": {
+      "x0": 705,
+      "y0": 1349,
+      "x1": 2732,
+      "y1": 1377
+     },
+     "confidence": 90
+    },
+    {
+     "text": "02-02-03 9556109105715 100128 - PETER 4 16.70 15.70 62.80 66.80 66.80 4.00 6 SR 0.00",
+     "bbox": {
+      "x0": 487,
+      "y0": 1396,
+      "x1": 2732,
+      "y1": 1425
+     },
+     "confidence": 90
+    },
+    {
+     "text": "MID-LEVEL — STUYVESANT RED",
+     "bbox": {
+      "x0": 487,
+      "y0": 1437,
+      "x1": 1164,
+      "y1": 1462
+     },
+     "confidence": 92
+    },
+    {
+     "text": "CMD 9556109106330 100155 - ROTHMANS RED 2 12.90 12.00 24.00 25.80 25.80 1.80 7 SR 0.00",
+     "bbox": {
+      "x0": 487,
+      "y0": 1475,
+      "x1": 2731,
+      "y1": 1503
+     },
+     "confidence": 92
+    },
+    {
+     "text": "9556109106712 100156 - ROTHMANS 12 12.90 12.00 144.00 154.80 154.80 10.80 7 SR 0.00",
+     "bbox": {
+      "x0": 704,
+      "y0": 1522,
+      "x1": 2731,
+      "y1": 1549
+     },
+     "confidence": 90
+    },
+    {
+     "text": "BLUE",
+     "bbox": {
+      "x0": 928,
+      "y0": 1562,
+      "x1": 994,
+      "y1": 1582
+     },
+     "confidence": 96
+    },
+    {
+     "text": "9556109107481 103735 - PETER 1 16.70 15.70 15.70 16.70 16.70 1.00 6 SR 0.00",
+     "bbox": {
+      "x0": 704,
+      "y0": 1601,
+      "x1": 2732,
+      "y1": 1628
+     },
+     "confidence": 94
+    },
+    {
+     "text": "STUYVESANT REMIX",
+     "bbox": {
+      "x0": 927,
+      "y0": 1642,
+      "x1": 1193,
+      "y1": 1663
+     },
+     "confidence": 93
+    },
+    {
+     "text": "PURPLE YELLOW",
+     "bbox": {
+      "x0": 927,
+      "y0": 1680,
+      "x1": 1148,
+      "y1": 1699
+     },
+     "confidence": 95
+    },
+    {
+     "text": "9556109108310 103630 - ROTHMANS 1 12.80 12.00 12.00 12.90 12.90 0.90 7 SR 0.00",
+     "bbox": {
+      "x0": 703,
+      "y0": 1718,
+      "x1": 2732,
+      "y1": 1744
+     },
+     "confidence": 90
+    },
+    {
+     "text": "PURPLE",
+     "bbox": {
+      "x0": 927,
+      "y0": 1759,
+      "x1": 1030,
+      "y1": 1778
+     },
+     "confidence": 95
+    },
+    {
+     "text": "Subtotal by Category: 2,435.80 2,435.80 159.61",
+     "bbox": {
+      "x0": 1484,
+      "y0": 1803,
+      "x1": 2302,
+      "y1": 1828
+     },
+     "confidence": 96
+    },
+    {
+     "text": "Grand Total: 2,435.80 2,435.80 159.61",
+     "bbox": {
+      "x0": 1599,
+      "y0": 1868,
+      "x1": 2300,
+      "y1": 1890
+     },
+     "confidence": 96
+    },
+    {
+     "text": "Page 2 of 2",
+     "bbox": {
+      "x0": 2597,
+      "y0": 1951,
+      "x1": 2729,
+      "y1": 1976
+     },
+     "confidence": 94
+    }
+   ],
+   "text": "Merchandise Sales Report Printed on 10/09/2026 15:49\nSite ID : 304602\nSite Name : PETRON MRR2 SAFARI\nBusiness Date From 09/09/2026 To 09/09/2026\nDepartment Code : 02-00-00 Category Code : All Sub-Category : All\nTerminal : Ali Shift : All Cashier ID: All\nItem : All\nTotal Total Nett Gross Profit\nPrice Cost Cost Sales Sales Profit Margin Tax Tax\nCategory Barcode /PLU Description Qty (RM) (RM) (RM) (RM) (RM) (RM) (%) Class (RM)\n_—_— mm eV FE hE BB RM) te) lass (RM)\n02-02-01 88823386 100640 - CHESTERFIELD 8 12.80 11.85 94.80 102.40 102.40 7.60 7 SR 0.00\nMID-LEVEL — RED 20S\nPMI 88823393 100642 - CHESTERFIELD [1 12.80 11.85 82.95 89.60 89.60 6.65 7 SR 0.00\nBLUE 20S\n95510354 100638 - CHESTERFIELD 8 12.80 11.85 94.80 102.40 102.40 7.60 7 SR 0.00\nMENTHOL 20S\n9555277315094 103526 - CHESTERFIELD 1 12.80 11.85 11.85 12.80 12.80 0.95 7 SR 0.00\nPURPLE 20S\n02-02-02 01231233 100740 - WINSTON RED 3 16.60 15.52 46.56 49.80 49.80 3.24 7 SR 0.00\nMID-LEVEL — 20\nJTI 01231932 100738 - WINSTON BLUE 3 16.60 15.52 46.56 49.80 49.80 3.24 7 SR 0.00\n20S\n8885004830004 100756 - LD RED 20S 5 12.70 11.93 59.65 63.50 63.50 3.85 6 SR 0.00\n8885004830028 100758 - LD BLUE 20S 6 12.70 11.93 71.58 76.20 76.20 4.62 6 SR 0.00\n8885004830042 100760 - LD MENTHOL 4 12.70 11.91 47.64 50.80 50.80 3.16 6 SR 0.00\n208\n9555900300121 100762 - LD ZOOM 20S 4 12.70 11.91 47.64 50.80 50.80 3.16 6 SR 0.00\n02-02-03 9556109105715 100128 - PETER 4 16.70 15.70 62.80 66.80 66.80 4.00 6 SR 0.00\nMID-LEVEL — STUYVESANT RED\nCMD 9556109106330 100155 - ROTHMANS RED 2 12.90 12.00 24.00 25.80 25.80 1.80 7 SR 0.00\n9556109106712 100156 - ROTHMANS 12 12.90 12.00 144.00 154.80 154.80 10.80 7 SR 0.00\nBLUE\n9556109107481 103735 - PETER 1 16.70 15.70 15.70 16.70 16.70 1.00 6 SR 0.00\nSTUYVESANT REMIX\nPURPLE YELLOW\n9556109108310 103630 - ROTHMANS 1 12.80 12.00 12.00 12.90 12.90 0.90 7 SR 0.00\nPURPLE\nSubtotal by Category: 2,435.80 2,435.80 159.61\nGrand Total: 2,435.80 2,435.80 159.61\nPage 2 of 2\n"
+  }
+ ]
+}

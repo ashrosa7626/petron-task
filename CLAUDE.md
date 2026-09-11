@@ -225,30 +225,70 @@ Supporting notes:
 - `vw_daily_reconciliation` computes `sold_physical = opening + add_in − closing`
   and the variance against `pos_sales_daily`. Excel/Power Query reads it directly
   — do not rename its columns.
-- **POS sales loader** (`stock-count/import-sales.html`, Sep 2026). Parses the
-  Merchandise Sales Report PDF with pdf.js and upserts `pos_sales_daily`.
+- **POS sales loader** (`stock-count/import-sales.html` + `stock-count/sales-parse.js`,
+  Sep 2026). **The report is a CCITT G4 fax scan with no text layer at all** — pdf.js
+  finds zero characters — so it is read by **OCR in the browser** (Tesseract.js 7.0.0,
+  pinned, loaded lazily from jsdelivr). The parsing lives in `sales-parse.js` as an ES
+  module so the page and the tests share one implementation; the page's script is
+  `type="module"` for that reason. The text-layer path is still tried first and feeds
+  the *same* parser, so a digital report would not be trusted any more blindly.
+  - **Two validations, and nothing is written without both.**
+    Per line, `Qty × Price` must equal `Total Sales` to the cent — a misread digit
+    breaks the equation instead of passing quietly. Across the file, summed
+    `Nett Sales` must equal the report's own **Grand Total**: a line lost whole to
+    OCR passes every per-line test because it is not there to be tested, and only
+    this catches it. A file that does not balance **blocks the write entirely**, and
+    says by how much; a gap that divides evenly by a price names the missing row
+    (50.80 = 4 × 12.70 on the 09/09 report).
   - **Absent means zero.** Only products that sold appear in the report; every other
     active product is written as `qty_sold = 0`. Leaving them out drops them from
     `vw_daily_reconciliation` entirely — on 09/09 that would have been **24 of 54
-    products with no variance**. This is the single most important behaviour; it is
-    pinned by `verify_sales_payload.mjs` against the known-good day.
-  - **`product_id` comes from the Description prefix** (`100634 - MARLBORO RED 20S`),
-    never the Barcode/PLU column — same leading-zero problem as everywhere else.
-  - Rows are rebuilt from pdf.js **glyph positions** (group by y, sort by x); the raw
-    string order scrambles columns. The Qty column is located from the `Qty` heading's
-    x-position, falls back to first-number-after-description, and is always shown and
-    overridable in the preview.
+    products with no variance**. Pinned by `verify_sales_payload.mjs`.
+  - **`product_id` is the six digits IMMEDIATELY before the dash — no `\b` anchor.**
+    A real line scanned as `8885004830042 4100760 - LD MENTHOL`, a stray digit fused
+    to the front of the ID; a `\b`-anchored pattern matched nothing and dropped the
+    line in silence. Never the Barcode/PLU column — same leading-zero problem as
+    everywhere else.
+  - **Render at the scan's native resolution**, read from the pdf.js operator list
+    (`paintImageMaskXObject` args carry width/height; no canvas needed), clamped
+    180–450, default 300. Resampling a 258dpi scan up to 300 blurs it and cost two
+    extra misread lines on the 09/09 report. The report prints **sideways**: a quarter
+    turn clockwise is tried first and confirmed by a cheap 130dpi probe of page 1.
+  - **Comma or period as the decimal separator** — `17,90` for `17.90`, about one
+    line in six.
+  - **A dropped decimal point is repaired, provably.** `18.40` scans as `1840`, which
+    shifts the money block a column over. A bare 3–5 digit integer in a money column
+    is re-read with the point put back, and accepted **only if the line then balances
+    to the cent** against two independently read numbers. Repaired lines are listed on
+    screen, never absorbed silently. This is the only place the parser re-reads
+    instead of refusing.
+  - **A failing line gets a suggestion, never a decision.** `Total Cost / Cost` and
+    `Total Sales / Price` are both Qty as the POS computed it; when they agree the
+    number is offered beside **a crop of the actual scan line**, and a human still has
+    to confirm it. Tolerance is on the money, not the ratio — `35.80/17.80` rounds to
+    2 but is 20 cents out, so it proves nothing.
   - Business date comes from the **report header**, never today's date or the filename.
-    `09/09/2026` is genuinely ambiguous day/month, so it is flagged for confirmation
-    rather than trusted. No date found → the user must set it; it never defaults.
+    **`Printed on` is excluded explicitly** — it is the first date on the page and the
+    wrong one (the day the paper came out, usually the day after). `09/09/2026` is
+    genuinely ambiguous day/month, so it is flagged for confirmation. No date found →
+    the user must set it; it never defaults. **`Business Date From X To Y` with X ≠ Y
+    is refused** — a multi-day report cannot be filed against one `sale_date`.
+  - **The wrong report is named, not shrugged at.** `identifyReport()` recognises
+    Inventory Balance and friends, which also carry six-digit Item IDs.
   - Unknown Item IDs are listed individually and **never written** — the FK to
     `product` is the database backstop. `103735 PETER STUYVESANT REMIX PURPLE YELLOW`
-    sells but is not on the planogram; that is information, not noise.
+    sells but is not on the planogram; that is information, not noise. They **do**
+    count towards the Grand Total check, because the POS counted them.
   - A missing or draft count for that date **warns but does not block** — sales can
     legitimately arrive before the count.
   - `08_pos_sales_write_policy.sql` grants anon insert+update on `pos_sales_daily`
     only, gated `qty_sold >= 0`, with **no delete policy** — a day is corrected by
     re-uploading, which upserts on `(branch_id, sale_date, product_id)`.
+  - Tests: `verify_ocr_parse.mjs` runs the shipped parser over
+    `cigarette stock/fixtures/sales_ocr_2026*.json`, the **real Tesseract output** for
+    the 09/09 and 10/09 scans with every mistake left in. Offline, no PDFs needed.
+    `verify_sales_parse.mjs` was deleted — it tested the Qty-column picker, which the
+    arithmetic proof replaced.
 - **Excel export is pull, not push** (`excel/`): Power Query hits the Supabase REST
   endpoint with the anon key and refreshes on open / every 60 min, so a submitted
   count reaches the workbook with no export step. `counts_query.m` (name the query
@@ -263,11 +303,11 @@ Supporting notes:
     dd/MM locale
   - the empty-result branch builds the table from `ColumnList`, so formulas
     survive the period before the first submission
-  - POS reconciliation is done in the sheet only because `pos_sales_daily` has no
-    loader; once one exists, `variance_packs` arrives computed and the sheet
-    columns become redundant
-- Open items: `short_name` values are drafts; the POS daily sales export format is
-  unseen so `pos_sales_daily` has no loader; only Safari is seeded — Nilai Desa Jati
+  - POS reconciliation is **no longer done in the sheet** — the loader exists, so
+    `variance_packs` arrives computed. The old `POS` sheet and its `SUMIFS` columns
+    should be deleted from any workbook still carrying them; two sources for the
+    same number will disagree the first time one is not updated by hand
+- Open items: `short_name` values are drafts; only Safari is seeded — Nilai Desa Jati
   needs its own planogram version. The `short_name` cases that actually bite are the
   three that land in a **single-facing (76px) block**: `E12` Rothmans Kool Hokkaido
   Mint (27 chars), `E16` Chesterfield Charcoal, `E27` Mevius Menthol White. Wide
@@ -325,14 +365,24 @@ single next action that proves the pipeline end to end.
 - `add_in` is always 0 (the count screen has one input), so any day stock went onto the
   shelf reads as negative variance. See the known-gap note in the module section.
 
+**The real PDFs have now been read.** `~/Downloads/20260910155519.pdf` is the 09/09
+report and `~/Downloads/20260910161828.pdf` is 10/09 — both CCITT G4 scans, no text
+layer. Read end to end in a real browser through the shipped page: 09/09 gives 31
+lines balancing to RM2,435.80 (144 packs clean + 8 across 2 flagged lines = the 152
+counted off the paper); 10/09 gives 27 lines balancing to RM1,376.70. Captured as
+`cigarette stock/fixtures/sales_ocr_2026*.json` so the tests keep running without them.
+`~/Downloads/20260826112033.pdf` is an **Inventory Balance** report, not a sales report
+— it is the fixture case for uploading the wrong one.
+
 **Not done:**
-- The real Merchandise Sales Report PDF has never been available here
-  (`_handoff/SALES_09SEP2026.xlsx` never arrived). `import-sales.html`'s payload builder
-  is verified exactly against the known-good day, but its **PDF parsing is tested only
-  against synthetic rows**. Most likely to need adjusting: the header date format and
-  the `Qty` column heading.
+- **The 10/09 sales report has still not been written to the database** — the import
+  was verified up to the point of writing and deliberately stopped there. Loading it
+  is what completes the variance chain, and it is the single next action.
 - No `pos_sales_daily` loader for Nilai Desa Jati; only Safari has a planogram.
 - `short_name` values are still drafts.
+- OCR accuracy is measured on two reports only: 1–2 lines a report need a human, and
+  2 more are repaired automatically. Worth re-checking that rate after a few weeks of
+  real use — if it climbs, the print quality or the scanner setting has moved.
 
 ## Deployment
 - git add . → git commit -m "message" → git push

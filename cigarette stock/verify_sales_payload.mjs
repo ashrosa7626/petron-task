@@ -1,21 +1,26 @@
 // Verify the importer's payload builder against the known-good day.
 //
-// buildPayload is imported straight out of import-sales.html, so this tests
-// shipped code. The 30 non-zero lines from 08_pos_sales_20260909.sql stand in
-// for what the parser reads off the report; the assertion is that the builder
-// turns them into the full 54-row payload with 24 explicit zeros.
+// buildPayload is imported from stock-count/sales-parse.js, the module the page
+// itself imports, so this tests shipped code. The 30 non-zero lines from
+// 08_pos_sales_20260909.sql stand in for what the parser reads off the report;
+// the assertion is that the builder turns them into the full 54-row payload
+// with 24 explicit zeros.
+//
+// Needs the network (it reads the live product table) and the known-good SQL
+// file. For the parser itself, see verify_ocr_parse.mjs, which runs offline
+// against captured OCR of the real scans.
 import { readFileSync } from 'node:fs';
-
-const html = readFileSync(new URL('../stock-count/import-sales.html', import.meta.url), 'utf8');
-const start = html.indexOf('function buildPayload');
-const end = html.indexOf('/* ============================ flow');
-if (start < 0 || end < 0) throw new Error('could not locate buildPayload');
-const { buildPayload } = await import(
-  'data:text/javascript,' + encodeURIComponent(html.slice(start, end) + '\nexport { buildPayload };')
-);
+import { buildPayload } from '../stock-count/sales-parse.js';
 
 // The known-good target.
-const sql = readFileSync('/Users/anieqluqman/Downloads/08_pos_sales_20260909.sql', 'utf8');
+const TARGET = '/Users/anieqluqman/Downloads/08_pos_sales_20260909.sql';
+let sql;
+try {
+  sql = readFileSync(TARGET, 'utf8');
+} catch (e) {
+  console.log(`SKIP  ${TARGET} is not here — this check needs the known-good day's SQL.`);
+  process.exit(0);
+}
 const target = new Map();
 for (const m of sql.matchAll(/\('SAFARI',\s*'([\d-]+)',\s*'(\d+)',\s*(\d+)\)/g)) {
   target.set(m[2], Number(m[3]));
