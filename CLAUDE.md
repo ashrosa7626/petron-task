@@ -142,6 +142,13 @@ The app's identity is the PIN session: `sessionStorage.staff_id` / `staff_name`,
   user to the page they wanted. `safeNext()` accepts **same-site relative paths only** —
   anything with a scheme, or starting `//` or `/`, is rejected, so a crafted `next`
   cannot redirect off-site. No `next` behaves exactly as before.
+- **One hop still drops it**: `pin.html` opens with
+  `if (!staffId) window.location.href = 'index.html'` — no `next`. Anyone landing on
+  the PIN screen without having picked a staff member loses where they were going and
+  ends on My Tasks after signing in. Sep 2026: `import-sales.html` was reported doing
+  exactly this. **That page no longer signs in at all** (see the sales loader below),
+  so the report was answered by removing the dependency rather than the bug — the
+  dropped `next` in `pin.html` is still there for any other page that needs it.
 
 **`CIGARETTES PLANOGRAM.xlsx` is the source of truth for the layout**, not the seed
 and not the database. `Planogram` sheet = the 6×27 grid; `Full Stock List` = product
@@ -232,14 +239,31 @@ Supporting notes:
   module so the page and the tests share one implementation; the page's script is
   `type="module"` for that reason. The text-layer path is still tried first and feeds
   the *same* parser, so a digital report would not be trusted any more blindly.
-  - **Two validations, and nothing is written without both.**
-    Per line, `Qty × Price` must equal `Total Sales` to the cent — a misread digit
-    breaks the equation instead of passing quietly. Across the file, summed
-    `Nett Sales` must equal the report's own **Grand Total**: a line lost whole to
-    OCR passes every per-line test because it is not there to be tested, and only
-    this catches it. A file that does not balance **blocks the write entirely**, and
-    says by how much; a gap that divides evenly by a price names the missing row
-    (50.80 = 4 × 12.70 on the 09/09 report).
+  - **Only the quantity is judged** (changed Sep 2026, at Rosa's request). `qty_sold`
+    is the only value this system writes — no price ever reaches the database — so
+    the money columns are read as **evidence for the quantity and nothing else**:
+    `Total Sales ÷ Price`, `Total Cost ÷ Cost` and `Nett Sales ÷ Price` are each the
+    quantity as the POS computed it, from digits read independently of it. A line
+    whose read quantity lands exactly on one of them (to the cent, on the *money*,
+    never on the ratio) is taken. When they agree on a **different** number, the
+    quantity is wrong and a human is asked. **A misread price that still proves the
+    quantity is not reported at all** — it changes nothing that gets written. This
+    took 09/09 from 2 flags to 1 and 10/09 from 1 to 0.
+  - The **Grand Total check survives as a warning, not a gate**: summed `Nett Sales`
+    against the report's own total is the only thing that can notice a line lost
+    *whole* to OCR, because such a line is proved by nothing and flagged by nothing.
+    A gap that divides evenly by a price names the missing row (50.80 = 4 × 12.70 on
+    09/09). It no longer blocks — a mismatch can equally mean a misread price.
+  - **PLU is cross-checked against the Item ID**, and still never joined on. They are
+    two labels for the same pack printed side by side; disagreement means one was
+    misread. Advisory only. Two cautions make it usable: the report's category code
+    runs onto the front of the barcode (`0201231233` for `01231233`), so the last
+    digit run before the Item ID is taken and a match is allowed when either value
+    ends with the other; and leading zeros are stripped. It found a real one —
+    **Mevius Sky Blue `100734` is `490221200804` in `product`, `02_seed.sql` and
+    `products_reference.csv`, but both scans read `4902210200804`** (13 digits, a
+    plausible EAN-13). The reference data is likely a digit short. Not changed —
+    verify against the pack.
   - **Absent means zero.** Only products that sold appear in the report; every other
     active product is written as `qty_sold = 0`. Leaving them out drops them from
     `vw_daily_reconciliation` entirely — on 09/09 that would have been **24 of 54
@@ -252,21 +276,24 @@ Supporting notes:
   - **Render at the scan's native resolution**, read from the pdf.js operator list
     (`paintImageMaskXObject` args carry width/height; no canvas needed), clamped
     180–450, default 300. Resampling a 258dpi scan up to 300 blurs it and cost two
-    extra misread lines on the 09/09 report. The report prints **sideways**: a quarter
-    turn clockwise is tried first and confirmed by a cheap 130dpi probe of page 1.
+    extra misread lines on the 09/09 report.
+  - The report prints **sideways**, so page 1 is read at full resolution turned 90°
+    and only if that does not come back looking like the report are the other three
+    orientations tried. **There is no low-resolution orientation probe** — there was,
+    and it was a trap: at 130dpi the scan is too soft for Tesseract to find the words
+    it is being asked about, so the probe failed on the 09/09 report it should have
+    recognised and then ground through all four orientations at a full page each.
+    The question is already answered by the page-1 read that has to happen anyway.
   - **Comma or period as the decimal separator** — `17,90` for `17.90`, about one
     line in six.
-  - **A dropped decimal point is repaired, provably.** `18.40` scans as `1840`, which
-    shifts the money block a column over. A bare 3–5 digit integer in a money column
-    is re-read with the point put back, and accepted **only if the line then balances
-    to the cent** against two independently read numbers. Repaired lines are listed on
-    screen, never absorbed silently. This is the only place the parser re-reads
-    instead of refusing.
-  - **A failing line gets a suggestion, never a decision.** `Total Cost / Cost` and
-    `Total Sales / Price` are both Qty as the POS computed it; when they agree the
-    number is offered beside **a crop of the actual scan line**, and a human still has
-    to confirm it. Tolerance is on the money, not the ratio — `35.80/17.80` rounds to
-    2 but is 20 cents out, so it proves nothing.
+  - **A dropped decimal point is put back.** `18.40` scans as `1840`, shifting the
+    money block a column over so it can corroborate nothing. A bare 3–5 digit integer
+    in a money column is re-read with the point restored — but this is plumbing, not
+    a finding: the reading is only taken if the quantity it implies is then proved,
+    and it is **not reported**, because no price is written. (It used to be listed as
+    a "repair"; that card is gone.)
+  - **A flagged line gets a suggestion, never a decision**, offered beside **a crop
+    of the actual scan line** taken while the page canvas is still in memory.
   - Business date comes from the **report header**, never today's date or the filename.
     **`Printed on` is excluded explicitly** — it is the first date on the page and the
     wrong one (the day the paper came out, usually the day after). `09/09/2026` is
@@ -281,6 +308,16 @@ Supporting notes:
     count towards the Grand Total check, because the POS counted them.
   - A missing or draft count for that date **warns but does not block** — sales can
     legitimately arrive before the count.
+  - **No sign-in.** The page used to require the PIN session before writing; that gate
+    is gone (Sep 2026). A required **name text box above the drop zone** replaces it,
+    remembered in `localStorage.pos_import_staff`. It is **not authentication** and
+    must not be read as any — a margin note saying who was at the keyboard.
+  - `09_pos_sales_imported_by.sql` adds `imported_by text`. It is **optional**: the
+    page probes for the column once at load (`select imported_by limit 1`) and leaves
+    the field out if it is missing, because sending a column that is not there fails
+    the whole upsert. Until it is run, the name gates the button but is not stored.
+  - **What blocks a write**: unconfirmed quantities, an unset date, a multi-day report,
+    an empty name. *Not* a price mismatch, *not* a PLU mismatch, *not* the Grand Total.
   - `08_pos_sales_write_policy.sql` grants anon insert+update on `pos_sales_daily`
     only, gated `qty_sold >= 0`, with **no delete policy** — a day is corrected by
     re-uploading, which upserts on `(branch_id, sale_date, product_id)`.

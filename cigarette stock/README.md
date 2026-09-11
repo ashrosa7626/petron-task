@@ -80,23 +80,58 @@ alternative was reasonable:
 Revisit if reports ever get long — the 15-page Inventory Balance would be minutes,
 not seconds — or if the import has to happen on a phone.
 
+### Then narrowed: only the quantity is judged
+
+`qty_sold` is the only value this system writes. No price ever reaches the
+database. So the per-line check stopped being *"does the money add up"* and
+became *"is the quantity proved"*:
+
+`Total Sales ÷ Price`, `Total Cost ÷ Cost` and `Nett Sales ÷ Price` are each the
+quantity as the POS computed it, from digits read independently of the quantity
+itself. Land on the number OCR read and the line is taken. Agree on a **different**
+number and a human is asked. **A misread price that still proves the quantity is
+not reported**, because it changes nothing that gets written.
+
+On the real scans that is the difference between 2 flags and 1 on 09/09, and
+between 1 and none on 10/09 — the lines it stopped raising were all of the form
+"price scanned 17.80 instead of 17.90, quantity fine".
+
+The Grand Total comparison stayed, demoted to a **warning**. It is the only thing
+that can notice a line lost *whole*, since such a line is proved by nothing and
+flagged by nothing. It no longer blocks, because a mismatch can equally mean a
+misread price.
+
+PLU is now **cross-checked** against the Item ID — still never joined on. They are
+two labels for the same pack, so disagreement means one was misread. Advisory.
+It immediately found one worth knowing about: Mevius Sky Blue is
+`490221200804` in the database, the seed *and* `products_reference.csv`, but both
+scans read `4902210200804` — 13 digits, a plausible EAN-13. The reference data
+looks a digit short. Left alone; check it against the pack.
+
 ### What changed on the way across
 
 - **Render at the scan's own resolution, not at 300dpi.** The PDFs are ~258dpi
   scans; resampling them up to 300 blurs every stroke. On the 09/09 report that
   cost two extra misread lines. The native figure is read out of the pdf.js
   operator list, needs no canvas, and falls back to 300 if it cannot be found.
-- **The decimal point OCR drops is repaired, provably.** `18.40` scans as `1840`
-  on a few lines in every report, which shifts the whole money block one column
-  over. A bare 3–5 digit integer in a money column is re-read with the point put
-  back — and accepted *only* if the line then balances to the cent against two
-  numbers read separately. Repaired lines are listed on screen, never absorbed
-  quietly. This is the one place the parser re-reads rather than refuses, and it
-  is held to the same proof as everything else.
-- **A failing line gets a suggestion, not a decision.** `Total Cost / Cost` and
-  `Total Sales / Price` are both Qty, computed by the POS before anything was
-  scanned. When they agree the quantity is offered — with the crop of the scan
-  beside it — and a human still has to accept it.
+- **The decimal point OCR drops is put back.** `18.40` scans as `1840` on a few
+  lines in every report, which shifts the whole money block one column over so it
+  can corroborate nothing. A bare 3–5 digit integer in a money column is re-read
+  with the point restored — plumbing, not a finding, and not reported, because the
+  reading is only taken when the quantity it implies is proved.
+- **A flagged line gets a suggestion, not a decision**, with the crop of the scan
+  beside it, and a human still has to accept it.
+- **No sign-in.** Reading a printed report does not need an account, and the PIN
+  flow was dropping people on My Tasks: `pin.html` opens with
+  `if (!staffId) location.href = 'index.html'`, losing the `?next=` that would have
+  brought them back. A required name box replaces it — a note saying who was at the
+  keyboard, not authentication. `09_pos_sales_imported_by.sql` stores it; the page
+  probes for the column and works without it.
+- **No low-resolution orientation probe.** There was one, and it cost minutes: at
+  130dpi the scan is too soft for Tesseract to find the words the probe asks about,
+  so it failed on a report it should have recognised and then tried all four
+  orientations at a full page each. Page 1 is read turned 90° at full resolution,
+  and only a page that comes back not looking like the report tries the others.
 - **The Qty-column picker is gone.** It existed to let someone correct a guess
   about which printed column held the quantity. The arithmetic proves it now.
 - **"Printed on" is excluded explicitly.** It is the first date in the header

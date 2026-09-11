@@ -6,13 +6,23 @@
 // on that assumption: the input is a noisy transcription, and the job is to
 // decide which lines can be trusted rather than to believe all of them.
 //
-// Two validations carry that weight, and neither is optional:
+// THE ONLY VALUE THIS SYSTEM WRITES IS qty_sold. No price ever reaches the
+// database. So the money columns are not audited for their own sake — they are
+// read as EVIDENCE FOR THE QUANTITY, and nothing else:
 //
-//   per line   Qty x Price must equal Total Sales, to the cent. A misread digit
-//              breaks the equation instead of passing quietly.
-//   per file   the Nett Sales column must sum to the report's own Grand Total.
-//              A line lost entirely to OCR passes every per-line test, because
-//              it is not there to be tested. Only this catches it.
+//   Total Sales / Price   and   Total Cost / Cost   and   Nett Sales / Price
+//
+// are each the quantity, computed by the POS before anything was scanned. When
+// one of them lands exactly on the number OCR read, the quantity is proved by
+// digits read independently of it, and the line is taken. When they agree on a
+// DIFFERENT number, the quantity is wrong and a human is asked — that is the
+// only thing flagged. A misread price that still proves the quantity is not a
+// problem and is not reported: it changes nothing that gets written.
+//
+// One file-level check survives, as a warning rather than a gate: the Nett
+// Sales column should sum to the report's own Grand Total. A line lost entirely
+// to OCR is proved by nothing and flagged by nothing, because it is not there
+// to be tested — this is the only thing that notices it is gone.
 //
 // Imported by both import-sales.html and cigarette stock/verify_ocr_parse.mjs,
 // so the tests exercise the shipped code rather than a copy of it.
@@ -76,15 +86,14 @@ const NOT_A_PRODUCT =
 //
 // '18.40' comes back as '1840' on a handful of lines in every report — the
 // point is a two-pixel mark on a fax scan. That shifts the whole money block
-// by one column and the line reads as nonsense (1840 x 17.15 = 31,556.00).
+// by one column, and a column read one place out cannot corroborate anything.
 //
 // A bare 3-5 digit integer sitting in a money column is therefore re-read with
-// the point put back two from the right — but the result is only ever accepted
-// if the line THEN satisfies Qty x Price = Total Sales to the cent, proved
-// against two other numbers that were read independently. So this is not the
-// parser guessing its way past a failed check; it is a second reading of the
-// same digits, held to exactly the same proof as every other accepted line.
-// Repaired lines are flagged and shown as repaired — never absorbed silently.
+// the point put back two from the right. This is plumbing, not a finding: it
+// only ever matters because it lets the money columns speak for the quantity,
+// and a reading is only taken when the quantity it implies is proved. A price
+// misread in a way that changes nothing about the quantity is not reported,
+// because no price is ever written.
 // ---------------------------------------------------------------------------
 const MONEY_TOKEN = new RegExp(`^(?:${NUM})$`);
 const BARE_INT = /^\d{1,5}$/;
@@ -98,8 +107,7 @@ const moneyValue = tok => {
   return null;
 };
 
-// Read the money block starting at `i` (the quantity), returning it only when
-// the arithmetic proves it.
+// Read the money block starting at `i`, where tokens[i] is the quantity.
 function readBlockAt(tokens, i) {
   const qtyTok = tokens[i];
   if (!BARE_INT.test(qtyTok) || qtyTok.length > 4) return null;
@@ -109,29 +117,94 @@ function readBlockAt(tokens, i) {
     if (!v && k <= 4) return null;      // price..total_sales are all required
     cols.push(v);
   }
-  const qty = parseInt(qtyTok, 10);
   const [price, cost, total_cost, total_sales, nett] = cols;
-  if (Math.abs(qty * price.value - total_sales.value) > CENT) return null;
   return {
-    qty,
+    qty: parseInt(qtyTok, 10),
     price: price.value, cost: cost.value,
     total_cost: total_cost.value, total_sales: total_sales.value,
-    nett_sales: nett ? nett.value : total_sales.value,
-    repaired: cols.some(c => c && c.repaired)
+    nett_sales: nett ? nett.value : total_sales.value
   };
 }
 
-// Every starting position is tried and the first reading that balances wins.
-// A description ending in a number ("PETER STUYVESANT 100 5 16.70 ...") would
-// otherwise be mistaken for the quantity; it simply fails to balance and the
-// scan moves on.
+// ---------------------------------------------------------------------------
+// What the money columns say the quantity is.
+//
+// Each ratio is the quantity as the POS computed it, from digits read
+// independently of the quantity itself. The tolerance is on the MONEY, never
+// on the ratio: 35.80 / 17.80 is 2.011, which rounds to 2 within a hundredth,
+// but 2 x 17.80 is twenty cents out, so that pairing proves nothing and must
+// not be allowed to look as if it does.
+// ---------------------------------------------------------------------------
+export function quantityEvidence(row) {
+  const found = new Map();
+  const add = (total, unit, from) => {
+    if (!(unit > 0) || !(total > 0) || !isFinite(total) || !isFinite(unit)) return;
+    const n = Math.round(total / unit);
+    if (n < 1 || n > 9999) return;
+    if (Math.abs(n * unit - total) > CENT) return;
+    if (!found.has(n)) found.set(n, { qty: n, from: [] });
+    found.get(n).from.push(from);
+  };
+  add(row.total_sales, row.price, 'Total Sales ÷ Price');
+  add(row.total_cost, row.cost, 'Total Cost ÷ Cost');
+  add(row.nett_sales, row.price, 'Nett Sales ÷ Price');
+  return [...found.values()].sort((a, b) => b.from.length - a.from.length);
+}
+
+const proves = (row, qty) => quantityEvidence(row).some(e => e.qty === qty);
+
+// Every starting position is tried, and the first reading whose quantity the
+// money columns actually corroborate wins. A description ending in a number
+// ("PETER STUYVESANT 100 5 16.70 ...") would otherwise be mistaken for the
+// quantity; nothing corroborates it, so the scan moves on. If no reading is
+// corroborated the leftmost valid one is returned anyway, so the line can be
+// shown to a human with its numbers rather than as a blank.
 function readMoneyBlock(rest) {
   const tokens = rest.trim().split(/\s+/);
+  let first = null;
   for (let i = 0; i < tokens.length - 4; i++) {
     const hit = readBlockAt(tokens, i);
-    if (hit) return hit;
+    if (!hit) continue;
+    if (proves(hit, hit.qty)) return { reading: hit, proved: true };
+    if (!first) first = hit;
   }
-  return null;
+  return first ? { reading: first, proved: false } : null;
+}
+
+// ---------------------------------------------------------------------------
+// The Barcode/PLU printed to the left of the Item ID, as a CROSS-CHECK.
+//
+// It is never a join key and this does not make it one — `product_id` remains
+// the only thing anything joins on. The point is different: the PLU and the
+// Item ID are two independent labels for the same pack, printed side by side.
+// If they disagree, one of them was misread, and that is worth saying out loud
+// next to a line whose quantity was taken on trust.
+//
+// Two things stop this from crying wolf:
+//   * the report prints its category code in the same region, so OCR runs
+//     '02' onto the front of the barcode ('0201231233' for '01231233'). The
+//     LAST run of digits before the Item ID is taken, and a match is allowed
+//     when either value ends with the other.
+//   * leading zeros differ between the POS export and the product table on
+//     several lines — the same leading-zero problem that is why PLU is never
+//     a join key — so they are stripped before comparing.
+// ---------------------------------------------------------------------------
+function scannedPlu(text, productId) {
+  const at = text.indexOf(productId);
+  if (at < 0) return null;
+  const before = text.slice(0, at);
+  const runs = before.match(/\d+/g);
+  if (!runs || !runs.length) return null;
+  const last = runs[runs.length - 1];
+  return last.length >= 6 ? last : null;
+}
+
+const bare = s => String(s == null ? '' : s).replace(/\D/g, '').replace(/^0+/, '');
+
+export function pluAgrees(scanned, known) {
+  const a = bare(scanned), b = bare(known);
+  if (!a || !b) return true;                 // nothing to compare, no complaint
+  return a === b || a.endsWith(b) || b.endsWith(a);
 }
 
 // ---------------------------------------------------------------------------
@@ -297,77 +370,58 @@ export function parseLines(input) {
       const row = {
         product_id,
         description: description.replace(/\s+/g, ' ').trim(),
+        scanned_plu: scannedPlu(text, product_id),
         page: pg.page, bbox: ln.bbox || null,
         confidence: ln.confidence, raw: text,
         qty: null, price: null, cost: null,
         total_cost: null, total_sales: null, nett_sales: null,
-        ok: false, repaired: false, reason: '', suggestions: []
+        ok: false, reason: '', suggestions: []
       };
 
       // ------------------------------------------------------------------
-      // The line checks its own arithmetic. This is what makes OCR
-      // acceptable for data feeding a financial reconciliation: a misread
-      // digit breaks the equation instead of passing quietly.
-      //
-      // A balanced reading is looked for first; only if none exists does the
-      // strict left-to-right match run, purely to produce a useful failure
-      // message for the human who has to sort it out.
+      // Only the quantity is judged. A reading whose quantity the money
+      // columns corroborate is taken; otherwise the line goes to a human
+      // with whatever those columns do say.
       // ------------------------------------------------------------------
-      const hit = readMoneyBlock(rest);
-      if (hit) {
-        Object.assign(row, hit, { ok: true });
+      const hit = readMoneyBlock(rest) ||
+        (() => {
+          const b = rest.match(NUMERIC_BLOCK);
+          if (!b) return null;
+          return {
+            proved: false,
+            reading: {
+              qty: parseInt(b[1], 10), price: toNum(b[2]), cost: toNum(b[3]),
+              total_cost: toNum(b[4]), total_sales: toNum(b[5]),
+              nett_sales: b[6] === undefined ? toNum(b[5]) : toNum(b[6])
+            }
+          };
+        })();
+
+      if (!hit) {
+        row.reason = 'the quantity on this line could not be read at all';
         out.push(row);
         continue;
       }
 
-      const b = rest.match(NUMERIC_BLOCK);
-      if (!b) {
-        row.reason = 'the numbers on this line could not be read';
-        out.push(row);
-        continue;
-      }
+      Object.assign(row, hit.reading);
+      row.suggestions = quantityEvidence(row).filter(e => e.qty !== row.qty);
 
-      row.qty = parseInt(b[1], 10);
-      row.price = toNum(b[2]);
-      row.cost = toNum(b[3]);
-      row.total_cost = toNum(b[4]);
-      row.total_sales = toNum(b[5]);
-      row.nett_sales = b[6] === undefined ? row.total_sales : toNum(b[6]);
-      row.reason =
-        `${row.qty} x ${row.price.toFixed(2)} = ${(row.qty * row.price).toFixed(2)}, ` +
-        `but the line reads ${row.total_sales.toFixed(2)}`;
-      row.suggestions = suggestQty(row);
+      if (hit.proved) {
+        row.ok = true;
+      } else if (row.suggestions.length) {
+        const top = row.suggestions[0];
+        row.reason =
+          `read as ${row.qty} pack${row.qty === 1 ? '' : 's'}, but the report's own ` +
+          `figures work out to ${top.qty}`;
+      } else {
+        row.reason =
+          `read as ${row.qty} pack${row.qty === 1 ? '' : 's'}, and nothing else on the ` +
+          `line confirms it`;
+      }
       out.push(row);
     }
   }
   return out;
-}
-
-// ---------------------------------------------------------------------------
-// When a line fails, the other printed columns often still name the quantity:
-// Total Cost / Cost and Total Sales / Price are both Qty, computed by the POS
-// before anything was scanned. Two independent routes to the same integer is
-// strong evidence — but it is offered as a suggestion for a human to accept,
-// never applied on its own. Nothing that failed its arithmetic gets written
-// because the software talked itself round.
-// ---------------------------------------------------------------------------
-export function suggestQty(row) {
-  const found = new Map();
-  // The tolerance is on the money, not on the ratio. 35.80 / 17.80 is 2.011,
-  // which rounds to 2 within a hundredth — but 2 x 17.80 is 20 cents out, so
-  // that pairing proves nothing and must not be offered as if it did.
-  const add = (total, unit, from) => {
-    if (!unit || !isFinite(total) || !isFinite(unit) || unit <= 0 || total <= 0) return;
-    const n = Math.round(total / unit);
-    if (n < 1 || n > 9999) return;
-    if (Math.abs(n * unit - total) > CENT) return;
-    if (!found.has(n)) found.set(n, { qty: n, from: [] });
-    found.get(n).from.push(from);
-  };
-  add(row.total_sales, row.price, 'Total Sales / Price');
-  add(row.total_cost, row.cost, 'Total Cost / Cost');
-  add(row.nett_sales, row.price, 'Nett Sales / Price');
-  return [...found.values()].sort((a, b) => b.from.length - a.from.length);
 }
 
 // ---------------------------------------------------------------------------

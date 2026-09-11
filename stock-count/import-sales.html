@@ -117,8 +117,9 @@
     .fix-in label{display:block;font-size:0.72rem;color:var(--p-text3);text-transform:uppercase;
                   letter-spacing:0.6px;margin-bottom:5px}
     .fix-in .inp{width:130px}
-    .sugg{font-size:0.82rem;color:var(--p-text2);margin-top:10px;line-height:1.5;
-          display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+    /* Block, not flex: this is a sentence with a number in the middle of it,
+       and flex made each text node its own item and broke it across lines. */
+    .sugg{font-size:0.82rem;color:var(--p-text2);margin-top:10px;line-height:1.5}
 
     /* the file-level totals check */
     .tot{display:flex;gap:18px;flex-wrap:wrap;font-family:var(--mono);font-size:0.95rem;
@@ -141,12 +142,22 @@
 
 <div class="wrap">
   <div class="hd">Merchandise Sales Report</div>
-  <div class="sub">Upload the POS daily sales PDF. The report prints as a scan with no text in it, so it is
-    read by OCR &mdash; then every line is checked against its own arithmetic, and the file against its
-    Grand Total, before anything is written. Products that do not appear in the report sold nothing
-    and are written as <b>0</b> &mdash; without that they drop out of reconciliation entirely.</div>
+  <div class="sub">Upload the POS daily sales PDF. The report prints as a scan with no text in it, so it
+    is read by OCR. The only number taken from it is <b>packs sold</b>, and each one has to be confirmed
+    by the report&rsquo;s own figures before it is written &mdash; anything that cannot be is put in front
+    of you with the scan beside it. Prices are read only as proof of the quantity and are never stored.
+    Products that do not appear in the report sold nothing and are written as <b>0</b>; without that they
+    drop out of reconciliation entirely.</div>
 
   <div id="stage1">
+    <div class="card">
+      <label class="lbl d" for="fStaff">Who is importing this</label>
+      <input class="inp" id="fStaff" type="text" placeholder="Your name" autocomplete="name">
+      <div class="hint">Kept with the day you load, so whoever looks at these numbers later knows
+        who to ask. It is a name on the work, not a login &mdash; reading a printed report does not
+        need an account.</div>
+    </div>
+
     <div class="drop" id="drop">
       <div class="drop-t">Choose the sales PDF</div>
       <div class="drop-s">or drag it here &middot; Merchandise Sales Report, site 304602</div>
@@ -182,19 +193,21 @@
     </div>
 
     <div class="card" id="fixCard" hidden>
-      <div class="lbl">Lines that need you</div>
-      <div class="sub" style="margin-bottom:14px">These did not pass their own arithmetic, so nothing is
-        assumed about them. The scan of each line is shown as the report printed it &mdash; read the
-        quantity off the paper and enter it.</div>
+      <div class="lbl">Quantities that need you</div>
+      <div class="sub" style="margin-bottom:14px">The packs sold on these lines could not be confirmed
+        from the report&rsquo;s own figures, so nothing is assumed about them. The scan of each line is
+        shown as the report printed it &mdash; read the quantity off the paper and enter it.</div>
       <div id="fixList"></div>
     </div>
 
-    <div class="card" id="repCard" hidden>
-      <div class="lbl g">Lines repaired and re-checked</div>
-      <div class="sub" style="margin-bottom:12px">OCR lost the decimal point in the price on these lines.
-        Putting it back made each one balance to the cent against two numbers read separately, so they are
-        treated as read &mdash; but they are listed here rather than absorbed quietly.</div>
-      <div class="tw"><table id="repTable"></table></div>
+    <div class="card" id="pluCard" hidden>
+      <div class="lbl" style="color:var(--p-blue-lt)">PLU and Item ID disagree</div>
+      <div class="sub" style="margin-bottom:12px">The barcode printed beside the Item ID does not match
+        the PLU held against that product. Two labels for the same pack, so one of them is wrong: either
+        OCR misread a digit of the barcode, or the product table has the wrong PLU. Nothing is blocked
+        &mdash; quantities are keyed on the Item ID and the PLU is never joined on &mdash; but a
+        disagreement here is worth a look.</div>
+      <div class="tw"><table id="pluTable"></table></div>
     </div>
 
     <div class="card" id="unkCard" hidden>
@@ -234,7 +247,7 @@
 <script type="module">
 import {
   parseLines, mergeDuplicates, findBusinessDate, findGrandTotal, identifyReport,
-  reconcileTotals, explainShortfall, buildPayload
+  reconcileTotals, explainShortfall, buildPayload, pluAgrees
 } from './sales-parse.js';
 
 const SUPABASE_URL = 'https://vwffiuciogthfzekkkkz.supabase.co';
@@ -255,23 +268,31 @@ const TESS_WORKER = 'https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/worker
 const TESS_CORE = 'https://cdn.jsdelivr.net/npm/tesseract.js-core@7.0.0';
 const TESS_LANG = 'https://tessdata.projectnaptha.com/4.0.0';
 
-// The module's PIN session: identity lives in sessionStorage, set by index.html
-// and verified by pin.html.
+// No sign-in.
 //
-// Deliberately no hard redirect. Bouncing an unsigned visitor to the home page
-// dropped them into the PIN flow, which always finished on tasks.html — so
-// pressing "Import sales" appeared to open the tasks page. Ask in place instead,
-// and hand the PIN screen a ?next= so it returns here.
-const staffName = sessionStorage.getItem('staff_name');
-const signedIn = !!sessionStorage.getItem('staff_id');
-el('who').textContent = staffName || '';
-if (!signedIn) {
-  el('who').innerHTML = '<a href="../index.html?next=' +
-    encodeURIComponent('stock-count/import-sales.html') + '">Sign in</a>';
-}
+// This page used to require the PIN session before it would write, and take the
+// name from it. That gate is gone: reading a printed report and typing the packs
+// off it is not work that needs an account, and being bounced into the PIN flow
+// mid-task cost more than it protected — it also landed people on My Tasks,
+// because the sign-in screen only returns you here if every hop keeps the
+// ?next= intact, and one of them did not.
+//
+// A typed name replaces it. That is not authentication and is not treated as
+// any: it is a note saying who was at the keyboard, which is what is actually
+// wanted when a number looks wrong weeks later.
+const STAFF_KEY = 'pos_import_staff';
+el('fStaff').value = localStorage.getItem(STAFF_KEY) || sessionStorage.getItem('staff_name') || '';
+el('fStaff').addEventListener('input', () => {
+  localStorage.setItem(STAFF_KEY, el('fStaff').value.trim());
+  el('who').textContent = el('fStaff').value.trim();
+  // The name is one of the things that gates the write, so typing it has to
+  // release the button without needing the preview rebuilt by hand.
+  if (!el('stage2').hidden && ctx.rec) render();
+});
+el('who').textContent = el('fStaff').value;
 
 const ctx = {
-  branchId: null, branchName: '', products: new Map(),
+  branchId: null, branchName: '', products: new Map(), hasImportedBy: false,
   rows: [], fix: {}, date: null, grand: null, fileName: '', source: '', dpi: 0, turn: 0
 };
 
@@ -386,31 +407,28 @@ function loadTesseract() {
 //
 // The report prints sideways, so the page has to be turned before OCR —
 // unturned, Tesseract reads columns as rows and the output is unusable.
-// A quarter turn clockwise is right for every report seen so far, so it
-// is tried first and accepted the moment it looks like the report; the
-// other three are there so a change of printer settings is a slower
-// import rather than a broken one.
+// A quarter turn clockwise is right for every report seen so far.
+//
+// There used to be a cheap low-resolution probe here to decide that. It
+// was a bad trade: at 130dpi the scan is too soft for Tesseract to find
+// the words it was being asked about, so the probe failed on a report it
+// should have recognised and then ground through all four orientations
+// at a full page each — minutes, for a question already answered by the
+// page-1 read that has to happen anyway.
+//
+// So there is no probe. Page 1 is read at full resolution turned 90, and
+// only if that does not come back looking like the report is another
+// orientation tried. The common path costs nothing, and a report that
+// ever prints a different way up is a slower import rather than a broken
+// one.
 // ------------------------------------------------------------------
-const PROBE_DPI = 130;
+const TURNS = [90, 270, 0, 180];
 const looksLikeReport = t => {
   const items = (t.match(/\d{6}\s*[-‐-―]/g) || []).length;
   const kw = ['merchandise', 'business date', 'grand total', 'site name', 'description']
     .filter(k => t.toLowerCase().includes(k)).length;
   return items * 3 + kw;
 };
-
-async function findTurn(worker, page) {
-  let best = { turn: 90, score: -1 };
-  for (const turn of [90, 270, 0, 180]) {
-    const canvas = await renderPage(page, PROBE_DPI, turn);
-    const { data } = await worker.recognize(canvas);
-    canvas.width = canvas.height = 0;
-    const score = looksLikeReport(data.text || '');
-    if (score > best.score) best = { turn, score };
-    if (score >= 4) break;              // good enough; stop burning time
-  }
-  return best;
-}
 
 function linesFromBlocks(data) {
   const out = [];
@@ -474,7 +492,8 @@ async function readPdf(buf) {
   // 2 — OCR.
   progress('Preparing to read the scan',
     'This report has no text in it &mdash; it is a picture of a printout, so it has to be read ' +
-    'visually. The first run downloads the recogniser (about 15 MB); after that it is cached.', 4);
+    'visually. The first run downloads the recogniser (about 15 MB); after that it is cached. ' +
+    'Keep this tab in front: browsers slow work right down in a background tab.', 4);
   await loadTesseract();
 
   // Recognising one page takes tens of seconds, so its progress is routed to
@@ -494,28 +513,44 @@ async function readPdf(buf) {
   await worker.setParameters({ tessedit_pageseg_mode: '6' });   // a uniform block of text
 
   try {
-    const first = await pdf.getPage(1);
-    const dpi = await nativeDpi(first);
-    const turning = `Rendering at the scan&rsquo;s own resolution, <b>${dpi} dpi</b>.`;
-    progress('Finding which way up the report is', turning, 14);
-    onRecognise = f => progress('Finding which way up the report is', turning, 14 + f * 5);
-    const turn = await findTurn(worker, first);
-
+    const dpi = await nativeDpi(await pdf.getPage(1));
     const pages = [];
     const rows = [];
+    let turn = TURNS[0];
+
+    // Read one page, and keep the canvas alive long enough to crop from it.
+    const readPage = async (p, useTurn) => {
+      const page = await pdf.getPage(p);
+      const canvas = await renderPage(page, dpi, useTurn);
+      const { data } = await worker.recognize(canvas, {}, { blocks: true, text: true });
+      return { canvas, data, text: data.text || '' };
+    };
+
     for (let p = 1; p <= nPages; p++) {
       const base = 20 + ((p - 1) / nPages) * 74;
       const span = 74 / nPages;
       const title = `Reading page ${p} of ${nPages}`;
-      const sub = `Turned ${turn.turn}&deg;, ${dpi} dpi.`;
+      let sub = `At ${dpi} dpi.`;
       progress(title, sub, base);
       onRecognise = f => progress(title, sub, base + span * 0.9 * f);
-      const page = await pdf.getPage(p);
-      const canvas = await renderPage(page, dpi, turn.turn);
-      const { data } = await worker.recognize(canvas, {},
-        { blocks: true, text: true });
-      const lines = linesFromBlocks(data);
-      pages.push({ page: p, lines, text: data.text || '' });
+
+      let read = await readPage(p, turn);
+
+      // Only page 1 gets to question the orientation; once it is settled the
+      // rest of the report is the same way up.
+      if (p === 1 && looksLikeReport(read.text) < 4) {
+        for (const t of TURNS.slice(1)) {
+          read.canvas.width = read.canvas.height = 0;
+          sub = `Trying a different orientation (${t}&deg;) at ${dpi} dpi.`;
+          progress(title, sub, base);
+          read = await readPage(p, t);
+          turn = t;
+          if (looksLikeReport(read.text) >= 4) break;
+        }
+      }
+
+      const lines = linesFromBlocks(read.data);
+      pages.push({ page: p, lines, text: read.text });
 
       // Parse now, while the canvas is still alive, so the failing lines can
       // keep a picture of themselves. A full page canvas is ~25 MB; holding
@@ -523,14 +558,14 @@ async function readPdf(buf) {
       const parsed = parseLines([{ page: p, lines }]);
       for (const r of parsed) {
         r.uid = p + ':' + rows.length;
-        if (!r.ok) r.crop = cropLine(canvas, r.bbox);
+        if (!r.ok) r.crop = cropLine(read.canvas, r.bbox);
         rows.push(r);
       }
-      canvas.width = canvas.height = 0;
+      read.canvas.width = read.canvas.height = 0;
       onRecognise = null;
-      progress(title, sub, base + span);
+      progress(title, `Turned ${turn}&deg;, ${dpi} dpi.`, base + span);
     }
-    return { source: 'ocr', pages, rows, dpi, turn: turn.turn };
+    return { source: 'ocr', pages, rows, dpi, turn };
   } finally {
     await worker.terminate();
   }
@@ -563,6 +598,12 @@ async function init() {
     .select('product_id,short_name,plu,active').eq('active', true).order('short_name');
   if (error) return note('parseNotes', 'err', 'Could not read the product list: ' + esc(error.message));
   ctx.products = new Map((prods || []).map(p => [p.product_id, p]));
+
+  // pos_sales_daily only grew an imported_by column in migration 09, which is
+  // optional and may not have been run. Ask the database rather than assume:
+  // sending a column that is not there fails the whole upsert.
+  const probe = await db.from('pos_sales_daily').select('imported_by').limit(1);
+  ctx.hasImportedBy = !probe.error;
 }
 
 function note(target, kind, html) {
@@ -625,14 +666,16 @@ async function handle(file) {
 
 // Corrections are applied to a copy, never to what was parsed, so backing a
 // correction out returns to exactly what the scan said.
+//
+// A correction changes the quantity and nothing else. The money columns are
+// left exactly as the report printed them, because the completeness check below
+// asks whether the report's own figures add up to the report's own total —
+// correcting a quantity we misread does not change what the paper says.
 function applied() {
   return ctx.rows.map(r => {
     const f = ctx.fix[r.uid];
     if (!f || !f.confirmed) return r;
-    return Object.assign({}, r, {
-      qty: f.qty, nett_sales: f.nett, total_sales: f.nett,
-      ok: true, corrected: true
-    });
+    return Object.assign({}, r, { qty: f.qty, ok: true, corrected: true });
   });
 }
 
@@ -683,13 +726,25 @@ function displayName(r) {
   return (p && p.short_name) || r.description || r.product_id;
 }
 
+// "a", "a and b", "a, b and c" — three routes to the same quantity is the
+// common case, and "both" was wrong for it.
+const listOf = xs => xs.length < 2 ? (xs[0] || '')
+  : xs.slice(0, -1).join(', ') + ' and ' + xs[xs.length - 1];
+
 function render() {
   const saleDate = el('fDate').value;
   const rows = applied();
   const merged = mergeDuplicates(rows);
   const good = merged.filter(r => r.ok);
   const bad = rows.filter(r => !r.ok);
-  const repaired = merged.filter(r => r.repaired);
+
+  // The Barcode/PLU beside the Item ID is a second label for the same pack.
+  // Disagreement means one of them was misread; it never changes what is
+  // written, because quantities are keyed on the Item ID.
+  const pluOff = merged.filter(r => {
+    const p = ctx.products.get(r.product_id);
+    return p && r.scanned_plu && !pluAgrees(r.scanned_plu, p.plu);
+  });
 
   // The file-level check counts every line the report printed, including Item
   // IDs with no product row — the POS counted them in its Grand Total, and
@@ -712,21 +767,24 @@ function render() {
     ['Need you', bad.length, bad.length ? 'r' : 'g'],
     ['Rows to write', payload.length, 'g'],
     ['Written as zero', zeros, zeros ? 'a' : ''],
-    ['Unknown IDs', unknownAll.length, unknownAll.length ? 'r' : 'g']
+    ['Unknown IDs', unknownAll.length, unknownAll.length ? 'r' : 'g'],
+    ['PLU mismatch', pluOff.length, pluOff.length ? 'a' : 'g']
   ].map(([l, v, k]) =>
     `<div class="stat"><div class="stat-l">${l}</div><div class="stat-v ${k}">${v}</div></div>`).join('');
 
   renderTotals(rec, merged);
   renderFixList(bad);
 
-  el('repCard').hidden = repaired.length === 0;
-  if (repaired.length) {
-    el('repTable').innerHTML =
-      '<thead><tr><th>Product</th><th>What the scan said</th>' +
-      '<th style="text-align:right">Price used</th><th style="text-align:right">Packs</th></tr></thead><tbody>' +
-      repaired.map(r => `<tr><td>${esc(displayName(r))}</td>` +
-        `<td class="k">${esc(r.raw.slice(0, 70))}</td>` +
-        `<td class="n">${r.price.toFixed(2)}</td><td class="n">${r.qty}</td></tr>`).join('') + '</tbody>';
+  el('pluCard').hidden = pluOff.length === 0;
+  if (pluOff.length) {
+    el('pluTable').innerHTML =
+      '<thead><tr><th>Product</th><th>Item ID</th><th>PLU in the report</th>' +
+      '<th>PLU on record</th></tr></thead><tbody>' +
+      pluOff.map(r => {
+        const p = ctx.products.get(r.product_id) || {};
+        return `<tr><td>${esc(displayName(r))}</td><td class="k">${esc(r.product_id)}</td>` +
+          `<td class="k">${esc(r.scanned_plu)}</td><td class="k">${esc(p.plu || '—')}</td></tr>`;
+      }).join('') + '</tbody>';
   }
 
   el('unkCard').hidden = unknownAll.length === 0;
@@ -745,7 +803,6 @@ function render() {
       const hit = soldMap.get(r.product_id);
       const src = !hit ? 'absent &rarr; zero'
         : hit.corrected ? 'you entered it'
-        : hit.repaired ? 'report, repaired'
         : 'report';
       return `<tr><td>${esc(p.short_name || r.product_id)}</td>` +
         `<td class="k">${esc(r.product_id)}</td>` +
@@ -760,10 +817,10 @@ function render() {
 function renderTotals(rec, merged) {
   const money = n => n === null || n === undefined ? '—' : 'RM ' + Number(n).toFixed(2);
   const ok = rec.balances;
-  el('totLbl').className = 'lbl ' + (ok ? 'g' : 'r');
+  el('totLbl').className = 'lbl ' + (ok ? 'g' : 'a');
   el('totLbl').innerHTML = ok
-    ? 'The file adds up <span class="pill g">balanced</span>'
-    : 'The file does not add up <span class="pill a">blocked</span>';
+    ? 'Every line is here <span class="pill g">nothing missing</span>'
+    : 'A line may be missing <span class="pill a">worth a look</span>';
 
   el('totBody').innerHTML = [
     ['Nett sales, summed', money(rec.summed)],
@@ -773,25 +830,29 @@ function renderTotals(rec, merged) {
 
   if (ok) {
     el('totHint').innerHTML =
-      'Every line the report printed is accounted for. This is the check that catches a line lost ' +
-      'whole to OCR &mdash; such a line passes every per-line test, because it is not there to be tested.';
+      'The money the lines add up to matches what the report says it should, so no line was lost ' +
+      'reading the scan. This is not a price check &mdash; no price is ever written &mdash; it is the ' +
+      'only thing that can notice a line that vanished whole, because a line that is not there is ' +
+      'not flagged by anything else.';
     return;
   }
   if (!rec.grand) {
     el('totHint').innerHTML =
-      '<b>No Grand Total was found in the report.</b> Without it there is no way to tell whether a ' +
-      'line was dropped, so this import is blocked. Check the last page of the PDF is included.';
+      'No Grand Total was found in the report, so there is no way to tell whether every line came ' +
+      'through. Check the last page of the PDF is included. The quantities read are unaffected.';
     return;
   }
   const hits = explainShortfall(rec.shortfall, merged);
   el('totHint').innerHTML =
     `The lines read come to <b>${money(rec.summed)}</b> but the report totals ` +
-    `<b>${money(rec.grand)}</b> &mdash; a gap of <b>${money(Math.abs(rec.shortfall))}</b>. ` +
+    `<b>${money(rec.grand)}</b> &mdash; a gap of <b>${money(Math.abs(rec.shortfall))}</b>, which ` +
+    `usually means a whole line was missed. ` +
     (hits.length
-      ? `A gap that divides evenly by a price usually names the missing line: ` +
+      ? `A gap that divides evenly by a price tends to name it: ` +
         hits.map(h => `<span class="mono">${h.note}</span>`).join(', ') + '. '
       : '') +
-    `Nothing is written until this balances &mdash; correcting the lines below may close it.`;
+    `Compare the list below against the paper before writing. This does not block the import &mdash; ` +
+    `it can also just mean a price was misread, which changes nothing that gets written.`;
 }
 
 function renderFixList(bad) {
@@ -813,14 +874,11 @@ function renderFixList(bad) {
         <div><label for="q-${esc(r.uid)}">Packs sold</label>
           <input class="inp" id="q-${esc(r.uid)}" type="number" min="0" step="1"
                  value="${f.qty !== undefined ? f.qty : (top ? top.qty : '')}"></div>
-        <div><label for="n-${esc(r.uid)}">Nett sales (RM)</label>
-          <input class="inp" id="n-${esc(r.uid)}" type="number" min="0" step="0.01"
-                 value="${f.nett !== undefined ? f.nett : (r.nett_sales ?? '')}"></div>
         <button class="btn ${f.confirmed ? 'sec' : 'pri'} sm" data-act="confirm">
           ${f.confirmed ? 'Change' : 'Confirm'}</button>
       </div>
-      ${top ? `<div class="sugg">The other columns say <b>${top.qty}</b> &mdash;
-        ${esc(top.from.join(' and '))} ${top.from.length > 1 ? 'both give' : 'gives'} that.
+      ${top ? `<div class="sugg">The report&rsquo;s own figures work out to <b>${top.qty}</b> &mdash;
+        ${esc(listOf(top.from))} ${top.from.length === 1 ? 'gives' : 'all give'} that.
         Check it against the scan before confirming.</div>` : ''}
     </div>`;
   }).join('');
@@ -831,22 +889,23 @@ function renderFixList(bad) {
       const uid = box.dataset.uid;
       if (ctx.fix[uid] && ctx.fix[uid].confirmed) { delete ctx.fix[uid]; return render(); }
       const q = box.querySelector('input[type=number]');
-      const n = box.querySelectorAll('input[type=number]')[1];
       const qty = parseInt(q.value, 10);
       if (!Number.isFinite(qty) || qty < 0) { q.focus(); return; }
-      const nett = n.value === '' ? 0 : Number(n.value);
-      ctx.fix[uid] = { qty, nett: isFinite(nett) ? nett : 0, confirmed: true };
+      ctx.fix[uid] = { qty, confirmed: true };
       render();
     });
   });
 }
 
+// What actually stops a write. Quantities, the date, and nothing else — a
+// mismatched price or PLU is reported but never blocks, because neither is
+// written and neither changes a number that is.
 function gateWrite(badCount, rec, saleDate) {
   const reasons = [];
-  if (badCount) reasons.push(`${badCount} line${badCount > 1 ? 's' : ''} still need a quantity`);
-  if (!rec.balances) reasons.push('the file does not match its Grand Total');
+  if (badCount) reasons.push(`${badCount} quantit${badCount > 1 ? 'ies' : 'y'} still unconfirmed`);
   if (!saleDate) reasons.push('the business date is not set');
   if (ctx.date && ctx.date.span) reasons.push('the report covers more than one day');
+  if (!el('fStaff').value.trim()) reasons.push('nobody is named as importing it');
   el('btnWrite').disabled = reasons.length > 0;
   el('writeHint').textContent = reasons.length ? 'Blocked: ' + reasons.join('; ') + '.' : '';
 }
@@ -896,23 +955,22 @@ function csv() {
   const date = el('fDate').value;
   const byId = new Map(ctx.merged.filter(r => r.ok).map(r => [r.product_id, r]));
   const head = ['sale_date', 'branch_id', 'product_id', 'short_name', 'qty_sold',
-                'price', 'nett_sales', 'source'];
+                'plu_on_record', 'plu_in_report', 'imported_by', 'source'];
+  const who = el('fStaff').value.trim();
   const lines = [head.join(',')];
   for (const r of ctx.payload) {
     const p = ctx.products.get(r.product_id) || {};
     const hit = byId.get(r.product_id);
     lines.push([date, ctx.branchId, r.product_id, p.short_name || '', r.qty_sold,
-      hit && hit.price != null ? hit.price.toFixed(2) : '',
-      hit && hit.nett_sales != null ? hit.nett_sales.toFixed(2) : '',
+      p.plu || '', hit ? (hit.scanned_plu || '') : '', who,
       !hit ? 'absent, written as zero'
         : hit.corrected ? 'entered by hand'
-        : hit.repaired ? 'report, decimal point repaired' : 'report'
+        : 'report'
     ].map(q).join(','));
   }
   for (const u of ctx.unknown) {
     lines.push([date, ctx.branchId, u.product_id, u.description, u.qty,
-      u.price != null ? u.price.toFixed(2) : '',
-      u.nett_sales != null ? u.nett_sales.toFixed(2) : '',
+      '', u.scanned_plu || '', who,
       'NOT WRITTEN — no product with this Item ID'].map(q).join(','));
   }
   const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
@@ -931,18 +989,19 @@ el('btnWrite').addEventListener('click', async () => {
     el('fDate').focus();
     return note('notes', 'err', 'Set the business date before writing.');
   }
-  // Reading and checking the report is open; changing the data is not.
-  if (!signedIn) {
-    return note('notes', 'err',
-      'Sign in before writing. <a href="../index.html?next=' +
-      encodeURIComponent('stock-count/import-sales.html') +
-      '">Sign in</a> and you will come straight back here.');
+  const who = el('fStaff').value.trim();
+  if (!who) {
+    el('fStaff').focus();
+    el('fStaff').scrollIntoView({ block: 'center', behavior: 'smooth' });
+    return note('notes', 'err', 'Put your name at the top before writing, so this day has someone on it.');
   }
   const btn = el('btnWrite');
   btn.disabled = true;
   btn.textContent = 'Writing…';
   try {
-    const rows = ctx.payload.map(r => Object.assign({}, r, { sale_date: saleDate }));
+    const rows = ctx.payload.map(r => Object.assign({}, r,
+      ctx.hasImportedBy ? { sale_date: saleDate, imported_by: who }
+                        : { sale_date: saleDate }));
     // Keyed on (branch_id, sale_date, product_id), so re-uploading a day
     // overwrites it cleanly instead of duplicating.
     const { error } = await db.from('pos_sales_daily')
@@ -954,13 +1013,12 @@ el('btnWrite').addEventListener('click', async () => {
     const zeros = rows.filter(r => r.qty_sold === 0).length;
     el('doneNote').innerHTML =
       `Wrote <b>${rows.length}</b> rows for <b>${esc(saleDate)}</b> &mdash; ` +
-      `${rows.length - zeros} with sales, <b>${zeros} as zero</b>. ` +
-      `The file balanced to the report&rsquo;s Grand Total of ` +
-      `<b>RM ${Number(ctx.rec.grand).toFixed(2)}</b>.` +
+      `${rows.length - zeros} with sales, <b>${zeros} as zero</b>` +
+      (ctx.hasImportedBy ? `, against <b>${esc(who)}</b>` : '') + '. ' +
       (ctx.unknown.length
-        ? ` ${ctx.unknown.length} unknown Item ID(s) were not written.`
+        ? `${ctx.unknown.length} unknown Item ID(s) were not written. `
         : '') +
-      ` Excel picks this up on its next refresh &mdash; there is nothing to send.`;
+      `Excel picks this up on its next refresh &mdash; there is nothing to send.`;
   } catch (e) {
     btn.disabled = false;
     btn.textContent = 'Write to database';
