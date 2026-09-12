@@ -406,9 +406,10 @@
 
   <header class="mast">
     <div class="eyebrow">Petron Safari &middot; Cigarette stock count</div>
-    <h1>Cigarette Counts to Excel</h1>
-    <p class="standfirst">Excel connects to the count system and refreshes itself. Set this up once and
-      every submitted count is in the workbook without anyone exporting anything.</p>
+    <h1>Cigarette reconciliation in Excel</h1>
+    <p class="standfirst">One trading day at a time, worst variance first, printable on a single
+      page &mdash; plus a view across days that tells a steady leak apart from one bad night.
+      The workbook is generated from the database, so refreshing it is one command.</p>
   </header>
 
   <div class="flow">
@@ -424,244 +425,166 @@
       <div class="node-s">Freezes the count</div>
     </div>
     <div class="arrow" aria-hidden="true">&rarr;</div>
-    <div class="node is-end">
-      <div class="node-k">Every 60 min</div>
-      <div class="node-v">Excel pulls</div>
-      <div class="node-s">Power Query</div>
+    <div class="node">
+      <div class="node-k">One command</div>
+      <div class="node-v">build_workbook.py</div>
+      <div class="node-s">Rebuilds the file</div>
     </div>
-    <p class="flow-note"><b>Nothing pushes.</b> Excel asks the database for the counts, on open and on a
-      timer. There is no file to send, no export step, and nothing for anyone to forget.</p>
+    <p class="flow-note"><b>The workbook is generated, not maintained.</b> Every run rebuilds it from
+      the database as it stands, so nothing in it should be edited by hand &mdash; the next run will
+      not keep the change. Anything that should be different belongs in the script.</p>
   </div>
 
   <section>
-    <h2>What arrives</h2>
-    <p>One row per product per submitted trading day, from the <code>vw_daily_reconciliation</code> view.</p>
+    <h2>What is in it</h2>
+    <div class="tw">
+      <table>
+        <thead>
+          <tr><th>Sheet</th><th>What it is for</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="k">Daily</td><td>One trading day, picked from a dropdown. Summary on top,
+            products below, worst variance first. Prints on one page.</td></tr>
+          <tr><td class="k">Trends</td><td>Variance by product across every counted day</td></tr>
+          <tr><td class="k">Notes</td><td>What the columns mean and what can make them lie</td></tr>
+          <tr><td class="k">Data</td><td>Hidden. The raw view, every column, exactly as it came back</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="call">
+      <div class="call-k">One table, not a sheet per day</div>
+      <p>Only the hidden sheet holds values. Daily reads it by formula, so changing the date in the
+        dropdown recalculates the same table in place &mdash; one set of formatting, one print
+        layout, however many days accumulate.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>The Daily sheet</h2>
     <div class="tw">
       <table>
         <thead>
           <tr><th>Column</th><th>What it holds</th></tr>
         </thead>
         <tbody>
-          <tr><td class="k">count_date</td><td>The trading day closed &mdash; not the clock date the count was taken</td></tr>
-          <tr><td class="k">product_id</td><td>The POS Item ID. <b>The only safe join key</b></td></tr>
-          <tr><td class="k">plu</td><td>For reading and checking the pack. <small>Never join on it</small></td></tr>
-          <tr><td class="k">short_name</td><td>Product name as it appears on the shelf block</td></tr>
-          <tr><td class="k">opening_packs</td><td>The previous submitted count&rsquo;s closing</td></tr>
-          <tr><td class="k">add_in</td><td>Stock added to the shelf during the day</td></tr>
-          <tr><td class="k">closing_packs</td><td>What was counted</td></tr>
-          <tr><td class="k">sold_physical</td><td><code>opening + add_in &minus; closing</code></td></tr>
-          <tr><td class="k">sold_pos</td><td>What the POS says it sold</td></tr>
-          <tr><td class="k">variance_packs</td><td><code>sold_physical &minus; sold_pos</code></td></tr>
+          <tr><td class="k">Opening</td><td>What the previous submitted count left on the shelf</td></tr>
+          <tr><td class="k">Closing</td><td>What was counted on the trading day named at the top</td></tr>
+          <tr><td class="k">Sold (counted)</td><td>Opening &minus; Closing. What the shelf says went out</td></tr>
+          <tr><td class="k">Sold (POS)</td><td>What the till says it sold, from the imported sales report</td></tr>
+          <tr><td class="k">Variance</td><td><code>Sold (counted) &minus; Sold (POS)</code>, straight from
+            the database view &mdash; never recalculated here, so it cannot drift from what the system believes</td></tr>
+          <tr><td class="k">Variance RM</td><td>The same figure valued in ringgit. <small>Needs prices &mdash; see below</small></td></tr>
+          <tr><td class="k">Item ID, PLU</td><td>Kept for checking a pack against the shelf label, pushed
+            to the far right where they are out of the way</td></tr>
         </tbody>
       </table>
     </div>
-    <div class="call info">
-      <div class="call-k">Drafts never arrive</div>
-      <p>A count reaches Excel only once it has been submitted. A half-finished count must never
-        reconcile, so the view reads submitted counts only.</p>
-    </div>
+    <p>Rows are ordered by <b>absolute</b> variance descending, so whatever needs attention is at the
+      top rather than wherever the alphabet put it. Variance is grey at zero and red from one pack,
+      getting heavier at five and again at ten. <span class="path">Ctrl+P</span> prints the day on
+      screen on a single page, with the header row repeated.</p>
+    <p><code>branch_id</code> and <code>pos_description</code> are gone. So is <b>Added</b>:
+      <code>add_in</code> is always zero because the count screen no longer collects deliveries, and a
+      column of zeros would only imply something had been checked. It is still on the hidden sheet.</p>
   </section>
 
   <section>
-    <h2>Set it up once</h2>
-    <ol class="steps">
-      <li>
-        <div class="st">Open a blank query</div>
-        <div class="sd">In Excel: <span class="path">Data &rsaquo; Get Data &rsaquo; From Other Sources &rsaquo; Blank Query</span></div>
-      </li>
-      <li>
-        <div class="st">Paste the query below</div>
-        <div class="sd"><span class="path">Home &rsaquo; Advanced Editor</span>, delete what is there, paste all of it, then <b>Done</b>.</div>
-      </li>
-      <li>
-        <div class="st">Name it <code>Counts</code></div>
-        <div class="sd">The sheet formulas further down depend on this exact name.</div>
-      </li>
-      <li>
-        <div class="st">Close &amp; Load</div>
-        <div class="sd">If Excel asks about credentials for <code>supabase.co</code>, choose <b>Anonymous</b>.</div>
-      </li>
-      <li>
-        <div class="st">Turn on automatic refresh</div>
-        <div class="sd"><span class="path">Data &rsaquo; Queries &amp; Connections</span>, right-click <b>Counts &rsaquo; Properties</b>, then tick
-          <b>Refresh data when opening the file</b> and <b>Refresh every 60 minutes</b>. This is the whole automation.</div>
-      </li>
-    </ol>
-
-    <div class="code">
-      <div class="code-bar">
-        <span class="code-name">counts_query.m &mdash; paste into Advanced Editor</span>
-        <button class="copy" type="button" data-target="m-counts">Copy</button>
-      </div>
-      <pre id="m-counts"><code>let
-    BaseUrl  = "https://vwffiuciogthfzekkkkz.supabase.co/rest/v1/",
-    ApiKey   = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ3ZmZpdWNpb2d0aGZ6ZWtra2t6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4NzcwMTAsImV4cCI6MjA5MTQ1MzAxMH0.OTEyOMn1fmUNV7pR51KMOLsMTNAfytt62uGS_AkQXyw",
-    Resource = "vw_daily_reconciliation",
-    Columns  = "branch_id,count_date,staff_name,product_id,plu,short_name,pos_description,opening_packs,add_in,closing_packs,sold_physical,sold_pos,variance_packs",
-    ColumnList = Text.Split(Columns, ","),
-    PageSize = 1000,
-
-    GetPage = (Offset as number) as list =&gt;
-        Json.Document(
-            Web.Contents(
-                BaseUrl,
-                [
-                    RelativePath = Resource,
-                    Query = [
-                        select = Columns,
-                        order  = "count_date.desc,short_name.asc",
-                        limit  = Text.From(PageSize),
-                        offset = Text.From(Offset)
-                    ],
-                    Headers = [
-                        apikey        = ApiKey,
-                        Authorization = "Bearer " &amp; ApiKey,
-                        Accept        = "application/json"
-                    ]
-                ]
-            )
-        ),
-
-    Pages = List.Generate(
-        () =&gt; [Offset = 0, Rows = GetPage(0)],
-        each List.Count([Rows]) &gt; 0,
-        each [Offset = [Offset] + PageSize, Rows = GetPage([Offset] + PageSize)],
-        each [Rows]
-    ),
-    AllRows = List.Combine(Pages),
-
-    AsTable =
-        if List.IsEmpty(AllRows) then
-            #table(ColumnList, {})
-        else
-            Table.ExpandRecordColumn(
-                Table.FromList(AllRows, Splitter.SplitByNothing(), {"rec"}, null, ExtraValues.Error),
-                "rec", ColumnList),
-
-    Typed = Table.TransformColumnTypes(AsTable, {
-        {"branch_id",       type text},
-        {"count_date",      type date},
-        {"staff_name",      type text},
-        {"product_id",      type text},
-        {"plu",             type text},
-        {"short_name",      type text},
-        {"pos_description", type text},
-        {"opening_packs",   Int64.Type},
-        {"add_in",          Int64.Type},
-        {"closing_packs",   Int64.Type},
-        {"sold_physical",   Int64.Type},
-        {"sold_pos",        Int64.Type},
-        {"variance_packs",  Int64.Type}
-    }, "en-US")
-in
-    Typed</code></pre>
-    </div>
-
-    <details>
-      <summary>Also add the product list (optional, but needed for the POS step)</summary>
-      <p style="color:var(--ink-2);font-size:0.92rem;margin-bottom:12px">The 54 products with their POS
-        Item ID, PLU and POS description. Use it to translate a POS export into <code>product_id</code>.
-        Install it the same way and name it <code>Products</code>.</p>
-      <div class="code">
-        <div class="code-bar">
-          <span class="code-name">products_query.m</span>
-          <button class="copy" type="button" data-target="m-products">Copy</button>
-        </div>
-        <pre id="m-products" class="short"><code>let
-    BaseUrl  = "https://vwffiuciogthfzekkkkz.supabase.co/rest/v1/",
-    ApiKey   = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ3ZmZpdWNpb2d0aGZ6ZWtra2t6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4NzcwMTAsImV4cCI6MjA5MTQ1MzAxMH0.OTEyOMn1fmUNV7pR51KMOLsMTNAfytt62uGS_AkQXyw",
-    Resource = "product",
-    Columns  = "product_id,plu,short_name,pos_description,brand,active",
-    ColumnList = Text.Split(Columns, ","),
-
-    Response = Json.Document(
-        Web.Contents(
-            BaseUrl,
-            [
-                RelativePath = Resource,
-                Query = [ select = Columns, order = "short_name.asc", limit = "1000" ],
-                Headers = [
-                    apikey        = ApiKey,
-                    Authorization = "Bearer " &amp; ApiKey,
-                    Accept        = "application/json"
-                ]
-            ]
-        )
-    ),
-
-    AsTable =
-        if List.IsEmpty(Response) then
-            #table(ColumnList, {})
-        else
-            Table.ExpandRecordColumn(
-                Table.FromList(Response, Splitter.SplitByNothing(), {"rec"}, null, ExtraValues.Error),
-                "rec", ColumnList),
-
-    Typed = Table.TransformColumnTypes(AsTable, {
-        {"product_id",      type text},
-        {"plu",             type text},
-        {"short_name",      type text},
-        {"pos_description", type text},
-        {"brand",           type text},
-        {"active",          type logical}
-    })
-in
-    Typed</code></pre>
-      </div>
-    </details>
-  </section>
-
-  <section>
-    <h2>Reconciling against the POS</h2>
-    <p><code>sold_pos</code> and <code>variance_packs</code> come back blank today, because nothing loads
-      the POS sales figures into the database yet. Until something does, do the POS side in the sheet.</p>
-
-    <div class="call info">
-      <div class="call-k">The real fix, when it comes</div>
-      <p>A loader that writes the POS daily sales export into <code>pos_sales_daily</code>. After that,
-        <b>variance arrives already calculated</b> and the two formula columns below become redundant.
-        It needs a sample POS export &mdash; nobody has produced one yet.</p>
-    </div>
-
-    <h3>1. A sheet named <code>POS</code></h3>
-    <p>Three columns, then <span class="path">Insert &rsaquo; Table</span>, named <code>POS</code>.</p>
+    <h2>Zero and unknown are not the same thing</h2>
+    <p>This is the thing to understand about every figure in here. Variance comes from the view, which
+      means it is <b>blank</b> whenever the view cannot work it out &mdash; and that happens for two
+      quite different reasons:</p>
     <div class="tw">
       <table>
-        <thead><tr><th>sale_date</th><th>product_id</th><th>qty_sold</th></tr></thead>
+        <thead>
+          <tr><th>Reason</th><th>What to do</th></tr>
+        </thead>
         <tbody>
-          <tr><td class="k">2026-09-09</td><td class="k">103732</td><td class="n">28</td></tr>
-          <tr><td class="k">2026-09-09</td><td class="k">104922</td><td class="n">22</td></tr>
+          <tr><td>No POS sales loaded for that day</td><td>Import that day&rsquo;s sales report</td></tr>
+          <tr><td>No opening figure &mdash; the first count of a product</td><td>Nothing. It fills in
+            from the next consecutive count</td></tr>
         </tbody>
       </table>
     </div>
-
-    <div class="call warn">
-      <div class="call-k">Format product_id as Text first</div>
-      <p>Do this <b>before</b> pasting. If one side is text and the other a number, the lookup returns
-        zero without complaining and every product reads as a perfect match &mdash; a clean sheet that is
-        entirely wrong.</p>
+    <div class="call">
+      <div class="call-k">Which is why it shows an em dash, not a zero</div>
+      <p>A blank cell in a spreadsheet reads as &ldquo;nothing wrong&rdquo;. These days are
+        &ldquo;not checked&rdquo;, which is a different thing and the one worth knowing about. The
+        summary line says in plain English which of the two applies, and the totals skip those rows
+        rather than counting them as agreement.</p>
     </div>
+  </section>
 
-    <h3>2. Two columns beside the <code>Counts</code> table</h3>
-    <p>Click the first empty cell to the right of the table and add these. Columns added inside a query
-      table survive refresh and fill down onto new rows.</p>
+  <section>
+    <h2>Trends</h2>
+    <p>Variance by product across every counted day, sorted by <b>how many days</b> each product was
+      off before how large the gap was.</p>
+    <div class="call">
+      <div class="call-k">A leak outranks an event</div>
+      <p>Five nights off by one pack is a leak worth chasing. One night off by five is an event. The
+        leak sorts above the event, which is the whole reason this sheet is not just Daily with more
+        columns.</p>
+    </div>
+    <p><b>Days off</b> counts only days that could actually be checked, so a product that has never had
+      a POS figure reads as a dash rather than as a confident nil.</p>
+  </section>
+
+  <section>
+    <h2>Refreshing it</h2>
+    <ol class="steps">
+      <li>
+        <div class="st">Install openpyxl, once</div>
+        <div class="sd">The only thing the script needs beyond Python.</div>
+      </li>
+      <li>
+        <div class="st">Run the build</div>
+        <div class="sd">It pulls the view with the public read-only key and rewrites the file.</div>
+      </li>
+      <li>
+        <div class="st">Open the workbook</div>
+        <div class="sd">Pick a trading day from the dropdown. Everything follows that one choice.</div>
+      </li>
+    </ol>
     <div class="code">
       <div class="code-bar">
-        <span class="code-name">pos_qty</span>
-        <button class="copy" type="button" data-target="f-pos">Copy</button>
+        <span class="code-name">in the excel/ folder</span>
+        <button class="copy" type="button" data-target="cmd-build">Copy</button>
       </div>
-      <pre id="f-pos" class="short"><code>=SUMIFS(POS[qty_sold], POS[sale_date], [@count_date], POS[product_id], [@product_id])</code></pre>
+      <pre id="cmd-build">pip install openpyxl
+python3 build_workbook.py</pre>
     </div>
-    <div class="code">
-      <div class="code-bar">
-        <span class="code-name">variance</span>
-        <button class="copy" type="button" data-target="f-var">Copy</button>
-      </div>
-      <pre id="f-var" class="short"><code>=IF([@sold_physical]="", "", [@sold_physical] - [@pos_qty])</code></pre>
+    <p>There is a test too &mdash; <code>python3 verify_workbook.py</code>. It matters because the live
+      database has no variance in it yet, so the ranking, the totals and the colouring would otherwise
+      ship having never run. It feeds the builder a day set shaped to exercise them and checks the
+      answers.</p>
+  </section>
+
+  <section>
+    <h2>Variance in ringgit</h2>
+    <p>Needs a price per pack, which means running
+      <code>10_prices_and_opening_date.sql</code>. Until then the RM column and
+      <b>Opening from</b> read as unavailable and everything else works.</p>
+    <div class="tw">
+      <table>
+        <thead>
+          <tr><th>Where the price lives</th><th>Why there</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="k">pos_sales_daily.unit_price</td><td>What the pack sold for <b>on that day</b>.
+            Filled automatically from the next sales report imported &mdash; the importer already reads
+            the price to prove the quantity, so it costs nothing to keep</td></tr>
+          <tr><td class="k">product.unit_price</td><td>The current list price, and <b>yours to set</b>.
+            The fallback, and the only answer for a product that had variance but sold nothing that
+            day &mdash; which is exactly the shrinkage case worth pricing</td></tr>
+        </tbody>
+      </table>
     </div>
-    <p style="font-size:0.9rem;color:var(--ink-2)"><code>SUMIFS</code> is deliberate: it returns 0 for a
-      product the POS never sold rather than an error, and it copes with the POS listing a product twice
-      in one day.</p>
+    <div class="call">
+      <div class="call-k">Why not just one price column</div>
+      <p>Cigarette prices move, and a duty change revalues the whole gondola overnight. Valuing
+        August&rsquo;s variance at today&rsquo;s price would quietly restate history every time
+        someone updated a price. So the price is recorded where it is observed, and the workbook can
+        show which one it used.</p>
+    </div>
   </section>
 
   <section>
@@ -682,66 +605,54 @@ in
           was not recorded as <code>add_in</code>.</div>
       </div>
       <div class="lg nil">
-        <div class="lg-v">blank</div>
-        <div class="lg-t"><b>Nothing to compare against.</b> No previous count to open from. Every product
-          shows this on its first count, and it fills in from the second consecutive day.</div>
+        <div class="lg-v">&mdash;</div>
+        <div class="lg-t"><b>Not known, and not zero.</b> Either no POS sales were loaded for that day,
+          or it is the product&rsquo;s first count and there is no opening to sell down from.</div>
       </div>
     </div>
   </section>
 
   <section>
-    <h2>Two things that will skew variance</h2>
-    <div class="call warn">
-      <div class="call-k">add_in is always zero</div>
-      <p>The count screen takes one number per product and no longer records deliveries. On any day
-        stock went onto the shelf, <code>sold_physical</code> understates what was sold by the delivery
-        quantity and shows as <b>negative variance</b>. Either record deliveries into
-        <code>add_in</code> another way, or read negative variance on delivery days as expected.</p>
-    </div>
-    <div class="call warn">
-      <div class="call-k">Counts must be consecutive</div>
-      <p><code>opening_packs</code> is the previous <b>submitted</b> count&rsquo;s closing, whatever date
-        that was. Skip a day and two days of sales silently fold into one, which reads as a large
-        variance on the day after the gap.</p>
-    </div>
+    <h2>Two things that will skew it</h2>
+    <p><b>Deliveries are not recorded.</b> The count screen collects one number per product and no
+      longer captures stock added during the day, so <code>add_in</code> is always zero. On any day
+      stock went onto the shelf, Sold (counted) understates what was sold and the day reads as
+      negative variance.</p>
+    <p><b>Counts must be consecutive.</b> Opening is the previous <i>submitted</i> count&rsquo;s
+      closing, whatever date that was &mdash; skip a day and two days of sales fold into one, which
+      reads as a large variance the day after the gap. That is what <b>Opening from</b> in the summary
+      is for: if it is not the day before, treat the figures with suspicion.</p>
   </section>
 
   <section>
-    <h2>If something goes wrong</h2>
+    <h2>If something looks wrong</h2>
     <div class="faq">
       <div class="faq-row">
-        <div class="faq-q">Excel keeps asking for credentials</div>
-        <div class="faq-a"><span class="path">Data &rsaquo; Get Data &rsaquo; Data Source Settings</span>,
-          clear permissions for <code>supabase.co</code>, refresh, and choose <b>Anonymous</b>.</div>
+        <div class="faq-q">Everything reads as a dash</div>
+        <div class="faq-a">No POS sales are loaded for that day, or it is the first count. The summary
+          line above the table says which.</div>
       </div>
       <div class="faq-row">
-        <div class="faq-q">The table is empty</div>
-        <div class="faq-a">Normal before the first count is submitted. Check the results page shows a
-          count marked <b>Submitted</b> &mdash; a draft will not appear here.</div>
+        <div class="faq-q">Variance RM is blank everywhere</div>
+        <div class="faq-a">Migration 10 has not been run, or <code>product.unit_price</code> has not
+          been set.</div>
       </div>
       <div class="faq-row">
-        <div class="faq-q">It stops at 1000 rows</div>
-        <div class="faq-a">The query pages past that on its own, so this means the M was truncated when
-          pasted. Copy it again and check the last line is <code>Typed</code>.</div>
+        <div class="faq-q">The dropdown is missing recent days</div>
+        <div class="faq-a">The workbook is a snapshot. Re-run <code>build_workbook.py</code>.</div>
       </div>
       <div class="faq-row">
-        <div class="faq-q">PLUs have lost their leading zero</div>
-        <div class="faq-a">A column was typed as a number somewhere. Cosmetic only &mdash; PLU is never
-          used to match anything &mdash; but the fix is <code>type text</code> in the query.</div>
+        <div class="faq-q">A large variance out of nowhere</div>
+        <div class="faq-a">Check <b>Opening from</b> in the summary. A skipped day folds two days of
+          sales into one figure.</div>
       </div>
       <div class="faq-row">
-        <div class="faq-q">Dates fail to parse</div>
-        <div class="faq-a">The query pins its culture to <code>en-US</code> for this reason. If it still
-          happens, check the <code>"en-US"</code> at the end of the last step survived the paste.</div>
+        <div class="faq-q">My edits disappeared</div>
+        <div class="faq-a">Expected &mdash; the file is regenerated. Put the change in
+          <code>build_workbook.py</code> so it survives.</div>
       </div>
     </div>
   </section>
-
-  <footer>
-    <div>The key in these queries is read-only and already public in the app&rsquo;s JavaScript. It grants
-      read access and nothing more. Never paste a service key into a workbook.</div>
-    <div>Petron Task System &middot; cigarette stock count</div>
-  </footer>
 
 </div>
 

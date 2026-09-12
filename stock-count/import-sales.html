@@ -599,11 +599,15 @@ async function init() {
   if (error) return note('parseNotes', 'err', 'Could not read the product list: ' + esc(error.message));
   ctx.products = new Map((prods || []).map(p => [p.product_id, p]));
 
-  // pos_sales_daily only grew an imported_by column in migration 09, which is
-  // optional and may not have been run. Ask the database rather than assume:
-  // sending a column that is not there fails the whole upsert.
-  const probe = await db.from('pos_sales_daily').select('imported_by').limit(1);
-  ctx.hasImportedBy = !probe.error;
+  // pos_sales_daily grew imported_by in migration 09 and unit_price in 10, both
+  // optional and possibly not run. Ask the database rather than assume: sending
+  // a column that is not there fails the whole upsert.
+  const [byProbe, priceProbe] = await Promise.all([
+    db.from('pos_sales_daily').select('imported_by').limit(1),
+    db.from('pos_sales_daily').select('unit_price').limit(1)
+  ]);
+  ctx.hasImportedBy = !byProbe.error;
+  ctx.hasUnitPrice = !priceProbe.error;
 }
 
 function note(target, kind, html) {
@@ -999,9 +1003,14 @@ el('btnWrite').addEventListener('click', async () => {
   btn.disabled = true;
   btn.textContent = 'Writing…';
   try {
-    const rows = ctx.payload.map(r => Object.assign({}, r,
-      ctx.hasImportedBy ? { sale_date: saleDate, imported_by: who }
-                        : { sale_date: saleDate }));
+    // Only send the optional columns the database actually has — see init().
+    const rows = ctx.payload.map(r => {
+      const row = { branch_id: r.branch_id, product_id: r.product_id,
+                    qty_sold: r.qty_sold, sale_date: saleDate };
+      if (ctx.hasImportedBy) row.imported_by = who;
+      if (ctx.hasUnitPrice && r.unit_price != null) row.unit_price = r.unit_price;
+      return row;
+    });
     // Keyed on (branch_id, sale_date, product_id), so re-uploading a day
     // overwrites it cleanly instead of duplicating.
     const { error } = await db.from('pos_sales_daily')

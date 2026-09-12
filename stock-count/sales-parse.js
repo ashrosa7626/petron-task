@@ -514,13 +514,25 @@ export function buildPayload(parsedLines, products, branchId, saleDate) {
   const known = [], unknown = [];
   for (const l of parsedLines) (products.has(l.product_id) ? known : unknown).push(l);
 
+  // The price the report printed, for the products that sold. It is read anyway
+  // — proving the quantity is what it is for — and storing it is what lets
+  // variance be valued at the price that applied on the day rather than at
+  // whatever the list price happens to be when someone opens the workbook.
+  //
+  // Only where the report actually gave one. A product that did not sell has no
+  // price here, and inventing one would be worse than a null: the view falls
+  // back to product.unit_price instead, and says which it used.
+  const priced = new Map(
+    parsedLines.filter(l => l.price > 0).map(l => [l.product_id, l.price]));
+
   const rows = [];
   for (const [pid] of products) {
     rows.push({
       branch_id: branchId,
       sale_date: saleDate,
       product_id: pid,
-      qty_sold: sold.has(pid) ? sold.get(pid) : 0
+      qty_sold: sold.has(pid) ? sold.get(pid) : 0,
+      unit_price: priced.has(pid) ? priced.get(pid) : null
     });
   }
   return { rows, known, unknown };

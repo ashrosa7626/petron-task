@@ -130,7 +130,9 @@ Pages, all under `stock-count/`:
 
 Excel reporting lives in `excel/` — see the export section below. The published
 setup guide is at https://claude.ai/code/artifact/f2489e09-bf24-4782-978b-4ed5cef39172
-(republish `excel/guide.html` to that same URL to update it).
+(republish `excel/guide.html` to that same URL to update it). **`guide.html` was
+rewritten for the generated workbook in Sep 2026 but has NOT been republished** —
+the live artifact still describes the old Power Query + SUMIFS setup.
 
 ### Sign-in and the `?next=` round trip
 The app's identity is the PIN session: `sessionStorage.staff_id` / `staff_name`, set by
@@ -326,11 +328,48 @@ Supporting notes:
     the 09/09 and 10/09 scans with every mistake left in. Offline, no PDFs needed.
     `verify_sales_parse.mjs` was deleted — it tested the Qty-column picker, which the
     arithmetic proof replaced.
-- **Excel export is pull, not push** (`excel/`): Power Query hits the Supabase REST
-  endpoint with the anon key and refreshes on open / every 60 min, so a submitted
-  count reaches the workbook with no export step. `counts_query.m` (name the query
-  `Counts`) and `products_query.m` (`Products`); `README.md` has the setup and the
-  Excel-side POS reconciliation. Points to note when editing the M:
+- **Excel reporting is a generated workbook** (`excel/`, rebuilt Sep 2026). It was
+  one flat table of every day stacked together, which is unreadable past a week.
+  `build_workbook.py` pulls `vw_daily_reconciliation` and writes
+  `Cigarette Reconciliation.xlsx`: **Daily** (one trading day from a dropdown,
+  summary block, sorted by *absolute* variance desc, prints on one page),
+  **Trends** (variance by product × date, sorted by days-off before size, so a
+  leak outranks an event), **Notes**, and a **hidden Data** sheet holding the raw
+  view. Only Data holds values; Daily reads it by formula, so the date selector
+  refilters one table rather than needing a sheet per day.
+  - **Refresh = re-run the script.** This is push, not pull — the deliberate
+    reversal of the old design, because the structure could not be delivered any
+    other way (see the next bullet). The file is rebuilt from scratch each run,
+    so **never hand-edit it**; changes belong in the script.
+  - **Not a PivotTable, though one was asked for.** AppleScript cannot create a
+    pivot cache in Excel 16.89 (`-50 Parameter error` on every variant of
+    `make new pivot cache`), and the `slicer` class in Excel's sdef is declared
+    with no properties, so a slicer cannot be scripted at all. Hand-authoring
+    pivot + slicer OOXML risks Excel's repair prompt, and a pivot cache is a
+    snapshot anyway — with no Power Query it would buy nothing over formulas that
+    recalculate instantly. Daily uses `INDEX`/`MATCH` off a data-validation date
+    cell instead: same one-table-one-format behaviour, verifiable, and no
+    `_xlfn.` dynamic-array landmines.
+  - **Keys are date SERIALS, not formatted strings.** `TEXT(d,"yyyy-mm-dd")` uses
+    localised tokens, so a string key silently stops matching on non-English
+    Excel. Concatenating a date coerces to its serial everywhere. Learned by
+    watching the sheet blank out the moment a date was typed rather than picked.
+  - **`INDEX` into an empty cell returns 0, not blank.** Every lookup goes through
+    a blank test, because otherwise an unknown total renders as a confident
+    "0 packs of variance" on exactly the day nothing could be checked. Unknown
+    shows an em dash; totals skip those rows.
+  - `Added` is dropped everywhere a person looks (`add_in` is always 0); it stays
+    on the hidden raw sheet. `branch_id`/`pos_description` dropped;
+    `product_id`/`plu` moved to the far right.
+  - `verify_workbook.py` feeds the builder synthetic days with variance in them,
+    because **the live database still has none** — every day has either no
+    opening or no POS — so ranking, totals and colouring would otherwise ship
+    unexercised. 38 checks.
+- **The Power Query path still exists** and is now the subordinate alternative:
+  it hits the Supabase REST endpoint with the anon key and refreshes on open /
+  every 60 min, giving live data but the flat table with none of the structure.
+  `counts_query.m` (name the query `Counts`) and `products_query.m` (`Products`).
+  Kept because it is the only no-Python route. Points to note when editing the M:
   - it **pages** — PostgREST caps responses at 1000 rows, which 54 products/day
     reaches in under three weeks
   - `BaseUrl` must stay constant with `RelativePath`/`Query` doing the work, or
@@ -378,23 +417,30 @@ write, so migrations are run by hand in the Supabase SQL editor):
 ## Cigarette Module — State as of 11 Sep 2026
 Verified against the live database, not from memory. Re-check before trusting.
 
-**Migrations applied:** 01–08 are all in. `pos_sales_daily` holds 54 rows, so `08`'s
-write policy is live and an import has succeeded.
+**Migrations applied:** 01–08 are in. `pos_sales_daily` holds 54 rows, so `08`'s
+write policy is live and an import has succeeded. **`09` and `10` are written but
+NOT run** — verified 12 Sep 2026: `product` has no `unit_price` and the view has no
+`opening_date`, so the workbook shows those as unavailable. Both are optional and
+everything degrades gracefully without them.
 
 **Data in the system:**
 
-| count_date | status | opening | sold_physical | sold_pos | variance |
-|---|---|---|---|---|---|
-| 2026-08-26 | draft | — | — | — | — |
-| 2026-09-09 | submitted | 0/54 | 0/54 | **54/54** | 0/54 |
-| 2026-09-10 | submitted | **54/54** | **54/54** | 0/54 | 0/54 |
+Re-verified 12 Sep 2026 against the live view:
+
+| count_date | status | staff | opening | sold_physical | sold_pos | variance |
+|---|---|---|---|---|---|---|
+| 2026-08-26 | draft | — | — | — | — | — |
+| 2026-09-09 | submitted | Luqman | 0/54 | 0/54 | **54/54** | 0/54 |
+| 2026-09-10 | submitted | Luqman | **54/54** | **54/54** | 0/54 | 0/54 |
+| 2026-09-11 | submitted | Aktar | **54/54** | **54/54** | 0/54 | 0/54 |
 
 **Variance is still 0 rows everywhere, and this is the thing to understand.** Each half
 works; they have never overlapped on the same day. `variance_packs` needs *both* a
 previous submitted count (for `opening_packs`) *and* a `pos_sales_daily` row for that
-same day. 09/09 has POS but is the first count so has no opening; 10/09 has an opening
-but no POS yet. **Importing the 10/09 sales report completes the chain** and is the
-single next action that proves the pipeline end to end.
+same day. 09/09 has POS but is the first count so has no opening; 10/09 and 11/09 have
+openings but no POS yet. **Importing the 10/09 or 11/09 sales report completes the
+chain** and is still the single next action that proves the pipeline end to end — it is
+also what makes the Excel workbook show anything but em dashes.
 
 **Two known distortions in the current numbers**, both expected, neither a bug:
 - 09/09 was a **test count** — one product at 7 packs, the other 53 at 0. So 10/09's

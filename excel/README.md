@@ -1,106 +1,153 @@
-# Sending cigarette counts to Excel
+# Cigarette reconciliation — the Excel workbook
 
-Excel pulls from Supabase. Nothing pushes. Once set up, every submitted count
-appears in the workbook on its own — open the file, or wait for the refresh
-interval, and the new day is there. No export step, no file to copy.
+`Cigarette Reconciliation.xlsx` is generated. To make it, or to refresh it:
 
-The count screen already writes to Supabase on submit. This just points Excel at
-the same data.
+```
+pip install openpyxl          # once
+python3 build_workbook.py
+```
 
-## What arrives
+It pulls `vw_daily_reconciliation` from Supabase with the public read-only key
+and rebuilds the file from scratch. **Don't hand-edit it** — the next run won't
+keep the change. Anything that should be different belongs in the script.
 
-`vw_daily_reconciliation`, one row per product per **submitted** trading day:
+## What's in it
 
-| column | meaning |
+| sheet | |
 |---|---|
-| `branch_id`, `count_date`, `staff_name` | which count |
-| `product_id` | the POS Item ID — **the only safe join key** |
-| `plu`, `short_name`, `pos_description` | for reading, never for joining |
-| `opening_packs` | previous submitted count's closing |
-| `add_in` | stock added during the day |
-| `closing_packs` | what was counted |
-| `sold_physical` | `opening + add_in − closing` |
-| `sold_pos` | from `pos_sales_daily` |
-| `variance_packs` | `sold_physical − sold_pos` |
+| **Daily** | One trading day, chosen from a dropdown. Summary block on top, products below, worst variance first. Prints on one page. |
+| **Trends** | Variance by product across every counted day. |
+| **Notes** | What the columns mean and what can make them lie. |
+| **Data** | Hidden. The raw view, every column, exactly as it came back. |
 
-Drafts never appear. The view reads `vw_count_submitted`, so a count reaches
-Excel only once submitted — a half-finished count must not reconcile.
+Only `Data` holds values. Daily reads it by formula, so changing the date
+recalculates in place — one table, one set of formatting, no sheet per day.
 
-## Setup, once
+### Daily
 
-1. **Data → Get Data → From Other Sources → Blank Query**
-2. **Home → Advanced Editor**, delete what's there, paste all of
-   [`counts_query.m`](counts_query.m), **Done**
-3. Rename the query to **`Counts`** — the sheet formulas below depend on that name
-4. **Close & Load**
-5. If Excel asks about credentials for `supabase.co`, choose **Anonymous**
-6. Repeat 1–4 with [`products_query.m`](products_query.m), named **`Products`**
+Columns are `Opening`, `Closing`, `Sold (counted)`, `Sold (POS)`, `Variance`,
+`Variance RM`, then `Item ID` and `PLU` pushed out to the far right where they
+stay available without being in the way. `branch_id` and `pos_description` are
+gone. So is `Added` — `add_in` is always zero, so a column of zeros would only
+imply something had been checked. It is still on the hidden sheet.
 
-### Make it automatic
+Rows are ordered by **absolute** variance descending, so the problems are at the
+top instead of wherever the alphabet put them. Variance is grey at zero and red
+from one pack, getting heavier at five and again at ten.
 
-**Data → Queries & Connections →** right-click **Counts → Properties**:
+Ctrl+P prints the day on screen on a single page, header row repeated.
 
-- [x] Refresh data when opening the file
-- [x] Refresh every `60` minutes
+### Trends
 
-That is the whole automation. The workbook is now live against the count system.
+Sorted by **how many days** each product was off, before how large the gap was.
+That ordering is the whole point: five nights off by one pack is a leak worth
+chasing, one night off by five is an event. The leak sorts above the event.
 
-## Reconciling against the POS
+## Zero and unknown are not the same thing
 
-**Nothing to do in the sheet.** `sold_pos` and `variance_packs` arrive already
-computed, on the same rows as everything else.
+This is the thing to understand about every figure in here.
 
-This used to need a hand-maintained `POS` sheet and two `SUMIFS` columns, because
-`pos_sales_daily` had no loader. It has one now — the
-[sales import page](https://ashrosa7626.github.io/petron-task/stock-count/import-sales.html)
-reads the printed Merchandise Sales Report and writes the day. Once a day is
-imported and its count submitted, the variance is in the workbook at the next
-refresh.
+`Variance` comes from the database view and is **never recalculated in Excel**,
+so it cannot drift from what the system believes. That also means it is *blank*
+whenever the view cannot work it out, which happens for two different reasons:
 
-If you have an old workbook carrying the `POS` sheet and the `pos_qty` /
-`variance` columns, delete them — they now sit beside columns that say the same
-thing, and the two will disagree the first time someone forgets to update the
-sheet by hand.
+- **No POS sales loaded for that day.** Nothing to compare the shelf against.
+- **No opening figure.** The first count of a product has nothing to sell down
+  from, and a variance needs an opening.
 
-**What the import guarantees, and why it matters here:** every active product
-gets a row for the day, including the ones that sold nothing, written as an
-explicit `0`. A product left out of `pos_sales_daily` disappears from
-`vw_daily_reconciliation` for that day rather than showing a variance — on 09/09
-that would have been 24 of 54 products silently absent.
+Either way the workbook shows an **em dash, not a zero**, and the summary says
+which in plain English. A blank cell in a spreadsheet reads as "nothing wrong";
+these days are "not checked", which is a different thing entirely and the one
+worth knowing about. Totals skip them rather than treating them as agreement.
 
-## Reading the result
+To fill them in: import that day's sales report on
+[the import page](https://ashrosa7626.github.io/petron-task/stock-count/import-sales.html).
 
-- `variance` **0** — physical and POS agree
-- **positive** — more went missing than the POS sold: shrinkage, miscount, or an unrecorded delivery
-- **negative** — the POS sold more than the shelf lost: usually a delivery not recorded as `add_in`
-- **blank `sold_physical`** — no previous count to open from. Every product shows
-  this on its first ever count; it fills in from the second consecutive day.
+## Variance RM
 
-## Two things that will skew variance right now
+Needs a price, and prices need `10_prices_and_opening_date.sql` (in
+`cigarette stock/`). Until it is run, the RM column and `Opening from` read as
+unavailable and everything else works.
 
-**`add_in` is always 0.** The count screen collects one number per product and no
-longer captures deliveries. On any day stock went onto the shelf, `sold_physical`
-understates what was sold by the delivery quantity and shows as negative
-variance. Either record deliveries into `stock_count_line.add_in` another way, or
-treat negative variance on delivery days as expected.
+After it is run:
 
-**Counts must be consecutive.** `opening_packs` is the previous *submitted*
-count's closing, whatever date that was. Skip a day and the gap silently folds
-two days of sales into one, which reads as a large variance on the day after the
-gap.
+- `pos_sales_daily.unit_price` — filled automatically from the next sales report
+  imported. The importer already reads the price to prove the quantity, so this
+  is the price that actually applied on the day.
+- `product.unit_price` — **yours to set.** It is the fallback, and the only
+  answer for a product that had variance but sold nothing that day, which is
+  exactly the shrinkage case worth pricing.
 
-## If the refresh fails
+```sql
+update product set unit_price = 18.20 where product_id = '103732';
+```
 
-- **Credential prompt reappears** — Data → Get Data → Data Source Settings →
-  clear permissions for `supabase.co`, refresh, choose Anonymous.
-- **Empty table** — normal before the first count is submitted. Check
-  [the results page](https://ashrosa7626.github.io/petron-task/stock-count/history.html)
-  shows a count marked Submitted.
-- **Stops at 1000 rows** — the query pages past that; check the M wasn't
-  truncated when pasted.
-- **Leading zeros gone from PLU** — a column got typed as a number. PLU is
-  display-only and never a join key, so this is cosmetic, but the fix is
-  `type text` in the M.
-- **`sold_pos` blank but the count is submitted** — that day's sales report has
-  not been imported. Load it on the import page; the variance fills in at the
-  next refresh.
+Until `product.unit_price` is set, a product with variance and no sales has no
+RM figure, and the workbook leaves it blank rather than showing a confident zero.
+
+## Reading the variance
+
+- **0** — physical and POS agree.
+- **positive** — more left the shelf than the till sold: shrinkage, a miscount,
+  or stock put out and not recorded.
+- **negative** — the till sold more than the shelf lost: usually a delivery.
+- **an em dash** — not known. See above.
+
+## Two things that will skew it
+
+**Deliveries are not recorded.** The count screen collects one number per
+product and no longer captures stock added during the day, so `add_in` is always
+zero. On any day stock went onto the shelf, `Sold (counted)` understates what
+was sold and the day reads as negative variance.
+
+**Counts must be consecutive.** `Opening` is the previous *submitted* count's
+closing, whatever date that was — skip a day and two days of sales fold into
+one, which reads as a large variance the day after the gap. That is what
+**`Opening from`** in the summary is for: if it is not the day before, treat the
+figures with suspicion.
+
+## Tests
+
+```
+python3 verify_workbook.py
+```
+
+The live database has no variance in it yet — every day either has no opening or
+no POS sales — so the ranking, totals and colouring would otherwise ship having
+never run. This feeds the builder a day set shaped to exercise them and asserts
+the answers, including that a leak outranks an event and that unknown never
+sums as zero.
+
+## The live-refresh alternative
+
+`counts_query.m` and `products_query.m` are Power Query for pulling the same
+view straight into Excel. That refreshes on its own, on open and every 60
+minutes, with no script to run — but it gives you the flat stacked table with
+none of the structure above, which is what this rebuild was replacing.
+
+Kept because it is the only no-Python path. If nobody is using it, it can go.
+
+Points to note if you edit the M:
+
+- it **pages** — PostgREST caps responses at 1000 rows, which 54 products a day
+  reaches in under three weeks
+- `BaseUrl` must stay constant with `RelativePath`/`Query` doing the work, or
+  `Web.Contents` cannot resolve stored credentials and refresh breaks
+- `plu` and `product_id` are typed `text`; numeric typing eats leading zeros
+- `Table.TransformColumnTypes` pins culture `"en-US"` so ISO dates parse on a
+  dd/MM locale
+- the empty-result branch builds the table from `ColumnList`, so formulas
+  survive the period before the first submission
+
+## If something looks wrong
+
+- **Everything reads `—`** — no POS sales are loaded for that day, or it is the
+  first count. The summary line says which.
+- **`Variance RM` all blank** — migration 10 has not been run, or
+  `product.unit_price` is not set.
+- **The dropdown has the wrong days** — the workbook is a snapshot. Re-run
+  `build_workbook.py`.
+- **A large variance out of nowhere** — check `Opening from`. A skipped day
+  folds two days of sales into one.
+- **`#NAME?` anywhere** — shouldn't happen; the sheet deliberately uses only
+  `INDEX`, `MATCH` and `IF` so it works in any version of Excel. Report it.
