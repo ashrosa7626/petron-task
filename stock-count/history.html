@@ -250,12 +250,17 @@ async function init() {
   ctx.counts.forEach(c => { c.lineCount = tally.get(c.count_id) || 0; });
 
   await loadRestocks();
-  renderList();
 
-  // Deep links: history.html?count=4 or ?restock=7
+  // Read the deep link BEFORE renderList() runs: it calls history.replaceState
+  // to drop the query string, so reading location.search afterwards always
+  // returns empty and the link silently lands on the list instead. The ?count=
+  // link had this from the start and nobody noticed, because the only way to
+  // reach it is to paste a URL.
   const q = new URLSearchParams(location.search);
   const wantCount = Number(q.get('count'));
   const wantRestock = Number(q.get('restock'));
+
+  renderList();
   if (wantCount && ctx.counts.some(c => c.count_id === wantCount)) openCount(wantCount);
   else if (wantRestock && ctx.restocks.some(r => r.restock_id === wantRestock)) {
     tab = 'restocks';
