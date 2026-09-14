@@ -236,9 +236,14 @@ async function dbListAll(prefix, limit = null) {
         results.filter(Boolean).forEach(b => {
           if (b && b.timestamp) {
             merged[b.timestamp] = b;
-            // Overwrite localStorage — Supabase version has full photos
-            try { localStorage.setItem('pb_b_' + b.timestamp, JSON.stringify(b)); } catch {
-              try { localStorage.setItem('pb_b_' + b.timestamp, JSON.stringify({ ...b, photos: [], _photosStripped: true })); } catch {}
+            // Overwrite localStorage — the Supabase version has the full photos.
+            // Only for briefings still inside the cache window: an old one is
+            // already in `merged` above and will render from there, so writing it
+            // back buys nothing and is exactly what refilled the 10 MB cap.
+            if (worthCaching(b.timestamp)) {
+              try { localStorage.setItem('pb_b_' + b.timestamp, JSON.stringify(b)); } catch {
+                try { localStorage.setItem('pb_b_' + b.timestamp, JSON.stringify({ ...b, photos: [], _photosStripped: true })); } catch {}
+              }
             }
           }
         });
@@ -485,14 +490,29 @@ let dbFilter = 'All';
 let allBriefingsCache = {};
 
 // ─── INIT ────────────────────────────────────────────────────────────────────
+// localStorage briefings are a CACHE for instant paint, not storage. Supabase is
+// storage. Anything older than this is fetched when it is actually opened.
+//
+// One constant, used by pruneOldLocal AND by the write-back in dbListAll,
+// because they were allowed to disagree and the disagreement was the bug:
+// pruneOldLocal deleted the old briefings on load, then dbListAll found them
+// "missing", re-fetched them from Supabase and wrote them straight back WITH
+// PHOTOS — no age check. Every page load re-filled the cache with what had just
+// been cleared. Measured 14 Sep 2026 on the shop device: 10,240 KB of a 10 MB
+// origin cap, 9.9 MB of it five briefings from April, one of them 7 MB on its
+// own. That is what was making every other feature's setItem throw
+// QuotaExceededError — a 2.6 KB cigarette count draft could not be written.
+const LOCAL_KEEP_MS = 14 * 24 * 60 * 60 * 1000; // 2 weeks
+const localCutoff = () => Date.now() - LOCAL_KEEP_MS;
+const worthCaching = ts => Number(ts) >= localCutoff();
+
 function pruneOldLocal() {
-  const cutoff = Date.now() - 14 * 24 * 60 * 60 * 1000; // 2 weeks
   try {
     for (let i = localStorage.length - 1; i >= 0; i--) {
       const k = localStorage.key(i);
       if (k && k.startsWith('pb_b_')) {
         const ts = parseInt(k.slice(5));
-        if (ts && ts < cutoff) localStorage.removeItem(k);
+        if (ts && !worthCaching(ts)) localStorage.removeItem(k);
       }
     }
   } catch {}
@@ -512,6 +532,9 @@ function buildCarriedIssues(briefings) {
 
 async function init() {
   pruneOldLocal();
+  // A tab left open across midnight ages its own cache, and every save adds a
+  // new briefing. Prune on a timer as well as at startup.
+  setInterval(pruneOldLocal, 60 * 60 * 1000);
   // Load staff from localStorage immediately — no async wait
   try {
     const cached = JSON.parse(localStorage.getItem('pb_staff_all') || '[]');
