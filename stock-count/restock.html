@@ -155,18 +155,36 @@ let entry = { staff: '', date: '', note: '' };
 const DRAFT = 'cig_restock_draft';
 const PENDING = 'cig_restock_pending';   // a restock_id that reached the database
 
+/* EVERY local write goes through here, and none of them may throw.
+   localStorage on the shop device is genuinely full — the briefing system keeps
+   base64 photos in it — so setItem raises QuotaExceededError even for a
+   fifteen-character name. It did exactly that on the staff name, one line above
+   the line that closes the setup sheet, and the page stranded with the sheet
+   open and nothing on screen to say why.
+   Nothing this page keeps locally is worth blocking a delivery being recorded:
+   the draft is a convenience, and the restock itself lives in the database. */
+let storageFull = false;
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) {
+    try { localStorage.setItem(k, v); return true; }
+    catch (e) { storageFull = true; console.warn('local write failed:', k, e); return false; }
+  },
+  del(k) { try { localStorage.removeItem(k); } catch (e) { /* nothing to do */ } }
+};
+
 function saveDraft() {
-  try {
-    localStorage.setItem(DRAFT, JSON.stringify({ adds, entry, updated: new Date().toISOString() }));
-  } catch (e) { console.warn('local draft save failed', e); }
+  const before = storageFull;
+  store.set(DRAFT, JSON.stringify({ adds, entry, updated: new Date().toISOString() }));
+  if (storageFull && !before && grid) paintMeta();   // say so, once
 }
 function loadDraft() {
   try {
-    const raw = JSON.parse(localStorage.getItem(DRAFT) || 'null');
+    const raw = JSON.parse(store.get(DRAFT) || 'null');
     if (raw && raw.adds) { adds = raw.adds; entry = raw.entry || entry; }
   } catch (e) { /* a corrupt draft must not block a delivery being recorded */ }
 }
-const clearDraft = () => { try { localStorage.removeItem(DRAFT); } catch (e) {} };
+const clearDraft = () => store.del(DRAFT);
 
 const totals = () => {
   const ids = Object.keys(adds).filter(pid => adds[pid] > 0);
@@ -225,9 +243,9 @@ el('setupGo').addEventListener('click', () => {
     date: el('fDate').value,
     note: el('fNote').value.trim()
   };
-  localStorage.setItem('cig_restock_staff', entry.staff);
-  saveDraft();
   el('setupOvl').hidden = true;
+  store.set('cig_restock_staff', entry.staff);
+  saveDraft();
   paintMeta();
   const t = totals();
   if (!t.products) grid.goTo(grid.order[0]);
@@ -362,7 +380,7 @@ el('confirmGo').addEventListener('click', async () => {
 async function submitRestock() {
   const t = totals();
   let restockId = null;
-  try { restockId = JSON.parse(localStorage.getItem(PENDING) || 'null'); } catch (e) {}
+  try { restockId = JSON.parse(store.get(PENDING) || 'null'); } catch (e) { restockId = null; }
 
   if (restockId) {
     // Only reuse it if it is still a draft and still ours to finish.
@@ -382,7 +400,7 @@ async function submitRestock() {
     }).select('restock_id').single();
     if (ins.error) throw describe(ins.error, 'creating the restock');
     restockId = ins.data.restock_id;
-    localStorage.setItem(PENDING, JSON.stringify(restockId));
+    store.set(PENDING, JSON.stringify(restockId));
   }
 
   const lines = t.ids.map(pid => ({ restock_id: restockId, product_id: pid, packs: adds[pid] }));
@@ -407,7 +425,7 @@ async function submitRestock() {
     throw new Error('The restock was not updated. It may already have been submitted.');
   }
 
-  localStorage.removeItem(PENDING);
+  store.del(PENDING);
   clearDraft();
   const rn = el('resumeNote');
   if (rn && rn.parentElement) rn.parentElement.remove();
@@ -457,6 +475,9 @@ function paintMeta() {
   }
   chips.push(`<div class="chip"><b>${grid ? grid.order.length : 0}</b> products on the shelf</div>`);
   chips.push(`<div class="chip warn">not a count &mdash; leave untouched products blank</div>`);
+  // The restock still submits — only the local draft is lost — but a device that
+  // cannot save anything should not look like one that can.
+  if (storageFull) chips.push(`<div class="chip warn">device storage full &mdash; draft not kept</div>`);
   if (ctx.fellBack) chips.push(`<div class="chip warn">showing ${esc(ctx.branchName)}</div>`);
   el('meta').innerHTML = chips.join('');
   el('brLabel').textContent = ctx.branchName || 'Safari';
@@ -466,8 +487,8 @@ function paintMeta() {
 async function load() {
   loadDraft();
 
-  const selected = localStorage.getItem('selectedBranch') || 'Safari';
-  el('fStaff').value = entry.staff || localStorage.getItem('cig_restock_staff') || '';
+  const selected = store.get('selectedBranch') || 'Safari';
+  el('fStaff').value = entry.staff || store.get('cig_restock_staff') || '';
   el('fDate').value = entry.date || tradingDay();
   el('fNote').value = entry.note || '';
 

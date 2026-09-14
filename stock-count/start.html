@@ -140,13 +140,14 @@ function updateDateHint() {
 }
 
 async function init() {
-  const selected = localStorage.getItem('selectedBranch') || 'Safari';
+  let selected = 'Safari';
+  try { selected = localStorage.getItem('selectedBranch') || 'Safari'; } catch (e) { /* storage may be unreachable */ }
   el('brLabel').textContent = selected;
 
   const iso = tradingDay();
   el('fDate').value = iso;
   el('fTitle').value = defaultTitle(iso);
-  el('fStaff').value = localStorage.getItem('cig_last_staff') || '';
+  try { el('fStaff').value = localStorage.getItem('cig_last_staff') || ''; } catch (e) { /* leave it blank */ }
   updateDateHint();
 
   const [verRes, brRes] = await Promise.all([
@@ -236,14 +237,26 @@ el('btnGo').addEventListener('click', async () => {
 
   el('btnGo').disabled = true;
   el('btnGo').textContent = 'Working…';
-  localStorage.setItem('cig_last_staff', staff);
+  // Remembering the name is a convenience. localStorage on the shop device fills
+  // up — the briefing system keeps base64 photos in it — and setItem then raises
+  // QuotaExceededError even for a short string. That must never stop a count.
+  try { localStorage.setItem('cig_last_staff', staff); } catch (e) { /* not worth blocking on */ }
 
   try {
     const count = await openOrCreate(date, staff, title);
-    localStorage.setItem('cig_count', JSON.stringify({
-      count_id: count.count_id, branch_id: ctx.branchId, branch_name: ctx.branchName,
-      version_id: ctx.versionId, count_date: date, title: count.title, staff_name: count.staff_name
-    }));
+    // This one is NOT optional: index.html reads cig_count to know which count is
+    // open, so if it cannot be written the count genuinely cannot start. Say that
+    // plainly rather than throwing a QuotaExceededError at the user.
+    try {
+      localStorage.setItem('cig_count', JSON.stringify({
+        count_id: count.count_id, branch_id: ctx.branchId, branch_name: ctx.branchName,
+        version_id: ctx.versionId, count_date: date, title: count.title, staff_name: count.staff_name
+      }));
+    } catch (e) {
+      throw new Error('This device has no storage space left, so the count screen cannot be ' +
+        'told which count to open. The count itself is saved — free some space and press ' +
+        'Resume draft. (The shift briefings keep photos in the same storage.)');
+    }
     location.href = 'index.html';
   } catch (e) {
     el('btnGo').disabled = false;
