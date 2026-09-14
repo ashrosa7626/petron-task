@@ -93,11 +93,8 @@ To fill them in: import that day's sales report on
 
 ## Variance RM
 
-Needs a price, and prices need `10_prices_and_opening_date.sql` (in
-`cigarette stock/`). Until it is run, the RM column and `Opening from` read as
-unavailable and everything else works.
-
-After it is run:
+`10_prices_and_opening_date.sql` **has been run** — `Opening from` works, and the two
+price columns exist. They are just empty:
 
 - `pos_sales_daily.unit_price` — filled automatically from the next sales report
   imported. The importer already reads the price to prove the quantity, so this
@@ -161,8 +158,8 @@ looking up a PLU or a description. Delete it if nobody wants it.
 
 - **Everything reads `—`** — no POS sales are loaded for that day, or it is the
   first count. The summary line says which.
-- **`Variance RM` all blank** — migration 10 has not been run, or
-  `product.unit_price` is not set.
+- **`Variance RM` all blank** — `product.unit_price` is not set, and no sales report
+  has been imported since the price column was added. Either fills it in.
 - **The dropdown is missing recent days** — the query has not refreshed. Data →
   Refresh All. If that does nothing, the query was never attached: see the Setup sheet.
 - **Everything says "No data yet"** — the query is not attached, or it landed somewhere

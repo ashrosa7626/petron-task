@@ -113,7 +113,7 @@ Hosted on GitHub Pages: https://ashrosa7626.github.io/petron-task/
 ## Cigarette Stock Count Module
 Daily physical count of the cigarette gondola (Safari: 6 shelves A–F × 27 positions,
 162 facings, 54 products, **58 blocks**). Spec, workbook and SQL live in
-`cigarette stock/` — `BRIEF.md`, `01_schema.sql` … `08_pos_sales_write_policy.sql`,
+`cigarette stock/` — `BRIEF.md`, `01_schema.sql` … `10_prices_and_opening_date.sql`,
 `CIGARETTES PLANOGRAM.xlsx`, `products_reference.csv`.
 Run the SQL in numbered order. Counts are in **packs**; cartons are out of scope.
 
@@ -130,9 +130,11 @@ Pages, all under `stock-count/`:
 
 Excel reporting lives in `excel/` — see the export section below. The published
 setup guide is at https://claude.ai/code/artifact/f2489e09-bf24-4782-978b-4ed5cef39172
-(republish `excel/guide.html` to that same URL to update it). **`guide.html` was
-rewritten for the generated workbook in Sep 2026 but has NOT been republished** —
-the live artifact still describes the old Power Query + SUMIFS setup.
+(republish `excel/guide.html` to that same URL to update it). **Republished 14 Sep
+2026** and current. Note the publish guard: republishing refuses until the live version
+has been read back, which is what caught the guide embedding `counts_query.m` verbatim
+with a Copy button — content a local rewrite had silently dropped. Read the live copy
+and merge onto it; never assume the repo file is a superset.
 
 ### Sign-in and the `?next=` round trip
 The app's identity is the PIN session: `sessionStorage.staff_id` / `staff_name`, set by
@@ -416,18 +418,25 @@ write, so migrations are run by hand in the Supabase SQL editor):
 - **dashboard.html**: Tasks of the Day flat list above staff completion journey; font sizes bumped across all pages
 - **style.css**: base font bumped 16px → 17px; small labels bumped proportionally in briefing.html and dashboard.html
 
-## Cigarette Module — State as of 11 Sep 2026
-Verified against the live database, not from memory. Re-check before trusting.
+## Cigarette Module — State as of 14 Sep 2026
+Verified against the live database, not from memory. Re-check before trusting — this
+section has been wrong twice by assuming a migration's state rather than probing it.
 
-**Migrations applied:** 01–08 are in. `pos_sales_daily` holds 54 rows, so `08`'s
-write policy is live and an import has succeeded. **`09` and `10` are written but
-NOT run** — verified 12 Sep 2026: `product` has no `unit_price` and the view has no
-`opening_date`, so the workbook shows those as unavailable. Both are optional and
-everything degrades gracefully without them.
+**Migrations applied:** 01–08 and **10** are in. **`09` is NOT** — probed 14 Sep 2026:
+`pos_sales_daily.imported_by` errors `42703`, while `product.unit_price`,
+`pos_sales_daily.unit_price` and the view's `opening_date` / `unit_price_used` /
+`variance_rm` all exist. So the import page stores no `imported_by` (the name gates the
+button but goes nowhere) and does store `unit_price` from the next report loaded.
+`opening_date` populates correctly: null on a product's first count, the previous
+count's date thereafter.
+
+**`product.unit_price` is still null for every product**, so `unit_price_used` and
+`variance_rm` are null too. Variance RM stays blank until someone sets list prices —
+that is a data task, not a code one.
 
 **Data in the system:**
 
-Re-verified 12 Sep 2026 against the live view:
+Re-verified 14 Sep 2026 against the live view:
 
 | count_date | status | staff | opening | sold_physical | sold_pos | variance |
 |---|---|---|---|---|---|---|
@@ -435,14 +444,20 @@ Re-verified 12 Sep 2026 against the live view:
 | 2026-09-09 | submitted | Luqman | 0/54 | 0/54 | **54/54** | 0/54 |
 | 2026-09-10 | submitted | Luqman | **54/54** | **54/54** | 0/54 | 0/54 |
 | 2026-09-11 | submitted | Aktar | **54/54** | **54/54** | 0/54 | 0/54 |
+| 2026-09-12 | submitted | Aktar | **54/54** | **54/54** | 0/54 | 0/54 |
+| 2026-09-13 | submitted | Aktarul | **54/54** | **54/54** | 0/54 | 0/54 |
+
+`pos_sales_daily` still holds **only 09/09**. Counting is now a daily habit; importing
+the sales report is not.
 
 **Variance is still 0 rows everywhere, and this is the thing to understand.** Each half
 works; they have never overlapped on the same day. `variance_packs` needs *both* a
 previous submitted count (for `opening_packs`) *and* a `pos_sales_daily` row for that
-same day. 09/09 has POS but is the first count so has no opening; 10/09 and 11/09 have
-openings but no POS yet. **Importing the 10/09 or 11/09 sales report completes the
+same day. 09/09 has POS but is the first count so has no opening; 10/09 onward have
+openings but no POS. **Importing any sales report from 10/09 onward completes the
 chain** and is still the single next action that proves the pipeline end to end — it is
-also what makes the Excel workbook show anything but em dashes.
+also what makes the Excel workbook show anything but em dashes. Four days are now
+waiting, not one.
 
 **Two known distortions in the current numbers**, both expected, neither a bug:
 - 09/09 was a **test count** — one product at 7 packs, the other 53 at 0. So 10/09's
@@ -460,9 +475,12 @@ counted off the paper); 10/09 gives 27 lines balancing to RM1,376.70. Captured a
 — it is the fixture case for uploading the wrong one.
 
 **Not done:**
-- **The 10/09 sales report has still not been written to the database** — the import
-  was verified up to the point of writing and deliberately stopped there. Loading it
-  is what completes the variance chain, and it is the single next action.
+- **No sales report has been imported since 09/09** — 10/09 through 13/09 are all
+  counted and all missing their POS side. Loading any one of them completes the
+  variance chain, and it is the single next action.
+- **`09_pos_sales_imported_by.sql` has not been run**, so the name typed on the import
+  page is not stored anywhere. Optional; the page probes for the column and omits it.
+- **`product.unit_price` is not set**, so Variance RM is blank throughout the workbook.
 - No `pos_sales_daily` loader for Nilai Desa Jati; only Safari has a planogram.
 - `short_name` values are still drafts.
 - OCR accuracy is measured on two reports only: 1–2 lines a report need a human, and
