@@ -1,2 +1,5 @@
 .DS_Store
 **/.DS_Store
+
+# Build artefact of --mode snapshot; only used for testing
+excel/Cigarette Reconciliation (snapshot).xlsx

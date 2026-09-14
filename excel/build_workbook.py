@@ -2,23 +2,30 @@
 """
 Build the cigarette reconciliation workbook.
 
-    python3 build_workbook.py [-o "Cigarette Reconciliation.xlsx"]
+    python3 build_workbook.py --mode query      # the one to hand over
+    python3 build_workbook.py --mode snapshot   # self-contained, for testing
 
-Pulls vw_daily_reconciliation from Supabase with the public anon key (read-only)
-and writes a formatted workbook:
+Two modes, one layout. The sheets, formulas and formatting are identical in
+both; the only difference is where the rows on the Data sheet come from.
 
-    Daily    one trading day at a time, chosen from a dropdown, sorted by
-             absolute variance descending. Prints on one page.
-    Trends   variance by product across every date, so a product that drifts
-             every night separates from one that had a single bad one.
-    Notes    what the columns mean and what can make them lie.
-    Data     hidden. The raw view, exactly as it comes back.
+  query      Data is left empty apart from its header row. You attach the
+             Power Query in counts_query.m once, and from then on the workbook
+             refreshes itself on open. This is the deliverable.
 
-Only the Data sheet holds values. Daily reads from it by formula, so changing
-the date recalculates in place — one table, one set of formatting.
+  snapshot   Data is filled with a pull from Supabase at build time, so the
+             file works standalone with no setup. Because the formulas are the
+             SAME ones, this doubles as the test rig: verify_workbook.py can
+             check the real shipped formulas rather than a parallel copy.
 
-Re-run this to refresh. The workbook is rebuilt from scratch each time; nothing
-in it is hand-edited, so nothing is lost.
+Everything on Daily, Trends and Calc addresses the Data sheet by WHOLE COLUMN
+(Data!$N:$N). Not by structured reference, which was the obvious choice and is
+wrong: Excel rewrites a reference to a table that does not exist yet into a
+permanent #REF! the first time the file is opened, and Power Query cannot load
+into a table the builder created. Whole columns grow on their own, survive the
+sheet being replaced wholesale, and are not coupled to a table name.
+
+The cost is that Data's COLUMN ORDER is load-bearing — it must match what
+counts_query.m returns. That order is pinned at both ends and asserted below.
 
 Needs openpyxl (pip install openpyxl). No other dependencies.
 """
@@ -31,14 +38,13 @@ import ssl
 import sys
 import urllib.request
 from collections import defaultdict
-from datetime import date
+from datetime import date, datetime
 
 from openpyxl import Workbook
 from openpyxl.formatting.rule import FormulaRule
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
-from openpyxl.worksheet.table import Table, TableStyleInfo
 
 SUPABASE_URL = 'https://vwffiuciogthfzekkkkz.supabase.co'
 VIEW = 'vw_daily_reconciliation'
@@ -47,15 +53,16 @@ BRANCH = 'SAFARI'
 HERE = os.path.dirname(os.path.abspath(__file__))
 APP_JS = os.path.join(HERE, os.pardir, 'app.js')
 
-# ---------------------------------------------------------------------------
-# Look, not brand colours — this is a spreadsheet people read at 7am.
+TREND_DAYS = 14          # Trends window. Wider stops printing on one page.
+MAX_DAYS = 60            # rows reserved on Calc for the per-day summary
+MAX_PRODUCTS = 120       # rows reserved on Calc for products (54 today)
+
 # ---------------------------------------------------------------------------
 INK = '1F2A44'
 MUTED = '8A94A6'
 RULE = 'D6DBE4'
 HEAD_BG = '0F1B3D'
 BAND = 'F4F6FA'
-OK_GREEN = '1B7F4B'
 WARN_AMBER = '9A6500'
 RED_1 = 'C0392B'
 RED_2 = '96281B'
@@ -72,6 +79,22 @@ INT_FMT = '#,##0'
 RM_FMT = '#,##0.00'
 DATE_FMT = 'dd mmm yyyy'
 
+# ---------------------------------------------------------------------------
+# Data sheet column order. THIS MUST MATCH counts_query.m's output exactly —
+# the first 17 are the view's columns in the order the query pins them, the
+# last 5 are what the query computes on top.
+# ---------------------------------------------------------------------------
+DATA_COLS = [
+    'branch_id', 'count_date', 'shift', 'staff_name',
+    'product_id', 'plu', 'short_name', 'pos_description',
+    'opening_packs', 'add_in', 'closing_packs',
+    'sold_physical', 'sold_pos', 'variance_packs',
+    'opening_date', 'unit_price_used', 'variance_rm',
+    'abs_variance', 'rank', 'day_no', 'prod_no', 'row_key',
+]
+COL = {name: get_column_letter(i) for i, name in enumerate(DATA_COLS, start=1)}
+D = {name: f"Data!${COL[name]}:${COL[name]}" for name in DATA_COLS}
+
 
 # ===========================================================================
 # Fetch
@@ -85,8 +108,6 @@ def anon_key():
 
 
 def fetch(key):
-    """Every submitted day, paged — PostgREST caps a response at 1000 rows and
-    54 products a day reaches that in under three weeks."""
     rows, offset, page = [], 0, 1000
     ctx = ssl.create_default_context()
     while True:
@@ -119,186 +140,188 @@ def num(v):
 
 
 # ===========================================================================
-# Shape
+# Shape — mirrors counts_query.m exactly. If one changes, both change.
 # ===========================================================================
-# Column order on the hidden Data sheet. Formulas address these by letter, so
-# the order is load-bearing — add to the end, never insert.
-DATA_COLS = [
-    ('rowkey', 'A'), ('date_key', 'B'), ('count_date', 'C'), ('opening_date', 'D'),
-    ('staff_name', 'E'), ('short_name', 'F'), ('opening_packs', 'G'),
-    ('closing_packs', 'H'), ('sold_physical', 'I'), ('sold_pos', 'J'),
-    ('variance_packs', 'K'), ('variance_rm', 'L'), ('unit_price_used', 'M'),
-    ('abs_variance', 'N'), ('rank', 'O'), ('product_id', 'P'), ('plu', 'Q'),
-    ('branch_id', 'R'), ('shift', 'S'), ('pos_description', 'T'), ('add_in', 'U'),
-]
-COL = {name: letter for name, letter in DATA_COLS}
-
-# The per-date summary block, to the right of the table and out of its way.
-SUM_COLS = [
-    ('count_date', 'W'), ('date_key', 'X'), ('opening_date', 'Y'),
-    ('staff_name', 'Z'), ('products', 'AA'), ('with_variance', 'AB'),
-    ('total_packs', 'AC'), ('total_rm', 'AD'), ('pos_state', 'AE'),
-    ('message', 'AF'),
-]
-SUM = {name: letter for name, letter in SUM_COLS}
-
-# Excel's day zero. Keys are built from the date SERIAL, not from a formatted
-# string, because the two have to survive being compared to whatever ends up in
-# the selector cell. Pick from the dropdown and it is a date; type "2026-09-09"
-# and Excel converts it to a date too — but TEXT(...,"yyyy-mm-dd") uses
-# localised tokens, so a string key silently stops matching on a machine whose
-# Excel speaks anything but English. Concatenating a date coerces it to its
-# serial in every locale there is.
-EPOCH = date(1899, 12, 30)
-
-
-def serial(d):
-    return (d - EPOCH).days if isinstance(d, date) else None
-
-
 def prepare(raw):
     """Rank each day's products by absolute variance, descending.
 
-    Sorting is done here rather than in a formula because it is the same answer
-    every time the workbook opens, and because it has to put rows with NO
-    variance (no POS sales loaded) at the bottom rather than treating them as
-    zero — a blank variance is an unknown, not an agreement.
+    An UNKNOWN variance gets abs_variance -1 so it sorts below every known
+    zero. That distinction is the one thing here that must not be got wrong: a
+    blank variance means "not checked", not "agreed", and it must never be
+    ranked or totalled as if it were zero.
     """
-    have = set()
-    for r in raw:
-        have.update(r.keys())
-
-    by_date = defaultdict(list)
+    rows = []
     for r in raw:
         v = num(r.get('variance_packs'))
-        by_date[str(r['count_date'])[:10]].append({
-            'date_key': str(r['count_date'])[:10],
+        rows.append({
+            'branch_id': r.get('branch_id') or '',
             'count_date': as_date(r.get('count_date')),
-            'opening_date': as_date(r.get('opening_date')),
+            'shift': r.get('shift') or '',
             'staff_name': r.get('staff_name') or '',
+            'product_id': str(r.get('product_id') or ''),
+            'plu': str(r.get('plu') or ''),
             'short_name': r.get('short_name') or r.get('product_id') or '',
+            'pos_description': r.get('pos_description') or '',
             'opening_packs': num(r.get('opening_packs')),
+            'add_in': num(r.get('add_in')),
             'closing_packs': num(r.get('closing_packs')),
             'sold_physical': num(r.get('sold_physical')),
             'sold_pos': num(r.get('sold_pos')),
             'variance_packs': v,
-            'variance_rm': num(r.get('variance_rm')),
+            'opening_date': as_date(r.get('opening_date')),
             'unit_price_used': num(r.get('unit_price_used')),
-            # Unknown sorts last, below every known zero.
+            'variance_rm': num(r.get('variance_rm')),
             'abs_variance': abs(v) if v is not None else -1,
-            'product_id': str(r.get('product_id') or ''),
-            'plu': str(r.get('plu') or ''),
-            'branch_id': r.get('branch_id') or '',
-            'shift': r.get('shift') or '',
-            'pos_description': r.get('pos_description') or '',
-            'add_in': num(r.get('add_in')),
         })
 
-    rows = []
-    for dk in sorted(by_date):
-        day = sorted(by_date[dk],
-                     key=lambda x: (-x['abs_variance'], x['short_name'].lower()))
+    days = sorted({r['count_date'] for r in rows if r['count_date']}, reverse=True)
+    prods = sorted({r['short_name'] for r in rows})
+
+    by_day = defaultdict(list)
+    for r in rows:
+        by_day[r['count_date']].append(r)
+    for d0, day in by_day.items():
+        day.sort(key=lambda x: (-x['abs_variance'], x['short_name'].lower()))
         for i, x in enumerate(day, start=1):
             x['rank'] = i
-            x['rowkey'] = f"{serial(x['count_date'])}|{i}"
-            rows.append(x)
-    return rows, sorted(by_date), have
+    for r in rows:
+        r['day_no'] = days.index(r['count_date']) + 1 if r['count_date'] else None
+        r['prod_no'] = prods.index(r['short_name']) + 1
+        d0 = r['count_date']
+        r['row_key'] = ((d0.year * 10000 + d0.month * 100 + d0.day) * 1000
+                        + r['rank']) if d0 else None
 
-
-def summarise(rows, dates, have):
-    """One row per trading day. Computed here so the Daily sheet needs nothing
-    cleverer than INDEX/MATCH, which works in every version of Excel."""
-    out = []
-    for dk in dates:
-        day = [r for r in rows if r['date_key'] == dk]
-        priced = [r for r in day if r['variance_rm'] is not None]
-        known = [r for r in day if r['variance_packs'] is not None]
-        nonzero = [r for r in known if r['variance_packs'] != 0]
-        pos_loaded = any(r['sold_pos'] is not None for r in day)
-        no_opening = all(r['opening_packs'] is None for r in day)
-
-        opens = sorted({r['opening_date'] for r in day if r['opening_date']})
-        if not have or 'opening_date' not in have:
-            opening = 'run migration 10'
-        elif not opens:
-            opening = 'first count — no opening'
-        elif len(opens) == 1:
-            opening = opens[0]
-        else:
-            opening = f'mixed ({opens[0]:%d %b} – {opens[-1]:%d %b})'
-
-        if not pos_loaded:
-            msg = ('No POS sales have been loaded for this date, so variance cannot be '
-                   'worked out. Import the sales report for this day and it fills in.')
-        elif no_opening:
-            msg = ('This is the first count of these products, so there is no opening '
-                   'figure to sell down from. Variance starts from the next count.')
-        elif not nonzero:
-            msg = 'Physical and POS agree on every product.'
-        else:
-            msg = (f'{len(nonzero)} of {len(known)} products disagree with the POS. '
-                   f'Largest first below.')
-        if priced and len(priced) < len(nonzero):
-            msg += ' Some rows have no price, so the RM total is partial.'
-        elif not priced and nonzero:
-            msg += (' No unit prices are set, so there are no RM figures — see Notes.')
-
-        out.append({
-            'date_key': dk,
-            'count_date': day[0]['count_date'],
-            'opening_date': opening,
-            'staff_name': ', '.join(sorted({r['staff_name'] for r in day if r['staff_name']})) or '—',
-            'products': len(day),
-            # Keyed on whether a variance was actually computed, NOT on whether
-            # POS sales exist. The first count of a product has POS sales but no
-            # opening to sell down from, so its variance is unknown — and summing
-            # an empty list to 0 would report perfect agreement on the one day
-            # nothing could be checked at all.
-            'with_variance': len(nonzero) if known else None,
-            'total_packs': sum(r['variance_packs'] for r in known) if known else None,
-            'total_rm': round(sum(r['variance_rm'] for r in priced), 2) if priced else None,
-            'pos_state': 'loaded' if pos_loaded else 'not loaded',
-            'message': msg,
-        })
-    return out
+    rows.sort(key=lambda r: (r['count_date'] or date.min, r['rank']))
+    return rows, days, prods
 
 
 # ===========================================================================
 # Sheets
 # ===========================================================================
-def write_data(ws, rows, summary):
+def write_data(ws, rows, mode):
     ws.sheet_state = 'hidden'
-    headers = [name for name, _ in DATA_COLS]
-    ws.append(headers)
-    for r in rows:
-        ws.append([r.get(name) for name in headers])
+    ws.append(DATA_COLS)
+    for c in range(1, len(DATA_COLS) + 1):
+        ws.cell(row=1, column=c).font = Font(name='Calibri', size=10, bold=True)
+    if mode == 'snapshot':
+        for r in rows:
+            ws.append([r.get(n) for n in DATA_COLS])
+        for n in ('count_date', 'opening_date'):
+            for i in range(2, len(rows) + 2):
+                ws[f'{COL[n]}{i}'].number_format = DATE_FMT
 
-    last = len(rows) + 1
-    table = Table(displayName='Counts', ref=f'A1:{COL["add_in"]}{last}')
-    table.tableStyleInfo = TableStyleInfo(name='TableStyleLight8', showRowStripes=True)
-    ws.add_table(table)
 
-    for name in ('count_date', 'opening_date'):
-        for c in range(2, last + 1):
-            ws[f'{COL[name]}{c}'].number_format = DATE_FMT
+# --- Calc -----------------------------------------------------------------
+# Every aggregate the report needs, computed once here from the Data sheet, so
+# Daily and Trends are plain lookups. Hidden: nobody should be reading this.
+#
+# Two counting idioms carry the whole "unknown is not zero" rule:
+#   COUNTIFS(..., "<>")   how many rows have a variance AT ALL
+#   COUNTIFS(..., 0)      how many of those are genuinely zero
+# products-with-variance is the first minus the second, and every total is
+# suppressed to "" when the first is zero. Summing a column of blanks would
+# otherwise report perfect agreement on a day nothing could be checked.
+CALC_DAY_ROW = 3
+CALC_PROD_ROW = 3
 
-    # The per-date summary, beside the table.
-    for name, letter in SUM_COLS:
-        ws[f'{letter}1'] = name
-    for i, s in enumerate(summary, start=2):
-        for name, letter in SUM_COLS:
-            ws[f'{letter}{i}'] = s.get(name)
-        ws[f'{SUM["count_date"]}{i}'].number_format = DATE_FMT
-        if isinstance(s.get('opening_date'), date):
-            ws[f'{SUM["opening_date"]}{i}'].number_format = DATE_FMT
 
-    # The dropdown's source list, further right again. Real dates, so the
-    # selector cell holds a date whichever way it is filled in.
-    ws['AH1'] = 'dates'
-    for i, s in enumerate(summary, start=2):
-        ws[f'AH{i}'] = s['count_date']
-        ws[f'AH{i}'].number_format = DATE_FMT
-    return last
+def write_calc(ws):
+    ws.sheet_state = 'hidden'
+    ws['A1'] = 'per-day summary (day_no 1 = most recent counted day)'
+    ws['A1'].font = Font(bold=True)
+    day_hdr = ['day_no', 'date', 'staff', 'opening_date', 'products', 'known',
+               'zeros', 'with_variance', 'total_packs', 'priced', 'total_rm',
+               'pos_rows', 'pos_state', 'opening_known', 'message']
+    for i, h in enumerate(day_hdr, start=1):
+        ws.cell(row=2, column=i, value=h).font = Font(size=9, bold=True, color=MUTED)
+
+    for k in range(1, MAX_DAYS + 1):
+        r = CALC_DAY_ROW + k - 1
+        first = f'MATCH($A{r},{D["day_no"]},0)'
+        ws[f'A{r}'] = k
+        # INDEX into an empty cell returns 0, not blank. opening_date is empty
+        # until migration 10 is run, and an unguarded 0 renders as 31 Dec 1899
+        # — a date that looks real. Every one of these is blank-guarded.
+        def at(name):
+            idx = f'INDEX({D[name]},{first})'
+            return f'=IFERROR(IF({idx}="","",{idx}),"")'
+        ws[f'B{r}'] = at('count_date')
+        ws[f'B{r}'].number_format = DATE_FMT
+        ws[f'C{r}'] = at('staff_name')
+        ws[f'D{r}'] = at('opening_date')
+        ws[f'D{r}'].number_format = DATE_FMT
+        ws[f'E{r}'] = f'=COUNTIFS({D["day_no"]},$A{r})'
+        ws[f'F{r}'] = f'=COUNTIFS({D["day_no"]},$A{r},{D["variance_packs"]},"<>")'
+        ws[f'G{r}'] = f'=COUNTIFS({D["day_no"]},$A{r},{D["variance_packs"]},0)'
+        ws[f'H{r}'] = f'=IF($F{r}=0,"",$F{r}-$G{r})'
+        ws[f'I{r}'] = f'=IF($F{r}=0,"",SUMIFS({D["variance_packs"]},{D["day_no"]},$A{r}))'
+        ws[f'J{r}'] = f'=COUNTIFS({D["day_no"]},$A{r},{D["variance_rm"]},"<>")'
+        ws[f'K{r}'] = f'=IF($J{r}=0,"",SUMIFS({D["variance_rm"]},{D["day_no"]},$A{r}))'
+        ws[f'L{r}'] = f'=COUNTIFS({D["day_no"]},$A{r},{D["sold_pos"]},"<>")'
+        ws[f'M{r}'] = f'=IF($E{r}=0,"",IF($L{r}=0,"not loaded","loaded"))'
+        ws[f'N{r}'] = f'=COUNTIFS({D["day_no"]},$A{r},{D["opening_packs"]},"<>")'
+        ws[f'O{r}'] = (
+            f'=IF($E{r}=0,"",'
+            f'IF($L{r}=0,"No POS sales have been loaded for this date, so variance cannot be '
+            f'worked out. Import the sales report for this day and it fills in.",'
+            f'IF($N{r}=0,"This is the first count of these products, so there is no opening '
+            f'figure to sell down from. Variance starts from the next count.",'
+            f'IF($F{r}-$G{r}=0,"Physical and POS agree on every product.",'
+            f'($F{r}-$G{r})&" of "&$F{r}&" products disagree with the POS. Largest first below."'
+            f'))))')
+
+    # --- per-product trends, over the last TREND_DAYS days ---
+    ws['R1'] = f'per-product trends over the last {TREND_DAYS} days'
+    ws['R1'].font = Font(bold=True)
+    base = 18                                   # column R
+    day_first = base + 2                        # T
+    tail = day_first + TREND_DAYS               # after the day columns
+    L = get_column_letter
+
+    hdr = ['prod_no', 'product'] + [f'd{j}' for j in range(1, TREND_DAYS + 1)] + \
+          ['known', 'zeros', 'days_off', 'total', 'worst', 'sortkey', 'rank']
+    for i, h in enumerate(hdr):
+        ws.cell(row=2, column=base + i, value=h).font = Font(size=9, bold=True, color=MUTED)
+
+    c_known, c_zeros, c_off = L(tail), L(tail + 1), L(tail + 2)
+    c_total, c_worst, c_sort, c_rank = L(tail + 3), L(tail + 4), L(tail + 5), L(tail + 6)
+    win = f'"<="&{TREND_DAYS}'
+
+    for k in range(1, MAX_PRODUCTS + 1):
+        r = CALC_PROD_ROW + k - 1
+        pn = f'$R{r}'
+        ws[f'R{r}'] = k
+        ws[f'S{r}'] = (f'=IFERROR(INDEX({D["short_name"]},'
+                       f'MATCH({pn},{D["prod_no"]},0)),"")')
+        for j in range(1, TREND_DAYS + 1):
+            c = L(day_first + j - 1)
+            ws[f'{c}{r}'] = (
+                f'=IF(COUNTIFS({D["prod_no"]},{pn},{D["day_no"]},{j},'
+                f'{D["variance_packs"]},"<>")=0,"",'
+                f'SUMIFS({D["variance_packs"]},{D["prod_no"]},{pn},{D["day_no"]},{j}))')
+        ws[f'{c_known}{r}'] = (f'=COUNTIFS({D["prod_no"]},{pn},{D["day_no"]},{win},'
+                               f'{D["variance_packs"]},"<>")')
+        ws[f'{c_zeros}{r}'] = (f'=COUNTIFS({D["prod_no"]},{pn},{D["day_no"]},{win},'
+                               f'{D["variance_packs"]},0)')
+        ws[f'{c_off}{r}'] = f'=IF({c_known}{r}=0,"",{c_known}{r}-{c_zeros}{r})'
+        ws[f'{c_total}{r}'] = (f'=IF({c_known}{r}=0,"",SUMIFS({D["variance_packs"]},'
+                               f'{D["prod_no"]},{pn},{D["day_no"]},{win}))')
+        span = f'{L(day_first)}{r}:{L(day_first + TREND_DAYS - 1)}{r}'
+        ws[f'{c_worst}{r}'] = (f'=IF({c_known}{r}=0,"",'
+                               f'IF(ABS(MAX({span}))>=ABS(MIN({span})),MAX({span}),MIN({span})))')
+        # Sort key: days off dominates, size of the gap breaks ties. A product
+        # that has never been checked gets -1 so it sits below everything.
+        ws[f'{c_sort}{r}'] = (f'=IF({c_known}{r}=0,-1,'
+                              f'{c_off}{r}*100000+MIN(ABS({c_total}{r}),99999))')
+        ws[f'{c_rank}{r}'] = (
+            f'=IF($S{r}="","",1'
+            f'+COUNTIFS(${c_sort}${CALC_PROD_ROW}:${c_sort}${CALC_PROD_ROW + MAX_PRODUCTS - 1},'
+            f'">"&{c_sort}{r})'
+            f'+COUNTIFS(${c_sort}${CALC_PROD_ROW}:${c_sort}${CALC_PROD_ROW + MAX_PRODUCTS - 1},'
+            f'{c_sort}{r},$R${CALC_PROD_ROW}:$R${CALC_PROD_ROW + MAX_PRODUCTS - 1},"<"&{pn}))')
+
+    return {'rank': c_rank, 'off': c_off, 'total': c_total, 'worst': c_worst,
+            'day_first': day_first}
 
 
 def label(ws, cell, text):
@@ -328,91 +351,80 @@ DAILY_HEADERS = [
     ('Item ID', 10, 'left'),
     ('PLU', 15, 'left'),
 ]
-FIRST_ROW = 10          # first product row on Daily
+FIRST_ROW = 10
 HDR_ROW = 9
+DAILY_ROWS = 70          # products shown; more than any day has
 
 
-def write_daily(ws, rows, summary, data_last, max_products):
-    n = len(rows) + 1
-    keys = f"Data!$A$2:$A${n}"
+def write_daily(ws):
+    calc_days = f'Calc!$B${CALC_DAY_ROW}:$B${CALC_DAY_ROW + MAX_DAYS - 1}'
 
-    def dcol(name):
-        return f"Data!${COL[name]}$2:${COL[name]}${n}"
-
-    def scol(name):
-        return f"Data!${SUM[name]}$2:${SUM[name]}${len(summary) + 1}"
-
-    sumkeys = f"Data!$W$2:$W${len(summary) + 1}"
-
-    # INDEX into an empty cell returns 0, not blank — so an unknown total would
-    # render as a confident "0 packs of variance" on exactly the day nothing
-    # could be checked. Every lookup goes through a blank test for that reason.
-    def pick(name):
-        idx = f'INDEX({scol(name)},$L$1)'
+    def pick(col):
+        idx = f'INDEX(Calc!${col}${CALC_DAY_ROW}:${col}${CALC_DAY_ROW + MAX_DAYS - 1},$L$1)'
         return f'IF($L$1="","—",IF({idx}="","—",{idx}))'
 
-    # The summary's row in the per-date block, looked up once. Parked outside
-    # the print area alongside the per-row helpers.
-    ws['L1'] = f'=IFERROR(MATCH($B$3,{sumkeys},0),"")'
+    ws['L1'] = f'=IFERROR(MATCH($B$3,{calc_days},0),"")'
 
     ws['A1'] = 'Cigarette reconciliation'
     ws['A1'].font = Font(name='Calibri', size=18, bold=True, color=INK)
     ws.merge_cells('A1:D1')
-    ws['F1'] = 'Safari'
-    ws['F1'].font = Font(name='Calibri', size=11, bold=True, color=MUTED)
+    # The stamp whose absence let a stale file pass for a fresh one. The newest
+    # day in the file is a better signal than a refresh time: if the day you
+    # counted this morning is not in the list, the number here says so.
+    ws['F1'] = (f'=IF(COUNT({D["day_no"]})=0,"Data sheet is empty — attach the query",'
+                f'"Safari · "&COUNT(Calc!$B${CALC_DAY_ROW}:$B${CALC_DAY_ROW + MAX_DAYS - 1})'
+                f'&" days loaded, latest "&TEXT(MAX({D["count_date"]}),"dd mmm yyyy"))')
+    ws['F1'].font = Font(name='Calibri', size=10, bold=True, color=MUTED)
     ws['F1'].alignment = Alignment(horizontal='right')
     ws.merge_cells('F1:I1')
 
-    # --- the selector ---
     label(ws, 'A2', 'TRADING DAY (CLOSING)')
-    ws['B3'] = summary[-1]['count_date'] if summary else None
+    ws['A3'] = 'Show:'
+    ws['A3'].font = Font(name='Calibri', size=10, bold=True, color=INK)
+    ws['A3'].alignment = Alignment(horizontal='left', vertical='center')
+    ws['B3'] = f'=IFERROR(INDEX({D["count_date"]},MATCH(1,{D["day_no"]},0)),"")'
     ws['B3'].number_format = DATE_FMT
     ws['B3'].font = Font(name='Calibri', size=14, bold=True, color='1F4E79')
     ws['B3'].alignment = Alignment(horizontal='left', vertical='center')
     ws['B3'].border = BOX
     ws['B3'].fill = PatternFill('solid', fgColor='EAF1FB')
-    ws['A3'] = 'Show:'
-    ws['A3'].font = Font(name='Calibri', size=10, bold=True, color=INK)
-    ws['A3'].alignment = Alignment(horizontal='left', vertical='center')
 
-    dv = DataValidation(type='list',
-                        formula1=f"=Data!$AH$2:$AH${len(summary) + 1}",
+    dv = DataValidation(type='list', formula1=f'={calc_days}',
                         allow_blank=False, showDropDown=False)
     dv.error = ('Pick a trading day from the dropdown. Only days with a submitted '
                 'count are in the list.')
     dv.errorTitle = 'Not a counted day'
-    dv.showErrorMessage = True      # off by default, which makes the list advisory
+    dv.showErrorMessage = True
     ws.add_data_validation(dv)
     dv.add(ws['B3'])
 
-    # --- summary block ---
     label(ws, 'D2', 'OPENING FROM')
-    value(ws, 'D3', f'={pick("opening_date")}', DATE_FMT, size=11)
+    value(ws, 'D3', f'={pick("D")}', DATE_FMT, size=11)
     label(ws, 'F2', 'COUNTED BY')
-    value(ws, 'F3', f'={pick("staff_name")}', None, size=11)
+    value(ws, 'F3', f'={pick("C")}', None, size=11)
     label(ws, 'H2', 'PRODUCTS')
-    value(ws, 'H3', f'={pick("products")}', INT_FMT, size=11)
+    value(ws, 'H3', f'={pick("E")}', INT_FMT, size=11)
 
     label(ws, 'A5', 'PRODUCTS WITH VARIANCE')
-    value(ws, 'A6', f'={pick("with_variance")}', INT_FMT)
+    value(ws, 'A6', f'={pick("H")}', INT_FMT)
     label(ws, 'D5', 'TOTAL VARIANCE (PACKS)')
-    value(ws, 'D6', f'={pick("total_packs")}', INT_FMT)
+    value(ws, 'D6', f'={pick("I")}', INT_FMT)
     label(ws, 'F5', 'TOTAL VARIANCE (RM)')
-    value(ws, 'F6', f'={pick("total_rm")}', RM_FMT)
+    value(ws, 'F6', f'={pick("K")}', RM_FMT)
     label(ws, 'H5', 'POS SALES')
-    value(ws, 'H6', f'={pick("pos_state")}', None, size=11)
+    value(ws, 'H6', f'={pick("M")}', None, size=11)
 
-    # --- the plain-English status line ---
-    ws['A7'] = f'={pick("message")}'
+    # Before the query is attached there is no day to describe, and a bare em
+    # dash in a highlighted bar reads as broken rather than as "not set up yet".
+    ws['A7'] = (f'=IF(COUNT({D["day_no"]})=0,'
+                f'"No data yet — follow the Setup sheet to attach the query, once.",'
+                f'{pick("O")})')
     ws['A7'].font = Font(name='Calibri', size=10, bold=True, color=WARN_AMBER)
     ws['A7'].alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
     ws.merge_cells('A7:I7')
     ws['A7'].fill = PatternFill('solid', fgColor=AMBER_FILL)
-    # Merged cells do not auto-fit, and the longest of these messages runs to
-    # two lines at this width, so the height is set for the worst case.
     ws.row_dimensions[7].height = 32
 
-    # --- table ---
     for i, (text, width, align) in enumerate(DAILY_HEADERS, start=1):
         c = ws.cell(row=HDR_ROW, column=i, value=text)
         c.font = Font(name='Calibri', size=10, bold=True, color='FFFFFF')
@@ -422,21 +434,20 @@ def write_daily(ws, rows, summary, data_last, max_products):
         ws.column_dimensions[get_column_letter(i)].width = width
     ws.row_dimensions[HDR_ROW].height = 28
 
-    last_row = FIRST_ROW + max_products - 1
+    last_row = FIRST_ROW + DAILY_ROWS - 1
     for r in range(FIRST_ROW, last_row + 1):
-        rank = r - FIRST_ROW + 1
-        # One MATCH per row, parked out of the print area, so the nine cells
-        # beside it are cheap lookups rather than nine searches.
-        ws[f'L{r}'] = f'=IFERROR(MATCH($B$3&"|"&{rank},{keys},0),"")'
+        n = r - FIRST_ROW + 1
+        # The lookup key, built from date parts: yyyymmdd * 1000 + rank. Not
+        # TEXT(d,"yyyy-mm-dd"), whose tokens are localised, and not a date
+        # serial, which would rely on Power Query and Excel agreeing about day
+        # zero. Parts rely on nothing.
+        key = (f'(YEAR($B$3)*10000+MONTH($B$3)*100+DAY($B$3))*1000+{n}')
+        ws[f'L{r}'] = f'=IFERROR(MATCH({key},{D["row_key"]},0),"")'
         m = f'$L{r}'
         hit = f'AND(ISNUMBER({m}),{m}<>"")'
 
-        # A cell the view can legitimately leave empty must not read as a
-        # number. Blank in a spreadsheet looks like "nothing wrong"; an em dash
-        # looks like "not known", which is the truth for an opening with no
-        # previous count, or a variance with no POS sales loaded.
         def cell(col, name, fmt=None, align='right', dash=True, bold=False):
-            idx = f'INDEX({dcol(name)},{m})'
+            idx = f'INDEX({D[name]},{m})'
             body = f'IF({idx}="","—",{idx})' if dash else idx
             c = ws[f'{col}{r}']
             c.value = f'=IF({hit},{body},"")'
@@ -451,44 +462,20 @@ def write_daily(ws, rows, summary, data_last, max_products):
 
         cell('A', 'short_name', None, 'left', dash=False)
         cell('B', 'opening_packs', INT_FMT)
-        # Closing is coalesced to zero in the view, so it is always a real
-        # number — a dash here would be a lie about a product counted at nil.
         cell('C', 'closing_packs', INT_FMT, dash=False)
         cell('D', 'sold_physical', INT_FMT)
         cell('E', 'sold_pos', INT_FMT)
         cell('F', 'variance_packs', INT_FMT, bold=True)
         cell('G', 'variance_rm', RM_FMT)
-
-        # Kept, because a number that looks wrong gets checked against the POS
-        # and the shelf label — but pushed to the far right, out of the way.
         cell('H', 'product_id', None, 'left', dash=False).font = \
             Font(name='Consolas', size=9, color=MUTED)
         cell('I', 'plu', None, 'left', dash=False).font = \
             Font(name='Consolas', size=9, color=MUTED)
 
     ws.column_dimensions['L'].hidden = True
-
-    # --- variance colouring: grey at zero, red and heavier as it grows ---
-    rng = f'F{FIRST_ROW}:G{last_row}'
-    grey = Font(name='Calibri', size=10, color=MUTED)
-    for rule in (
-        FormulaRule(formula=[f'AND(ISNUMBER($F{FIRST_ROW}),$F{FIRST_ROW}=0)'],
-                    font=grey, stopIfTrue=True),
-        FormulaRule(formula=[f'AND(ISNUMBER($F{FIRST_ROW}),ABS($F{FIRST_ROW})>=10)'],
-                    font=Font(name='Calibri', size=10, bold=True, color=RED_3),
-                    fill=PatternFill('solid', fgColor=RED_3_BG), stopIfTrue=True),
-        FormulaRule(formula=[f'AND(ISNUMBER($F{FIRST_ROW}),ABS($F{FIRST_ROW})>=5)'],
-                    font=Font(name='Calibri', size=10, bold=True, color=RED_2),
-                    fill=PatternFill('solid', fgColor=RED_FILL_LIGHT), stopIfTrue=True),
-        FormulaRule(formula=[f'AND(ISNUMBER($F{FIRST_ROW}),ABS($F{FIRST_ROW})>=1)'],
-                    font=Font(name='Calibri', size=10, bold=True, color=RED_1),
-                    stopIfTrue=True),
-    ):
-        ws.conditional_formatting.add(rng, rule)
-
+    variance_rules(ws, f'F{FIRST_ROW}:G{last_row}', f'$F{FIRST_ROW}')
     ws.freeze_panes = f'A{FIRST_ROW}'
 
-    # --- print: the whole filtered day on one page ---
     ws.print_area = f'A1:I{last_row}'
     ws.print_title_rows = f'{HDR_ROW}:{HDR_ROW}'
     ws.page_setup.orientation = 'portrait'
@@ -500,116 +487,108 @@ def write_daily(ws, rows, summary, data_last, max_products):
     ws.print_options.horizontalCentered = True
     ws.oddFooter.left.text = 'Cigarette reconciliation — &[Tab]'
     ws.oddFooter.right.text = 'Page &[Page] of &[Pages]'
-    return last_row
 
 
-def write_trends(ws, rows, dates):
-    """Variance by product across dates.
+def variance_rules(ws, rng, anchor):
+    """Grey at zero, red from one pack, heavier at five and again at ten.
 
-    The question this sheet answers is not "what went wrong last night" — Daily
-    does that — but "which product goes wrong repeatedly". So it is sorted by
-    the NUMBER of days a product was off before the size of the gap: five nights
-    of one pack is a leak, one night of five packs is an event.
+    Every rule tests ISNUMBER first, so an em dash — which means "not known" —
+    is never coloured as though it were a number.
     """
-    ws['A1'] = 'Variance by product, across days'
+    grey = Font(name='Calibri', size=10, color=MUTED)
+    for rule in (
+        FormulaRule(formula=[f'AND(ISNUMBER({anchor}),{anchor}=0)'],
+                    font=grey, stopIfTrue=True),
+        FormulaRule(formula=[f'AND(ISNUMBER({anchor}),ABS({anchor})>=10)'],
+                    font=Font(name='Calibri', size=10, bold=True, color=RED_3),
+                    fill=PatternFill('solid', fgColor=RED_3_BG), stopIfTrue=True),
+        FormulaRule(formula=[f'AND(ISNUMBER({anchor}),ABS({anchor})>=5)'],
+                    font=Font(name='Calibri', size=10, bold=True, color=RED_2),
+                    fill=PatternFill('solid', fgColor=RED_FILL_LIGHT), stopIfTrue=True),
+        FormulaRule(formula=[f'AND(ISNUMBER({anchor}),ABS({anchor})>=1)'],
+                    font=Font(name='Calibri', size=10, bold=True, color=RED_1),
+                    stopIfTrue=True),
+    ):
+        ws.conditional_formatting.add(rng, rule)
+
+
+TRENDS_ROW0 = 4
+
+
+def write_trends(ws, calc):
+    ws['A1'] = f'Variance by product — last {TREND_DAYS} counted days'
     ws['A1'].font = Font(name='Calibri', size=16, bold=True, color=INK)
-    ws['A2'] = ('Sorted by how many days the product disagreed with the POS, then by '
-                'total. A product off a little every night sits above one that was off '
-                'a lot once. Blank means no POS sales were loaded for that day.')
+    ws['A2'] = ('Sorted by how many days the product disagreed with the POS, then by total. '
+                'A product off a little every night sits above one that was off a lot once. '
+                'A dash means no POS sales were loaded for that day.')
     ws['A2'].font = Font(name='Calibri', size=9, italic=True, color=MUTED)
-    ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=max(6, len(dates) + 4))
+    ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=TREND_DAYS + 4)
 
-    per = defaultdict(dict)
-    names = {}
-    for r in rows:
-        per[r['product_id']][r['date_key']] = r['variance_packs']
-        names[r['product_id']] = r['short_name']
-
-    stats = []
-    for pid, byd in per.items():
-        known = [v for v in byd.values() if v is not None]
-        off = [v for v in known if v != 0]
-        stats.append({
-            'pid': pid, 'name': names[pid], 'byd': byd,
-            # Zero days off means "checked, and fine". None means "never
-            # checked" — every day this product had no POS figure to compare
-            # against. Reporting the second as a confident zero is the whole
-            # failure this sheet exists to avoid.
-            'days_off': len(off) if known else None,
-            'total': sum(known) if known else None,
-            'worst': max(off, key=abs) if off else None,
-        })
-    stats.sort(key=lambda s: (-(s['days_off'] or 0),
-                              -(abs(s['total']) if s['total'] is not None else 0),
-                              s['name'].lower()))
-
-    hdr = ['Product'] + [f'{as_date(d):%d %b}' for d in dates] + \
-          ['Days off', 'Total', 'Worst']
-    row0 = 4
+    L = get_column_letter
+    ncols = 1 + TREND_DAYS + 3
+    hdr = ['Product'] + [''] * TREND_DAYS + ['Days off', 'Total', 'Worst']
     for i, text in enumerate(hdr, start=1):
-        c = ws.cell(row=row0, column=i, value=text)
+        c = ws.cell(row=TRENDS_ROW0, column=i, value=text)
         c.font = Font(name='Calibri', size=10, bold=True, color='FFFFFF')
         c.fill = PatternFill('solid', fgColor=HEAD_BG)
         c.alignment = Alignment(horizontal='center' if i > 1 else 'left',
                                 vertical='center', wrap_text=True)
         c.border = BOX
-    ws.row_dimensions[row0].height = 26
+    # Day headers are the dates themselves, newest first, straight off Calc.
+    for j in range(1, TREND_DAYS + 1):
+        c = ws.cell(row=TRENDS_ROW0, column=1 + j)
+        c.value = (f'=IF(Calc!$B${CALC_DAY_ROW + j - 1}="","",'
+                   f'TEXT(Calc!$B${CALC_DAY_ROW + j - 1},"dd mmm"))')
+    ws.row_dimensions[TRENDS_ROW0].height = 26
     ws.column_dimensions['A'].width = 30
-    for i in range(2, len(hdr) + 1):
-        ws.column_dimensions[get_column_letter(i)].width = 11
+    for i in range(2, ncols + 1):
+        ws.column_dimensions[L(i)].width = 9.5
 
-    for j, s in enumerate(stats):
-        r = row0 + 1 + j
-        c = ws.cell(row=r, column=1, value=s['name'])
-        c.font = Font(name='Calibri', size=10, color=INK)
-        c.border = BOX
-        c.alignment = Alignment(horizontal='left', vertical='center')
-        for k, d in enumerate(dates, start=2):
-            v = s['byd'].get(d)
-            c = ws.cell(row=r, column=k, value='—' if v is None else v)
-            c.number_format = INT_FMT
-            c.alignment = Alignment(horizontal='right', vertical='center')
-            c.border = BOX
-            c.font = Font(name='Calibri', size=10,
-                          color=MUTED if v in (None, 0) else INK)
-        base = len(dates) + 2
-        for k, v, fmt, bold in ((base, s['days_off'], INT_FMT, True),
-                                (base + 1, s['total'], INT_FMT, True),
-                                (base + 2, s['worst'], INT_FMT, False)):
-            c = ws.cell(row=r, column=k, value='—' if v is None else v)
-            c.number_format = fmt
-            c.alignment = Alignment(horizontal='right', vertical='center')
+    cr, co, ct, cw = calc['rank'], calc['off'], calc['total'], calc['worst']
+    pr0, pr1 = CALC_PROD_ROW, CALC_PROD_ROW + MAX_PRODUCTS - 1
+    rank_rng = f'Calc!${cr}${pr0}:${cr}${pr1}'
+
+    for k in range(1, MAX_PRODUCTS + 1):
+        r = TRENDS_ROW0 + k
+        ws[f'{L(ncols + 2)}{r}'] = f'=IFERROR(MATCH({k},{rank_rng},0),"")'
+        m = f'${L(ncols + 2)}{r}'
+        hit = f'AND(ISNUMBER({m}),{m}<>"")'
+
+        def pull(col_letter, calc_col, fmt=None, bold=False, align='right'):
+            src = f'INDEX(Calc!${calc_col}${pr0}:${calc_col}${pr1},{m})'
+            c = ws[f'{col_letter}{r}']
+            c.value = f'=IF({hit},IF({src}="","—",{src}),"")'
+            c.alignment = Alignment(horizontal=align, vertical='center')
             c.border = BOX
             c.font = Font(name='Calibri', size=10, bold=bold, color=INK)
-        if j % 2 == 1:
-            for k in range(1, len(hdr) + 1):
-                ws.cell(row=r, column=k).fill = PatternFill('solid', fgColor=BAND)
+            if fmt:
+                c.number_format = fmt
+            if k % 2 == 0:
+                c.fill = PatternFill('solid', fgColor=BAND)
+            return c
 
-    last = row0 + len(stats)
-    if stats:
-        first_data = get_column_letter(2)
-        last_data = get_column_letter(len(dates) + 1)
-        rng = f'{first_data}{row0 + 1}:{last_data}{last}'
-        anchor = f'{first_data}{row0 + 1}'
-        grey = Font(name='Calibri', size=10, color=MUTED)
-        for rule in (
-            FormulaRule(formula=[f'AND(ISNUMBER({anchor}),{anchor}=0)'],
-                        font=grey, stopIfTrue=True),
-            FormulaRule(formula=[f'AND(ISNUMBER({anchor}),ABS({anchor})>=10)'],
-                        font=Font(name='Calibri', size=10, bold=True, color=RED_3),
-                        fill=PatternFill('solid', fgColor=RED_3_BG), stopIfTrue=True),
-            FormulaRule(formula=[f'AND(ISNUMBER({anchor}),ABS({anchor})>=5)'],
-                        font=Font(name='Calibri', size=10, bold=True, color=RED_2),
-                        fill=PatternFill('solid', fgColor=RED_FILL_LIGHT), stopIfTrue=True),
-            FormulaRule(formula=[f'AND(ISNUMBER({anchor}),ABS({anchor})>=1)'],
-                        font=Font(name='Calibri', size=10, bold=True, color=RED_1),
-                        stopIfTrue=True),
-        ):
-            ws.conditional_formatting.add(rng, rule)
+        c = ws[f'A{r}']
+        c.value = (f'=IF({hit},INDEX(Calc!$S${pr0}:$S${pr1},{m}),"")')
+        c.alignment = Alignment(horizontal='left', vertical='center')
+        c.border = BOX
+        c.font = Font(name='Calibri', size=10, color=INK)
+        if k % 2 == 0:
+            c.fill = PatternFill('solid', fgColor=BAND)
 
-    ws.freeze_panes = f'B{row0 + 1}'
-    ws.print_area = f'A1:{get_column_letter(len(hdr))}{last}'
-    ws.print_title_rows = f'{row0}:{row0}'
+        for j in range(1, TREND_DAYS + 1):
+            pull(L(1 + j), L(calc['day_first'] + j - 1), INT_FMT)
+        pull(L(TREND_DAYS + 2), co, INT_FMT, bold=True)
+        pull(L(TREND_DAYS + 3), ct, INT_FMT, bold=True)
+        pull(L(TREND_DAYS + 4), cw, INT_FMT)
+
+    ws.column_dimensions[L(ncols + 2)].hidden = True
+    last = TRENDS_ROW0 + MAX_PRODUCTS
+    variance_rules(ws, f'B{TRENDS_ROW0 + 1}:{L(TREND_DAYS + 3)}{last}',
+                   f'B{TRENDS_ROW0 + 1}')
+
+    ws.freeze_panes = f'B{TRENDS_ROW0 + 1}'
+    ws.print_area = f'A1:{L(ncols)}{last}'
+    ws.print_title_rows = f'{TRENDS_ROW0}:{TRENDS_ROW0}'
     ws.page_setup.orientation = 'landscape'
     ws.page_setup.fitToWidth = 1
     ws.page_setup.fitToHeight = 0
@@ -625,6 +604,9 @@ NOTES = [
      'Rows are ordered by how far the variance is from zero, so whatever needs attention '
      'is at the top rather than wherever the alphabet put it.', ''),
     ('Ctrl+P prints exactly the day on screen, on one page, with the header row repeated.', ''),
+    ('The line at the top right says how many days are loaded and what the latest one is. '
+     'If the day you counted this morning is not the latest, the file has not been '
+     'refreshed — press Data > Refresh All.', ''),
     ('', ''),
     ('What the columns mean', 'h2'),
     ('Opening — what the previous submitted count left on the shelf. "Opening from" in '
@@ -638,15 +620,16 @@ NOTES = [
     ('  positive — more left the shelf than the till sold: shrinkage, a miscount, or '
      'stock put out and not recorded.', ''),
     ('  negative — the till sold more than the shelf lost: usually a delivery.', ''),
-    ('  an em dash — not known, not zero. No POS sales are loaded for that day.', ''),
+    ('  an em dash — not known, not zero. Either no POS sales are loaded for that day, '
+     'or it is the first count of that product and there is no opening to sell down from.', ''),
     ('Variance RM — the variance valued at the price that day\'s report printed, falling '
      'back to the product list price. Blank means neither is known.', ''),
     ('', ''),
     ('Trends', 'h2'),
-    ('Variance by product across every counted day, sorted by how many days each product '
-     'was off before how large the gap was. That ordering is the point: five nights of '
-     'one pack is a leak worth chasing, one night of five packs is an event. The first '
-     'sits at the top.', ''),
+    ('Variance by product over the last 14 counted days, sorted by how many days each '
+     'product was off before how large the gap was. That ordering is the point: five '
+     'nights of one pack is a leak worth chasing, one night of five packs is an event. '
+     'The leak sits at the top. Anything older than 14 days is still on the Data sheet.', ''),
     ('', ''),
     ('Two things that will skew variance', 'h2'),
     ('Deliveries are not recorded. The count screen collects one number per product and '
@@ -658,12 +641,12 @@ NOTES = [
      'whatever date that was. Check "Opening from" before believing a large variance.', ''),
     ('', ''),
     ('Refreshing', 'h2'),
-    ('This workbook is generated. Re-run build_workbook.py and it is rebuilt from the '
-     'database as it stands — so do not hand-edit it, because the next run will not keep '
-     'the change. Anything that should be different belongs in the script.', ''),
-    ('The Data sheet is hidden and holds the view exactly as it came back, including the '
-     'columns this report does not show. Right-click a sheet tab and choose Unhide to '
-     'see it.', ''),
+    ('Data > Refresh All, or just open the file if refresh-on-open is ticked. The rows '
+     'come from the database through the query named Counts; the sheets are formulas on '
+     'top of them, so new days and new products appear without anything being edited.', ''),
+    ('The Data and Calc sheets are hidden. Data is the query\'s landing zone and Calc '
+     'holds the working-out. Neither should be edited by hand: Data is overwritten on '
+     'every refresh, and Calc is what Daily and Trends read.', ''),
 ]
 
 
@@ -680,55 +663,125 @@ def write_notes(ws):
         else:
             c.font = Font(name='Calibri', size=10, color=INK)
             c.alignment = Alignment(wrap_text=True, vertical='top')
-            ws.row_dimensions[r].height = None
+        r += 1
+    ws.sheet_view.showGridLines = False
+
+
+SETUP = [
+    ('Attach the data — about fifteen minutes, once', 'h1'),
+    ('', ''),
+    ('Until this is done, Daily and Trends are empty and the line at the top right of '
+     'Daily says "Data sheet is empty". Nothing is broken; the rows simply are not there '
+     'yet. After it is done the workbook refreshes itself and this sheet can be ignored.', ''),
+    ('', ''),
+    ('1. Open a blank query', 'h2'),
+    ('Data > Get Data > From Other Sources > Blank Query.', ''),
+    ('', ''),
+    ('2. Paste the query', 'h2'),
+    ('Home > Advanced Editor. Delete what is there. Paste the whole of counts_query.m '
+     'from the excel folder. Done.', ''),
+    ('', ''),
+    ('3. Name it exactly  Counts', 'h2'),
+    ('In the Query Settings pane on the right. The name matters less than it used to — '
+     'the sheets address columns by position, not by table name — but keep it so the next '
+     'person can find it.', ''),
+    ('', ''),
+    ('4. Load it onto the Data sheet', 'h2'),
+    ('Home > Close & Load To... > Table > Existing worksheet > put the cursor in Data!$A$1 '
+     '> OK. If Excel asks about credentials for supabase.co, choose Anonymous.', ''),
+    ('IMPORTANT: it must land on the Data sheet at A1. The columns must sit in the order '
+     'the query returns them, because every formula in the workbook finds its values by '
+     'column position. If it lands somewhere else, undo and redo this step.', ''),
+    ('', ''),
+    ('5. Make it automatic', 'h2'),
+    ('Data > Queries & Connections > right-click Counts > Properties. Tick "Refresh data '
+     'when opening the file" and "Refresh every 60 minutes".', ''),
+    ('', ''),
+    ('Then check three things', 'h2'),
+    ('The top right of Daily names the latest counted day. It should be the most recent '
+     'count that has been submitted.', ''),
+    ('Pick the earliest day in the dropdown — the very first count. Variance, Opening and '
+     'Sold (counted) should all read as dashes, and the amber line should say there is no '
+     'opening figure. If any of those read 0 instead, tell Claude: a dash means "not '
+     'checked" and a zero means "agreed", and they must never be confused.', ''),
+    ('Submit a count, then press Data > Refresh All. The new day should appear in the '
+     'dropdown on its own.', ''),
+]
+
+
+def write_setup(ws):
+    ws.column_dimensions['A'].width = 104
+    r = 1
+    for text, kind in SETUP:
+        c = ws.cell(row=r, column=1, value=text)
+        if kind == 'h1':
+            c.font = Font(name='Calibri', size=16, bold=True, color=INK)
+        elif kind == 'h2':
+            c.font = Font(name='Calibri', size=12, bold=True, color='1F4E79')
+            c.border = UNDER
+        else:
+            c.font = Font(name='Calibri', size=10, color=INK)
+            c.alignment = Alignment(wrap_text=True, vertical='top')
         r += 1
     ws.sheet_view.showGridLines = False
 
 
 # ===========================================================================
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument('-o', '--out',
-                    default=os.path.join(HERE, 'Cigarette Reconciliation.xlsx'))
-    args = ap.parse_args()
-
-    raw = fetch(anon_key())
-    if not raw:
-        sys.exit(f'{VIEW} returned nothing for {BRANCH}. Is a count submitted?')
-    rows, dates, have = prepare(raw)
-    summary = summarise(rows, dates, have)
-    max_products = max(s['products'] for s in summary)
-
+def build(rows, mode, out):
     wb = Workbook()
     daily = wb.active
     daily.title = 'Daily'
     trends = wb.create_sheet('Trends')
     notes = wb.create_sheet('Notes')
+    if mode == 'query':
+        setup = wb.create_sheet('Setup')
+        write_setup(setup)
+    calc = wb.create_sheet('Calc')
     data = wb.create_sheet('Data')
 
-    data_last = write_data(data, rows, summary)
-    write_daily(daily, rows, summary, data_last, max_products)
-    write_trends(trends, rows, dates)
+    write_data(data, rows, mode)
+    handles = write_calc(calc)
+    write_daily(daily)
+    write_trends(trends, handles)
     write_notes(notes)
 
     # Nothing in the file carries a cached result, so Excel has to be told to
     # work them out when it opens rather than showing a grid of zeros.
     wb.calculation.fullCalcOnLoad = True
     wb.active = 0
-    wb.save(args.out)
+    wb.save(out)
+    return wb
 
-    missing = [c for c in ('opening_date', 'unit_price_used', 'variance_rm')
-               if c not in have]
-    print(f'wrote {args.out}')
-    print(f'  {len(rows)} rows over {len(dates)} days: {", ".join(dates)}')
-    print(f'  {max_products} products a day')
-    for s in summary:
-        print(f"  {s['date_key']}: POS {s['pos_state']}, "
-              f"variance {s['total_packs'] if s['total_packs'] is not None else '—'} packs, "
-              f"{s['with_variance'] if s['with_variance'] is not None else '—'} products off")
-    if missing:
-        print(f'  NOTE: the view has no {", ".join(missing)} yet — '
-              f'run 10_prices_and_opening_date.sql to light those columns up.')
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('-m', '--mode', choices=('query', 'snapshot'), default='query')
+    ap.add_argument('-o', '--out', default=None)
+    args = ap.parse_args()
+    out = args.out or os.path.join(
+        HERE, 'Cigarette Reconciliation.xlsx' if args.mode == 'query'
+        else 'Cigarette Reconciliation (snapshot).xlsx')
+
+    rows, days, prods = [], [], []
+    if args.mode == 'snapshot':
+        raw = fetch(anon_key())
+        if not raw:
+            sys.exit(f'{VIEW} returned nothing for {BRANCH}. Is a count submitted?')
+        rows, days, prods = prepare(raw)
+
+    build(rows, args.mode, out)
+
+    print(f'wrote {out}  [{args.mode}]')
+    if args.mode == 'query':
+        print('  Data is empty by design. Follow the Setup sheet to attach the query,')
+        print('  then the workbook refreshes itself — no more running this script.')
+    else:
+        print(f'  {len(rows)} rows over {len(days)} days, {len(prods)} products')
+        if days:
+            print(f'  latest {days[0]}, earliest {days[-1]}')
+    if len(prods) > MAX_PRODUCTS or len(days) > MAX_DAYS:
+        print(f'  WARNING: exceeds the reserved Calc rows '
+              f'(days {len(days)}/{MAX_DAYS}, products {len(prods)}/{MAX_PRODUCTS})')
 
 
 if __name__ == '__main__':

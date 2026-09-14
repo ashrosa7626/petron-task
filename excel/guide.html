@@ -426,13 +426,14 @@
     </div>
     <div class="arrow" aria-hidden="true">&rarr;</div>
     <div class="node">
-      <div class="node-k">One command</div>
-      <div class="node-v">build_workbook.py</div>
-      <div class="node-s">Rebuilds the file</div>
+      <div class="node-k">Every 60 min</div>
+      <div class="node-v">Excel pulls</div>
+      <div class="node-s">Power Query</div>
     </div>
-    <p class="flow-note"><b>The workbook is generated, not maintained.</b> Every run rebuilds it from
-      the database as it stands, so nothing in it should be edited by hand &mdash; the next run will
-      not keep the change. Anything that should be different belongs in the script.</p>
+    <p class="flow-note"><b>Nothing pushes.</b> Excel asks the database for the counts, on open and
+      on a timer. The sheets are formulas on top of whatever comes back, so a new day appears by
+      itself &mdash; but the <i>layout</i> is still generated, so nothing in the workbook should be
+      edited by hand. Anything that should be different belongs in the builder.</p>
   </div>
 
   <section>
@@ -447,7 +448,9 @@
             products below, worst variance first. Prints on one page.</td></tr>
           <tr><td class="k">Trends</td><td>Variance by product across every counted day</td></tr>
           <tr><td class="k">Notes</td><td>What the columns mean and what can make them lie</td></tr>
-          <tr><td class="k">Data</td><td>Hidden. The raw view, every column, exactly as it came back</td></tr>
+          <tr><td class="k">Setup</td><td>The one-time instructions for attaching the query</td></tr>
+          <tr><td class="k">Calc</td><td>Hidden. The working-out behind the two sheets above</td></tr>
+          <tr><td class="k">Data</td><td>Hidden. Where the query lands &mdash; the raw view, every column</td></tr>
         </tbody>
       </table>
     </div>
@@ -455,7 +458,8 @@
       <div class="call-k">One table, not a sheet per day</div>
       <p>Only the hidden sheet holds values. Daily reads it by formula, so changing the date in the
         dropdown recalculates the same table in place &mdash; one set of formatting, one print
-        layout, however many days accumulate.</p>
+        layout, however many days accumulate. The formulas address the data by whole column, so a
+        refresh that brings back more rows needs nothing edited.</p>
     </div>
   </section>
 
@@ -529,33 +533,45 @@
   </section>
 
   <section>
-    <h2>Refreshing it</h2>
+    <h2>Setting it up, once</h2>
+    <p>Until this is done Daily says &ldquo;No data yet&rdquo;. The same steps are on the
+      <b>Setup</b> sheet inside the workbook, so they are there when you need them.</p>
     <ol class="steps">
       <li>
-        <div class="st">Install openpyxl, once</div>
-        <div class="sd">The only thing the script needs beyond Python.</div>
+        <div class="st">Open a blank query</div>
+        <div class="sd"><span class="path">Data &rsaquo; Get Data &rsaquo; From Other Sources &rsaquo; Blank Query</span></div>
       </li>
       <li>
-        <div class="st">Run the build</div>
-        <div class="sd">It pulls the view with the public read-only key and rewrites the file.</div>
+        <div class="st">Paste the query</div>
+        <div class="sd"><span class="path">Home &rsaquo; Advanced Editor</span>, delete what is there,
+          paste all of <code>counts_query.m</code>, then <b>Done</b>.</div>
       </li>
       <li>
-        <div class="st">Open the workbook</div>
-        <div class="sd">Pick a trading day from the dropdown. Everything follows that one choice.</div>
+        <div class="st">Name it <code>Counts</code></div>
+        <div class="sd">In the Query Settings pane on the right.</div>
+      </li>
+      <li>
+        <div class="st">Load it onto the Data sheet at A1</div>
+        <div class="sd"><span class="path">Home &rsaquo; Close &amp; Load To&hellip; &rsaquo; Table &rsaquo; Existing worksheet</span>,
+          cursor in <code>Data!$A$1</code>. If Excel asks about credentials for
+          <code>supabase.co</code>, choose <b>Anonymous</b>.</div>
+      </li>
+      <li>
+        <div class="st">Turn on automatic refresh</div>
+        <div class="sd"><span class="path">Data &rsaquo; Queries &amp; Connections</span>, right-click
+          <b>Counts &rsaquo; Properties</b>, tick <b>Refresh data when opening the file</b> and
+          <b>Refresh every 60 minutes</b>.</div>
       </li>
     </ol>
-    <div class="code">
-      <div class="code-bar">
-        <span class="code-name">in the excel/ folder</span>
-        <button class="copy" type="button" data-target="cmd-build">Copy</button>
-      </div>
-      <pre id="cmd-build">pip install openpyxl
-python3 build_workbook.py</pre>
+    <div class="call">
+      <div class="call-k">It has to land on Data at A1</div>
+      <p>Every formula in the workbook finds its values by column position, so the query&rsquo;s
+        columns must sit where they are expected. If it loads anywhere else, undo and redo that
+        step. This is the one instruction worth re-reading.</p>
     </div>
-    <p>There is a test too &mdash; <code>python3 verify_workbook.py</code>. It matters because the live
-      database has no variance in it yet, so the ranking, the totals and the colouring would otherwise
-      ship having never run. It feeds the builder a day set shaped to exercise them and checks the
-      answers.</p>
+    <p>After that, <span class="path">Data &rsaquo; Refresh All</span> at any time, or just open
+      the file. The line at the top right of Daily names the latest day it has &mdash; if the day
+      you counted this morning is not there, it has not refreshed.</p>
   </section>
 
   <section>
@@ -639,7 +655,8 @@ python3 build_workbook.py</pre>
       </div>
       <div class="faq-row">
         <div class="faq-q">The dropdown is missing recent days</div>
-        <div class="faq-a">The workbook is a snapshot. Re-run <code>build_workbook.py</code>.</div>
+        <div class="faq-a">It has not refreshed. <span class="path">Data &rsaquo; Refresh All</span>.
+          If nothing happens, the query was never attached &mdash; see the Setup sheet.</div>
       </div>
       <div class="faq-row">
         <div class="faq-q">A large variance out of nowhere</div>
@@ -647,9 +664,9 @@ python3 build_workbook.py</pre>
           sales into one figure.</div>
       </div>
       <div class="faq-row">
-        <div class="faq-q">My edits disappeared</div>
-        <div class="faq-a">Expected &mdash; the file is regenerated. Put the change in
-          <code>build_workbook.py</code> so it survives.</div>
+        <div class="faq-q">Everything says &ldquo;No data yet&rdquo;</div>
+        <div class="faq-a">The query is not attached, or it landed somewhere other than
+          <code>Data!$A$1</code>. See the Setup sheet.</div>
       </div>
     </div>
   </section>

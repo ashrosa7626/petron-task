@@ -1,47 +1,75 @@
 # Cigarette reconciliation — the Excel workbook
 
-`Cigarette Reconciliation.xlsx` is generated. To make it, or to refresh it:
+`Cigarette Reconciliation.xlsx` **refreshes itself.** Open it, or press
+**Data → Refresh All**, and it pulls straight from the database. No script to run.
 
-```
-pip install openpyxl          # once
-python3 build_workbook.py
-```
-
-It pulls `vw_daily_reconciliation` from Supabase with the public read-only key
-and rebuilds the file from scratch. **Don't hand-edit it** — the next run won't
-keep the change. Anything that should be different belongs in the script.
+That needs a one-time setup of about fifteen minutes — the **Setup sheet inside the
+workbook** walks through it, and `counts_query.m` is the query to paste. Until it is
+done, Daily says "No data yet" and nothing else works. After it is done the Setup sheet
+can be ignored.
 
 ## What's in it
 
 | sheet | |
 |---|---|
 | **Daily** | One trading day, chosen from a dropdown. Summary block on top, products below, worst variance first. Prints on one page. |
-| **Trends** | Variance by product across every counted day. |
+| **Trends** | Variance by product over the last 14 counted days. |
 | **Notes** | What the columns mean and what can make them lie. |
-| **Data** | Hidden. The raw view, every column, exactly as it came back. |
+| **Setup** | The one-time attach instructions. |
+| **Calc** | Hidden. The working-out. |
+| **Data** | Hidden. Where the query lands — the raw view, every column. |
 
-Only `Data` holds values. Daily reads it by formula, so changing the date
-recalculates in place — one table, one set of formatting, no sheet per day.
+Daily and Trends are formulas over `Data`, addressed **by whole column**
+(`Data!$N:$N`), so new days and new products appear on refresh with nothing edited.
+
+> Not by structured reference (`Counts[variance_packs]`), which was the obvious choice
+> and is wrong. Excel rewrites a reference to a table that does not exist yet into a
+> permanent `#REF!` the first time the file is opened, and Power Query cannot be made to
+> load into a table the builder created. Whole columns have neither problem.
+>
+> The cost: **Data's column order is load-bearing.** It must be exactly what
+> `counts_query.m` returns. Both ends pin it and `verify_workbook.py` asserts it.
 
 ### Daily
 
 Columns are `Opening`, `Closing`, `Sold (counted)`, `Sold (POS)`, `Variance`,
-`Variance RM`, then `Item ID` and `PLU` pushed out to the far right where they
-stay available without being in the way. `branch_id` and `pos_description` are
-gone. So is `Added` — `add_in` is always zero, so a column of zeros would only
-imply something had been checked. It is still on the hidden sheet.
+`Variance RM`, then `Item ID` and `PLU` pushed out to the far right where they stay
+available without being in the way. `branch_id` and `pos_description` are gone. So is
+`Added` — `add_in` is always zero, so a column of zeros would only imply something had
+been checked. It is still on the hidden sheet.
 
-Rows are ordered by **absolute** variance descending, so the problems are at the
-top instead of wherever the alphabet put them. Variance is grey at zero and red
-from one pack, getting heavier at five and again at ten.
+Rows are ordered by **absolute** variance descending, so the problems are at the top
+instead of wherever the alphabet put them. Variance is grey at zero and red from one
+pack, getting heavier at five and again at ten.
+
+The line at the top right says how many days are loaded and what the latest one is.
+**If the day you counted this morning is not the latest, the file has not refreshed.**
+That line exists because a stale workbook once passed for a fresh one.
 
 Ctrl+P prints the day on screen on a single page, header row repeated.
 
 ### Trends
 
-Sorted by **how many days** each product was off, before how large the gap was.
-That ordering is the whole point: five nights off by one pack is a leak worth
-chasing, one night off by five is an event. The leak sorts above the event.
+The last **14 counted days**, sorted by **how many days** each product was off before
+how large the gap was. That ordering is the whole point: five nights off by one pack is
+a leak worth chasing, one night off by five is an event. The leak sorts above the event.
+Anything older than 14 days is still on the Data sheet.
+
+## Rebuilding the structure
+
+The workbook is generated. If the layout needs to change:
+
+```
+pip install openpyxl                          # once
+python3 build_workbook.py --mode query        # the file to hand over
+```
+
+Then re-attach the query (Setup sheet, about two minutes). **Don't hand-edit the
+workbook** — a rebuild will not keep the change. Anything that should be different
+belongs in the script.
+
+`--mode snapshot` writes a second file with the data baked in and no query needed. It
+exists for testing: it uses the *same* formulas, so it is how the real ones get checked.
 
 ## Zero and unknown are not the same thing
 
@@ -109,35 +137,25 @@ figures with suspicion.
 ## Tests
 
 ```
-python3 verify_workbook.py
+python3 verify_workbook.py            # structural + ranking rules
+python3 verify_workbook.py --excel    # also drives Excel and reads back what the
+                                      # FORMULAS computed (macOS only)
 ```
 
-The live database has no variance in it yet — every day either has no opening or
-no POS sales — so the ranking, totals and colouring would otherwise ship having
-never run. This feeds the builder a day set shaped to exercise them and asserts
-the answers, including that a leak outranks an event and that unknown never
-sums as zero.
+The live database has no variance in it yet — every day either has no opening or no POS
+sales — so the ranking, totals and colouring would otherwise ship having never run. The
+tests feed the builder a day set shaped to exercise them.
 
-## The live-refresh alternative
+`--excel` matters more than it sounds. The rule that **an unknown variance is never
+treated as a zero** lives in `COUNTIFS` formulas, which look correct whether or not they
+are. `--excel` opens the workbook, switches the trading day and reads back Excel's own
+answers, so that rule is tested rather than admired.
 
-`counts_query.m` and `products_query.m` are Power Query for pulling the same
-view straight into Excel. That refreshes on its own, on open and every 60
-minutes, with no script to run — but it gives you the flat stacked table with
-none of the structure above, which is what this rebuild was replacing.
+## `products_query.m`
 
-Kept because it is the only no-Python path. If nobody is using it, it can go.
+Still here, unused by this workbook. It pulls the product table and is handy for
+looking up a PLU or a description. Delete it if nobody wants it.
 
-Points to note if you edit the M:
-
-- it **pages** — PostgREST caps responses at 1000 rows, which 54 products a day
-  reaches in under three weeks
-- `BaseUrl` must stay constant with `RelativePath`/`Query` doing the work, or
-  `Web.Contents` cannot resolve stored credentials and refresh breaks
-- `plu` and `product_id` are typed `text`; numeric typing eats leading zeros
-- `Table.TransformColumnTypes` pins culture `"en-US"` so ISO dates parse on a
-  dd/MM locale
-- the empty-result branch builds the table from `ColumnList`, so formulas
-  survive the period before the first submission
 
 ## If something looks wrong
 
@@ -145,8 +163,10 @@ Points to note if you edit the M:
   first count. The summary line says which.
 - **`Variance RM` all blank** — migration 10 has not been run, or
   `product.unit_price` is not set.
-- **The dropdown has the wrong days** — the workbook is a snapshot. Re-run
-  `build_workbook.py`.
+- **The dropdown is missing recent days** — the query has not refreshed. Data →
+  Refresh All. If that does nothing, the query was never attached: see the Setup sheet.
+- **Everything says "No data yet"** — the query is not attached, or it landed somewhere
+  other than `Data!$A$1`.
 - **A large variance out of nowhere** — check `Opening from`. A skipped day
   folds two days of sales into one.
 - **`#NAME?` anywhere** — shouldn't happen; the sheet deliberately uses only
