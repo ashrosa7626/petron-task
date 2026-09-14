@@ -326,7 +326,8 @@
   .copy[data-state="done"] { background:linear-gradient(135deg, #22C55E, #4ADE80); }
   pre {
     margin:0; padding:15px;
-    overflow-x:auto;
+    overflow:auto;
+    max-height:22rem;
     font-family:var(--mono);
     font-size:0.78rem;
     line-height:1.6;
@@ -409,7 +410,7 @@
     <h1>Cigarette reconciliation in Excel</h1>
     <p class="standfirst">One trading day at a time, worst variance first, printable on a single
       page &mdash; plus a view across days that tells a steady leak apart from one bad night.
-      The workbook is generated from the database, so refreshing it is one command.</p>
+      It refreshes itself: open the file, and the counts are already there.</p>
   </header>
 
   <div class="flow">
@@ -446,7 +447,7 @@
         <tbody>
           <tr><td class="k">Daily</td><td>One trading day, picked from a dropdown. Summary on top,
             products below, worst variance first. Prints on one page.</td></tr>
-          <tr><td class="k">Trends</td><td>Variance by product across every counted day</td></tr>
+          <tr><td class="k">Trends</td><td>Variance by product over the last 14 counted days</td></tr>
           <tr><td class="k">Notes</td><td>What the columns mean and what can make them lie</td></tr>
           <tr><td class="k">Setup</td><td>The one-time instructions for attaching the query</td></tr>
           <tr><td class="k">Calc</td><td>Hidden. The working-out behind the two sheets above</td></tr>
@@ -520,8 +521,8 @@
 
   <section>
     <h2>Trends</h2>
-    <p>Variance by product across every counted day, sorted by <b>how many days</b> each product was
-      off before how large the gap was.</p>
+    <p>Variance by product over the last <b>14 counted days</b>, sorted by <b>how many days</b> each
+      product was off before how large the gap was. Anything older is still on the Data sheet.</p>
     <div class="call">
       <div class="call-k">A leak outranks an event</div>
       <p>Five nights off by one pack is a leak worth chasing. One night off by five is an event. The
@@ -563,6 +564,193 @@
           <b>Refresh every 60 minutes</b>.</div>
       </li>
     </ol>
+
+    <div class="code">
+      <div class="code-bar">
+        <span class="code-name">counts_query.m &mdash; paste this into the Advanced Editor</span>
+        <button class="copy" type="button" data-target="m-counts">Copy</button>
+      </div>
+      <pre id="m-counts">// ===========================================================================
+// Petron — cigarette reconciliation
+// Power Query (M) for Excel. Pulls every SUBMITTED count from Supabase.
+//
+// This query feeds the whole workbook. Daily and Trends read it by structured
+// reference, so it must be named exactly  Counts  and loaded to the Data sheet.
+//
+// To install:
+//   Data &gt; Get Data &gt; From Other Sources &gt; Blank Query
+//   Home &gt; Advanced Editor &gt; replace everything with this &gt; Done
+//   Rename the query to  Counts   (the sheet formulas depend on that name)
+//   Close &amp; Load To... &gt; Table &gt; Existing worksheet &gt; Data!$A$1
+//   If Excel asks about credentials for supabase.co, choose Anonymous.
+//
+// To make it automatic:
+//   Data &gt; Queries &amp; Connections &gt; right-click Counts &gt; Properties
+//     [x] Refresh data when opening the file
+//     [x] Refresh every 60 minutes
+//
+// Drafts never appear. vw_daily_reconciliation reads vw_count_submitted, so a
+// count only reaches Excel once it has actually been submitted — which is the
+// behaviour you want: a half-finished count must not reconcile.
+// ===========================================================================
+
+let
+    BaseUrl  = &quot;https://vwffiuciogthfzekkkkz.supabase.co/rest/v1/&quot;,
+
+    // Read-only anon key. This is the same key the web app ships in its
+    // JavaScript, so it is already public — it grants SELECT and nothing more
+    // on reference data. Do not paste a service key here.
+    ApiKey   = &quot;eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ3ZmZpdWNpb2d0aGZ6ZWtra2t6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4NzcwMTAsImV4cCI6MjA5MTQ1MzAxMH0.OTEyOMn1fmUNV7pR51KMOLsMTNAfytt62uGS_AkQXyw&quot;,
+
+    Resource = &quot;vw_daily_reconciliation&quot;,
+    Branch   = &quot;SAFARI&quot;,
+    PageSize = 1000,
+
+    // The shape the workbook&#x27;s formulas expect. opening_date, unit_price_used
+    // and variance_rm only exist once 10_prices_and_opening_date.sql has been
+    // run — so rather than depend on that, any column the view does not return
+    // is added as null below. The workbook then has a stable set of columns
+    // whichever migrations are in, and lights the extra ones up by itself when
+    // the migration lands. Nothing breaks in the meantime.
+    Expected = {
+        &quot;branch_id&quot;, &quot;count_date&quot;, &quot;shift&quot;, &quot;staff_name&quot;,
+        &quot;product_id&quot;, &quot;plu&quot;, &quot;short_name&quot;, &quot;pos_description&quot;,
+        &quot;opening_packs&quot;, &quot;add_in&quot;, &quot;closing_packs&quot;,
+        &quot;sold_physical&quot;, &quot;sold_pos&quot;, &quot;variance_packs&quot;,
+        &quot;opening_date&quot;, &quot;unit_price_used&quot;, &quot;variance_rm&quot;
+    },
+
+    // PostgREST caps any response at 1000 rows. At 54 products a day that cap
+    // arrives in under three weeks, so this pages until a request comes back
+    // empty rather than silently truncating the history.
+    //
+    // BaseUrl is a constant and the rest goes through RelativePath/Query on
+    // purpose: Web.Contents only resolves stored credentials when the base URL
+    // is static, so building the URL by string concatenation breaks refresh.
+    GetPage = (Offset as number) as list =&gt;
+        Json.Document(
+            Web.Contents(
+                BaseUrl,
+                [
+                    RelativePath = Resource,
+                    Query = [
+                        select    = &quot;*&quot;,
+                        branch_id = &quot;eq.&quot; &amp; Branch,
+                        order     = &quot;count_date.asc,short_name.asc&quot;,
+                        limit     = Text.From(PageSize),
+                        offset    = Text.From(Offset)
+                    ],
+                    Headers = [
+                        apikey        = ApiKey,
+                        Authorization = &quot;Bearer &quot; &amp; ApiKey,
+                        Accept        = &quot;application/json&quot;
+                    ]
+                ]
+            )
+        ),
+
+    Pages = List.Generate(
+        () =&gt; [Offset = 0, Rows = GetPage(0)],
+        each List.Count([Rows]) &gt; 0,
+        each [Offset = [Offset] + PageSize, Rows = GetPage([Offset] + PageSize)],
+        each [Rows]
+    ),
+    AllRows = List.Combine(Pages),
+
+    // An empty result still has to produce the right shape, or every formula in
+    // the workbook breaks on the day before the first count is submitted.
+    Raw =
+        if List.IsEmpty(AllRows) then
+            #table(Expected, {})
+        else
+            Table.ExpandRecordColumn(
+                Table.FromList(AllRows, Splitter.SplitByNothing(), {&quot;rec&quot;}, null, ExtraValues.Error),
+                &quot;rec&quot;, Table.ColumnNames(
+                    Table.FromRecords({List.First(AllRows)}))),
+
+    // Fill in whatever the view did not return, then pin the column order.
+    Missing  = List.Difference(Expected, Table.ColumnNames(Raw)),
+    Filled   = List.Accumulate(Missing, Raw,
+                   (t, c) =&gt; Table.AddColumn(t, c, each null)),
+    Shaped   = Table.SelectColumns(Filled, Expected),
+
+    // plu and product_id MUST stay text. Several PLUs carry a leading zero and
+    // Excel will eat it the moment the column is numeric — the same leading-zero
+    // problem that is why PLU is never a join key anywhere in this system.
+    //
+    // Culture is pinned so count_date parses the same on any machine. Without
+    // it, an Excel set to a dd/MM locale can reject the ISO dates the API
+    // returns, and the whole query errors rather than just that column.
+    TypeMap = {
+        {&quot;branch_id&quot;,       type text},
+        {&quot;count_date&quot;,      type date},
+        {&quot;shift&quot;,           type text},
+        {&quot;staff_name&quot;,      type text},
+        {&quot;product_id&quot;,      type text},
+        {&quot;plu&quot;,             type text},
+        {&quot;short_name&quot;,      type text},
+        {&quot;pos_description&quot;, type text},
+        {&quot;opening_packs&quot;,   Int64.Type},
+        {&quot;add_in&quot;,          Int64.Type},
+        {&quot;closing_packs&quot;,   Int64.Type},
+        {&quot;sold_physical&quot;,   Int64.Type},
+        {&quot;sold_pos&quot;,        Int64.Type},
+        {&quot;variance_packs&quot;,  Int64.Type},
+        {&quot;opening_date&quot;,    type date},
+        {&quot;unit_price_used&quot;, type number},
+        {&quot;variance_rm&quot;,     type number}
+    },
+    Typed = Table.TransformColumnTypes(Shaped, TypeMap, &quot;en-US&quot;),
+
+    // -----------------------------------------------------------------------
+    // Everything below is what the workbook&#x27;s formulas need and the view does
+    // not provide. It is computed HERE, once, rather than in 20,000 rows of
+    // spreadsheet formulas.
+    //
+    // abs_variance is the sort key, and an UNKNOWN variance gets -1 so it sorts
+    // below every known zero. That distinction is the one thing in this file
+    // that must not be got wrong: a blank variance means &quot;not checked&quot;, not
+    // &quot;agreed&quot;, and it must never be ranked or totalled as if it were zero.
+    // -----------------------------------------------------------------------
+    AddAbs = Table.AddColumn(Typed, &quot;abs_variance&quot;,
+        each if [variance_packs] = null then -1
+             else Number.Abs([variance_packs]), type number),
+
+    Sorted = Table.Sort(AddAbs, {
+        {&quot;count_date&quot;,   Order.Ascending},
+        {&quot;abs_variance&quot;, Order.Descending},
+        {&quot;short_name&quot;,   Order.Ascending}
+    }),
+
+    // rank = position within its own day, worst variance first.
+    Grouped = Table.Group(Sorted, {&quot;count_date&quot;}, {
+        {&quot;rows&quot;, each Table.AddIndexColumn(_, &quot;rank&quot;, 1, 1, Int64.Type)}
+    }),
+    Ranked = Table.Combine(Grouped[rows]),
+
+    // day_no = 1 is the most recent counted day; prod_no indexes the product
+    // list alphabetically. Both let the sheet find a row with a plain MATCH
+    // instead of an array formula.
+    DayList  = List.Sort(List.Distinct(Ranked[count_date]), Order.Descending),
+    ProdList = List.Sort(List.Distinct(Ranked[short_name]), Order.Ascending),
+    WithDay  = Table.AddColumn(Ranked, &quot;day_no&quot;,
+        each List.PositionOf(DayList, [count_date]) + 1, Int64.Type),
+    WithProd = Table.AddColumn(WithDay, &quot;prod_no&quot;,
+        each List.PositionOf(ProdList, [short_name]) + 1, Int64.Type),
+
+    // A numeric lookup key: yyyymmdd * 1000 + rank.
+    //
+    // Built from date PARTS on purpose. A text key would need TEXT(d,&quot;yyyy-mm-dd&quot;)
+    // on the Excel side, whose tokens are localised — the sheet silently stops
+    // matching on an Excel that speaks anything but English. A serial would rely
+    // on M and Excel agreeing about day zero. Parts rely on nothing.
+    WithKey = Table.AddColumn(WithProd, &quot;row_key&quot;,
+        each (Date.Year([count_date]) * 10000
+              + Date.Month([count_date]) * 100
+              + Date.Day([count_date])) * 1000 + [rank], Int64.Type)
+in
+    WithKey</pre>
+    </div>
     <div class="call">
       <div class="call-k">It has to land on Data at A1</div>
       <p>Every formula in the workbook finds its values by column position, so the query&rsquo;s
