@@ -65,9 +65,25 @@ Hosted on GitHub Pages: https://ashrosa7626.github.io/petron-task/
 ## Briefing Storage Architecture
 - Every save writes to localStorage first (`pb_b_{timestamp}`), then Supabase
 - If photos make JSON too large for localStorage, saves without photos and marks `_photosStripped: true`
-- dbListAll skips _photosStripped entries from local merge → they are fetched from Supabase (which has full photos)
-- Supabase version overwrites localStorage when fetched, restoring photos
-- localStorage briefings pruned to 2 weeks via pruneOldLocal() called at init
+- dbListAll **counts** a _photosStripped entry as present. It used to skip them, which
+  made every stripped row a cache miss and re-fetched the entire history each load
+- `hydrate(ts)` pulls the full record at the three points photos are actually wanted —
+  single PDF, Week/Month PDF, and the "load them" link on an expanded card. Deliberate
+  clicks, never a render
+- **Three numbers govern the cache, and two of them must stay equal:**
+  `LOCAL_KEEP_MS` (2 weeks) is how long a row keeps its **photos** — older rows are kept
+  **stripped**, ~6 KB against up to 7 MB, carrying `_photoCount` so a card says "3 photos"
+  rather than lying with "0". `LOCAL_MAX_ROWS` (400) bounds the cache by count, because
+  age alone cannot bound a store gaining three briefings a day. **`DASH_LIMIT` must equal
+  `LOCAL_MAX_ROWS`** — fetching more than is cached means the surplus, always the oldest
+  and heaviest rows, is re-downloaded every load and never kept
+- **Each of the three bugs here was caused by the fix before it** (14 Sep 2026):
+  (1) `pruneOldLocal()` deleted old rows and `dbListAll` re-fetched and re-wrote them
+  **with photos** on the same load — 10,240 KB of a 10 MB cap, 9.9 MB of it five April
+  briefings, which is why `setItem` threw `QuotaExceededError` across every other feature;
+  (2) dropping old rows instead meant all 492 were re-fetched every load, 8 to a batch;
+  (3) caching stripped rows left `DASH_LIMIT` unbounded, so the 92 rows past the cap were
+  re-downloaded forever. Change one of these numbers and check the other two
 - Dashboard renders from localStorage instantly (paintDashboard), then Supabase syncs in background
 - setDbFilter() repaints from allBriefingsCache — no re-fetch
 - Issue Resolved/Not Resolved buttons use data-* attributes + btnSetResolved() handler (avoids inline boolean/large-int onclick bugs)
@@ -98,10 +114,13 @@ Hosted on GitHub Pages: https://ashrosa7626.github.io/petron-task/
   far has run with no local safety net** — reload the tab or let Chrome evict it
   mid-count and every number typed is gone, because lines are not written to
   `stock_count_line` until Submit. The count screen now says so in the metabar
-  instead of only `console.warn`-ing. **The real fix is `pruneOldLocal()`**, which
-  is a briefing.html bug and is not fixed here.
+  instead of only `console.warn`-ing. **Root cause fixed 14 Sep 2026** in
+  briefing.html — see the cache rules above. 10,228 KB was reclaimed on the device
+  and a draft now fits.
 - shift_staff RLS blocks anon key — store staff in shift_briefings under stafflist:all instead
-- Photos in briefing history missing? Check _photosStripped flag — dbListAll will re-fetch from Supabase
+- Photos in briefing history missing? That is now normal for anything over 2 weeks old —
+  they live in Supabase and `hydrate()` fetches them on demand. `_photoCount` tells you
+  how many there should be
 - Inline boolean/large-int onclick args are unreliable — use data-* attributes + a named handler
 - Supabase batch select may silently return empty on some RLS configs — dbListAll uses keys-first approach
 
