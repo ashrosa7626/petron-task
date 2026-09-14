@@ -108,11 +108,39 @@ function loadDraft() {
 }
 // Every keystroke is written locally. A count takes ten minutes inside a shop
 // with thick walls; one dropped connection must not lose it.
+//
+// Except when it cannot be written. localStorage on the shop device is at its
+// 10MB cap — briefing photos, which pruneOldLocal() is not clearing — and a
+// draft is only 2.6KB, so it is not the count that is too big. This used to
+// console.warn and carry on, which meant the safety net could be gone for a
+// whole ten minute count with nothing on screen to say so: reload the tab, or
+// let the phone sleep and Chrome evict it, and every number typed is lost.
+// There is no server-side fallback mid-count either — lines are not written
+// until Submit. So a failure is now SAID OUT LOUD, once, in the metabar.
+let draftBroken = false;
 function saveDraft() {
   if (!session) return;
   try {
     localStorage.setItem(draftKey(), JSON.stringify({ lines, updated: new Date().toISOString() }));
-  } catch (e) { console.warn('local draft save failed', e); }
+    if (draftBroken) { draftBroken = false; paintStorageChip(); }
+  } catch (e) {
+    console.warn('local draft save failed', e);
+    if (!draftBroken) { draftBroken = true; paintStorageChip(); }
+  }
+}
+
+/* Nothing on this screen can fix a full device, so the chip says what it means
+   for the person counting: finish and submit without reloading. */
+function paintStorageChip() {
+  const bar = el('meta');
+  if (!bar) return;
+  const existing = el('chipStore');
+  if (!draftBroken) { if (existing) existing.remove(); return; }
+  if (existing) return;
+  bar.insertAdjacentHTML('beforeend',
+    '<div class="chip warn" id="chipStore" title="localStorage is full. A count draft is only ' +
+    '2.6KB, so it is the briefing photos using the space, not this count.">' +
+    'not saving on this device &mdash; do not reload before submitting</div>');
 }
 function lineOf(pid) {
   if (!lines[pid]) lines[pid] = { packs: null };
@@ -183,6 +211,7 @@ function paintMeta(version, branches, fellBack, derived, facings) {
   }
   if (fellBack) chips.push(`<div class="chip warn">showing ${esc(branchName)}</div>`);
   el('meta').innerHTML = chips.join('');
+  paintStorageChip();      // paintMeta rewrites the bar; the warning outranks it
   el('brLabel').textContent = session ? (session.branch_name || branchName) : branchName;
   const cs = el('chipStart');
   if (cs) cs.addEventListener('click', () => { location.href = 'start.html'; });

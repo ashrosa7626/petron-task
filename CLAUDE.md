@@ -88,6 +88,18 @@ Hosted on GitHub Pages: https://ashrosa7626.github.io/petron-task/
   a bare `setItem` anywhere raises `QuotaExceededError` — including for a tiny string,
   when the key is new. Never put one on the path to a UI state change; move the UI
   first, or wrap it. This stranded `restock.html` completely on first use.
+- **Measured 14 Sep 2026, not estimated: the origin is at 10,240 KB of a 10 MB cap
+  with ZERO headroom.** 9.9 MB of it is five `pb_b_*` briefing blobs from **April**
+  — one is 7 MB on its own — which `pruneOldLocal()` should have cleared at two
+  weeks and has not. All five are confirmed present in `shift_briefings`, so the
+  local copies are redundant. A 54-product count draft is **2.6 KB**, so nothing
+  about the count is too big; there is simply no room at all.
+  **Consequence: there are no `cig_draft_*` keys on the device, so every count so
+  far has run with no local safety net** — reload the tab or let Chrome evict it
+  mid-count and every number typed is gone, because lines are not written to
+  `stock_count_line` until Submit. The count screen now says so in the metabar
+  instead of only `console.warn`-ing. **The real fix is `pruneOldLocal()`**, which
+  is a briefing.html bug and is not fixed here.
 - shift_staff RLS blocks anon key — store staff in shift_briefings under stafflist:all instead
 - Photos in briefing history missing? Check _photosStripped flag — dbListAll will re-fetch from Supabase
 - Inline boolean/large-int onclick args are unreliable — use data-* attributes + a named handler
