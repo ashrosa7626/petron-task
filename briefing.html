@@ -503,6 +503,13 @@ let allBriefingsCache = {};
 // QuotaExceededError — a 2.6 KB cigarette count draft could not be written.
 const LOCAL_KEEP_MS = 14 * 24 * 60 * 60 * 1000; // photos kept locally this long
 const LOCAL_MAX_ROWS = 400;                    // stripped rows kept beyond that
+/* The dashboard fetches the same number it is willing to cache. These two MUST
+   stay equal. Fetching more than is cached means the surplus — always the
+   oldest rows, which are the ones carrying the big photo payloads — is
+   re-downloaded on every single load and never kept. At roughly three
+   briefings a day, 400 is about four months on the dashboard; everything older
+   is still in Supabase, it is just not listed. */
+const DASH_LIMIT = LOCAL_MAX_ROWS;
 const localCutoff = () => Date.now() - LOCAL_KEEP_MS;
 const keepPhotos = ts => Number(ts) >= localCutoff();
 
@@ -576,7 +583,7 @@ async function init() {
     }
   } catch {}
   renderHome();
-  const allBriefings = await dbListAll('briefing:');
+  const allBriefings = await dbListAll('briefing:', DASH_LIMIT);
   state.carriedIssues = buildCarriedIssues(allBriefings);
   state.allStaff = await getStaffList(allBriefings);
   state.staffList = deriveStaffList();
@@ -1290,7 +1297,7 @@ async function renderDashboard() {
   }
 
   // Fetch from Supabase in background; repaint only if there are new records
-  const allBriefings = await dbListAll('briefing:');
+  const allBriefings = await dbListAll('briefing:', DASH_LIMIT);
   if (allBriefings.length !== local.length) {
     paintDashboard(allBriefings, false);
   } else {
