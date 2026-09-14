@@ -146,6 +146,22 @@ Hosted on GitHub Pages: https://ashrosa7626.github.io/petron-task/
 - Housekeeping uses template IDs (`taskAssignments[tplId]`) — completely separate code path, works correctly
 
 ## Cigarette Stock Count Module
+**`to anon` is a Postgres ROLE, not "anyone using the anon key."** PostgREST takes the
+role from the JWT, and supabase-js sends whatever session is in
+`localStorage.sb-<ref>-auth-token` in preference to the anon key. So the moment any
+other page in this app signs a user in, every cigarette page switches to role
+`authenticated`, matches **no policy**, and PostgREST returns **`200 OK []`** — an
+empty array with no error. The page then says "No active planogram version found"
+and nothing anywhere mentions RLS. It comes and goes as the token expires and
+refreshes. Verified 14 Sep 2026 on the live database, same URL and apikey: anon
+bearer returned the row, session bearer returned `[]`.
+Two halves to the fix: every client under `stock-count/` is pinned with
+`persistSession: false` so a stray session cannot hijack it, and
+`12_authenticated_role.sql` recreates every policy `to anon, authenticated` so a
+signed-in supervisor is not silently shown nothing. **Any new policy in this module
+must name both roles.**
+
+
 Daily physical count of the cigarette gondola (Safari: 6 shelves A–F × 27 positions,
 162 facings, 54 products, **58 blocks**). Spec, workbook and SQL live in
 `cigarette stock/` — `BRIEF.md`, `01_schema.sql` … `10_prices_and_opening_date.sql`,

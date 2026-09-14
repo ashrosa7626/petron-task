@@ -65,7 +65,20 @@ import { createGrid, esc } from './planogram.js';
 
 const SUPABASE_URL = 'https://vwffiuciogthfzekkkkz.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ3ZmZpdWNpb2d0aGZ6ZWtra2t6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4NzcwMTAsImV4cCI6MjA5MTQ1MzAxMH0.OTEyOMn1fmUNV7pR51KMOLsMTNAfytt62uGS_AkQXyw';
-const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+/* Pinned to the anon key, deliberately.
+   supabase-js otherwise picks up whatever session is sitting in
+   localStorage under sb-<ref>-auth-token and sends THAT as the bearer
+   token. Every RLS policy in this module is written `to anon`, so an
+   authenticated request matches no policy at all and PostgREST returns
+   an empty array with NO ERROR — the page then says "No active planogram
+   version found" and there is nothing anywhere to explain why. Verified
+   14 Sep 2026: same URL, anon bearer returns the row, session bearer
+   returns []. It comes and goes as the token expires and refreshes,
+   which is the worst possible way for this to behave.
+   These pages have no sign-in by design, so there is no session to want. */
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+});
 const el = id => document.getElementById(id);
 const setStatus = (msg, isErr) => {
   const s = el('status');
