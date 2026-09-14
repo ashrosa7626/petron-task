@@ -205,7 +205,9 @@ async function dbListAll(prefix, limit = null) {
   const merged = {};
 
   // 1. Load local backups first (instant, always available)
-  //    Skip _photosStripped entries — Supabase has the full version with photos.
+  //    A _photosStripped entry counts: it has everything the dashboard renders,
+  //    and treating it as missing is what made every load re-fetch the lot.
+  //    downloadBriefing() pulls the full record when the photos are wanted.
   if (prefix === 'briefing:') {
     try {
       for (let i = 0; i < localStorage.length; i++) {
@@ -213,7 +215,7 @@ async function dbListAll(prefix, limit = null) {
         if (k && k.startsWith('pb_b_')) {
           try {
             const b = JSON.parse(localStorage.getItem(k));
-            if (b && b.timestamp && !b._photosStripped) merged[b.timestamp] = b;
+            if (b && b.timestamp) merged[b.timestamp] = b;
           } catch {}
         }
       }
@@ -236,14 +238,11 @@ async function dbListAll(prefix, limit = null) {
         results.filter(Boolean).forEach(b => {
           if (b && b.timestamp) {
             merged[b.timestamp] = b;
-            // Overwrite localStorage — the Supabase version has the full photos.
-            // Only for briefings still inside the cache window: an old one is
-            // already in `merged` above and will render from there, so writing it
-            // back buys nothing and is exactly what refilled the 10 MB cap.
-            if (worthCaching(b.timestamp)) {
-              try { localStorage.setItem('pb_b_' + b.timestamp, JSON.stringify(b)); } catch {
-                try { localStorage.setItem('pb_b_' + b.timestamp, JSON.stringify({ ...b, photos: [], _photosStripped: true })); } catch {}
-              }
+            // Cache it, but only keep the photos while they are recent. Writing
+            // every briefing back in full is what filled the 10 MB origin cap.
+            const keep = keepPhotos(b.timestamp) ? b : strip(b);
+            try { localStorage.setItem('pb_b_' + b.timestamp, JSON.stringify(keep)); } catch {
+              try { localStorage.setItem('pb_b_' + b.timestamp, JSON.stringify(strip(b))); } catch {}
             }
           }
         });
@@ -502,19 +501,52 @@ let allBriefingsCache = {};
 // origin cap, 9.9 MB of it five briefings from April, one of them 7 MB on its
 // own. That is what was making every other feature's setItem throw
 // QuotaExceededError — a 2.6 KB cigarette count draft could not be written.
-const LOCAL_KEEP_MS = 14 * 24 * 60 * 60 * 1000; // 2 weeks
+const LOCAL_KEEP_MS = 14 * 24 * 60 * 60 * 1000; // photos kept locally this long
+const LOCAL_MAX_ROWS = 400;                    // stripped rows kept beyond that
 const localCutoff = () => Date.now() - LOCAL_KEEP_MS;
-const worthCaching = ts => Number(ts) >= localCutoff();
+const keepPhotos = ts => Number(ts) >= localCutoff();
+
+/* Old briefings are kept WITHOUT their photos rather than dropped.
+   Dropping them outright was the first attempt and it was wrong: dbListAll
+   treats anything not held locally as missing, so every load re-fetched all
+   492 briefings one by one, 8 to a batch. The list only needs the text, and
+   a stripped row is ~6 KB against 7 MB for one with photos. The photos are
+   fetched from Supabase at the moment they are actually wanted, which is the
+   PDF, and nowhere else. */
+const strip = b => ({ ...b, photos: [], _photosStripped: true,
+                     _photoCount: (b.photos || []).length });
+
+/* Give me the full record, photos and all. A cached old briefing has none, so
+   fetch it — every caller here is a deliberate click, not a render. */
+async function hydrate(ts) {
+  const b = allBriefingsCache[ts];
+  if (!b || !b._photosStripped) return b;
+  try {
+    const full = await dbGet('briefing:' + ts);
+    if (full && full.timestamp) { allBriefingsCache[ts] = full; return full; }
+  } catch { /* print what we have rather than nothing */ }
+  return b;
+}
 
 function pruneOldLocal() {
   try {
+    const rows = [];
     for (let i = localStorage.length - 1; i >= 0; i--) {
       const k = localStorage.key(i);
-      if (k && k.startsWith('pb_b_')) {
-        const ts = parseInt(k.slice(5));
-        if (ts && !worthCaching(ts)) localStorage.removeItem(k);
-      }
+      if (!k || !k.startsWith('pb_b_')) continue;
+      const ts = parseInt(k.slice(5));
+      if (!ts) { localStorage.removeItem(k); continue; }
+      rows.push({ k, ts });
+      if (keepPhotos(ts)) continue;
+      try {
+        const b = JSON.parse(localStorage.getItem(k));
+        if (b && !b._photosStripped) localStorage.setItem(k, JSON.stringify(strip(b)));
+      } catch { localStorage.removeItem(k); }
     }
+    // Bound the cache by count as well as by age — this store is 10 MB total
+    // and briefings arrive about three a day, so age alone does not bound it.
+    rows.sort((a, b) => b.ts - a.ts);
+    for (const r of rows.slice(LOCAL_MAX_ROWS)) localStorage.removeItem(r.k);
   } catch {}
 }
 
@@ -1160,7 +1192,7 @@ function paintDashboard(allBriefings, syncing) {
                 <span class="badge badge-blue">${doneChk}/${totalChk} checklist</span>
               </div>
               <div style="font-weight:700;font-size:0.95rem;color:var(--p-text)">${date}</div>
-              <div style="color:var(--p-text3);font-size:0.8rem">${time} · ${(b.attendance||[]).length} staff · ${(b.photos||[]).length} photos</div>
+              <div style="color:var(--p-text3);font-size:0.8rem">${time} · ${(b.attendance||[]).length} staff · ${(b.photos||[]).length || b._photoCount || 0} photos</div>
             </div>
             <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
               <button onclick="event.stopPropagation();downloadBriefing(${b.timestamp})"
@@ -1210,7 +1242,12 @@ function paintDashboard(allBriefings, syncing) {
               <div class="db-sub-title">Photos (${b.photos.length})</div>
               <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:8px;margin-top:6px">
                 ${b.photos.map(p => `<img src="${p.src}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px">`).join('')}
-              </div>` : ''}
+              </div>` : (b._photoCount ? `
+              <div class="db-sub-title">Photos (${b._photoCount})</div>
+              <div style="color:var(--p-text3);font-size:0.8rem;padding:6px 0">Not kept on this device &mdash;
+                <span style="color:var(--p-orange);cursor:pointer;text-decoration:underline"
+                      onclick="event.stopPropagation();showPhotos(${b.timestamp})">load them</span>
+                , or use Save to get the PDF with photos included.</div>` : '')}
           </div>
         </div>`;
       }).join('');
@@ -1352,15 +1389,23 @@ function openPrintWin(html, docTitle) {
   return true;
 }
 
-function downloadBriefing(ts) {
-  const b = allBriefingsCache[ts];
-  if (!b) { showToast('Briefing data not found', true); return; }
+async function showPhotos(ts) {
+  showToast('Loading photos…');
+  const b = await hydrate(ts);
+  if (!(b && (b.photos || []).length)) { showToast('No photos found', true); return; }
+  paintDashboard(Object.values(allBriefingsCache).sort((x, y) => y.timestamp - x.timestamp), false);
+}
+
+async function downloadBriefing(ts) {
+  if (!allBriefingsCache[ts]) { showToast('Briefing data not found', true); return; }
+  if (allBriefingsCache[ts]._photosStripped) showToast('Fetching photos…');
+  const b = await hydrate(ts);
   const dateStr = new Date(b.timestamp).toLocaleDateString('en-MY', { day:'numeric', month:'short', year:'numeric' });
   const title = `Petron Briefing - ${b.shift} Shift - ${dateStr}`;
   if (openPrintWin(briefingBodyHtml(b), title)) showToast('Opening PDF — use Save as PDF in the print dialog');
 }
 
-function downloadRange(period) {
+async function downloadRange(period) {
   const currentBranch = localStorage.getItem('selectedBranch') || 'Safari';
   const now = new Date();
   let startDate;
@@ -1381,6 +1426,17 @@ function downloadRange(period) {
     .sort((a, b) => a.timestamp - b.timestamp);
 
   if (!inRange.length) { showToast('No briefings found for ' + rangeLabel, true); return; }
+
+  // A month range reaches past the two-week photo window, so pull the full
+  // records before building the pages. Sequential on purpose: these are large.
+  const stripped = inRange.filter(b => b._photosStripped);
+  if (stripped.length) {
+    showToast(`Fetching photos for ${stripped.length} briefing(s)…`);
+    for (let i = 0; i < stripped.length; i++) {
+      const full = await hydrate(stripped[i].timestamp);
+      if (full) inRange[inRange.indexOf(stripped[i])] = full;
+    }
+  }
 
   const header = `<div style="background:#1e3a6e;color:white;padding:18px;border-radius:8px;margin-bottom:20px"><div style="font-size:1.1rem;font-weight:800;margin-bottom:6px">PETRON BRIEFING HISTORY</div><div style="font-size:13px;opacity:0.8">${escHtml(rangeLabel)} &middot; Branch: ${escHtml(currentBranch)} &middot; ${inRange.length} Briefing(s)</div></div>`;
   const pages = inRange.map((b, i) => (i > 0 ? '<div style="page-break-before:always;margin-top:24px"></div>' : '') + briefingBodyHtml(b)).join('');
