@@ -84,6 +84,10 @@ Hosted on GitHub Pages: https://ashrosa7626.github.io/petron-task/
 - Never use terminal for JS with !, ?, special chars — write to .py file instead
 - After header redesigns, always check for dead element references in JS
 - Emojis in JS strings can cause syntax errors — use HTML entities instead
+- **`localStorage.setItem` throws on this device.** It is full of briefing photos, so
+  a bare `setItem` anywhere raises `QuotaExceededError` — including for a tiny string,
+  when the key is new. Never put one on the path to a UI state change; move the UI
+  first, or wrap it. This stranded `restock.html` completely on first use.
 - shift_staff RLS blocks anon key — store staff in shift_briefings under stafflist:all instead
 - Photos in briefing history missing? Check _photosStripped flag — dbListAll will re-fetch from Supabase
 - Inline boolean/large-int onclick args are unreliable — use data-* attributes + a named handler
@@ -372,6 +376,16 @@ Supporting notes:
     litter the table. The `restock_id` that reached the database is kept in
     `localStorage.cig_restock_pending` so a retry finishes it rather than
     duplicating the delivery.
+  - **localStorage is full on the shop device** and every write must survive it. The
+    briefing system keeps base64 photos in the same storage, so `setItem` raises
+    `QuotaExceededError` even for a fifteen-character name. It did, on
+    `cig_restock_staff`, one line above the line that hides the setup sheet — the
+    throw took the overlay with it and the page stranded with no error on screen.
+    Every local write on `restock.html` goes through a `store` helper that cannot
+    throw, and **UI state changes before storage, never after**. `start.html` had
+    the same latent fault and has not bitten only because `cig_last_staff` already
+    exists and is overwritten in place; `cig_count` there is *not* optional, so it
+    is caught and reported as a sentence about free space.
   - **No sign-in**, and no quantities shown anywhere — the count is blind and this
     screen draws the same shelf. The name box is a margin note, same framing as the
     sales import page.
