@@ -238,17 +238,21 @@ async function dbListAll(prefix, limit = null) {
         results.filter(Boolean).forEach(b => {
           if (b && b.timestamp) {
             merged[b.timestamp] = b;
-            // Cache it, but only keep the photos while they are recent. Writing
-            // every briefing back in full is what filled the 10 MB origin cap.
-            const keep = keepPhotos(b.timestamp) ? b : strip(b);
-            try { localStorage.setItem('pb_b_' + b.timestamp, JSON.stringify(keep)); } catch {
-              try { localStorage.setItem('pb_b_' + b.timestamp, JSON.stringify(strip(b))); } catch {}
-            }
+            // A FETCHED row is always cached stripped. It came from Supabase, so
+            // Supabase has it; re-storing the photos buys one avoided fetch on a
+            // rare Save click and costs 1.6 MB of a 10 MB budget. Only the
+            // briefing being written by this device keeps its photos locally,
+            // and that is saveBriefing's job, for offline safety.
+            try { localStorage.setItem('pb_b_' + b.timestamp, JSON.stringify(strip(b))); } catch {}
           }
         });
       }
     }
   } catch {}
+
+  // The write-back above just added rows. Nothing else runs between here and
+  // the next page load, so the budget has to be applied now, not only at init.
+  if (prefix === 'briefing:') pruneOldLocal();
 
   return Object.values(merged).sort((a, b) => b.timestamp - a.timestamp);
 }
@@ -501,7 +505,14 @@ let allBriefingsCache = {};
 // origin cap, 9.9 MB of it five briefings from April, one of them 7 MB on its
 // own. That is what was making every other feature's setItem throw
 // QuotaExceededError — a 2.6 KB cigarette count draft could not be written.
-const LOCAL_KEEP_MS = 14 * 24 * 60 * 60 * 1000; // photos kept locally this long
+/* Measured, not guessed: ONE briefing with a photo is up to 1.6 MB, because the
+   photo is a base64 data URL inside the JSON. Two weeks of them is 41 rows and
+   8.5 MB of a 10 MB cap — the window was never affordable, whatever the count
+   limit said. So photos are cached for a day, not a fortnight, and a byte
+   budget backstops the whole thing: it is the only limit that holds when the
+   thing being counted varies by three orders of magnitude. */
+const LOCAL_KEEP_MS = 24 * 60 * 60 * 1000;     // photos kept locally this long
+const LOCAL_MAX_BYTES = 4 * 1024 * 1024;       // hard budget, newest kept first
 const LOCAL_MAX_ROWS = 400;                    // stripped rows kept beyond that
 /* The dashboard fetches the same number it is willing to cache. These two MUST
    stay equal. Fetching more than is cached means the surplus — always the
@@ -543,17 +554,22 @@ function pruneOldLocal() {
       if (!k || !k.startsWith('pb_b_')) continue;
       const ts = parseInt(k.slice(5));
       if (!ts) { localStorage.removeItem(k); continue; }
-      rows.push({ k, ts });
-      if (keepPhotos(ts)) continue;
-      try {
-        const b = JSON.parse(localStorage.getItem(k));
-        if (b && !b._photosStripped) localStorage.setItem(k, JSON.stringify(strip(b)));
-      } catch { localStorage.removeItem(k); }
+      if (!keepPhotos(ts)) {
+        try {
+          const b = JSON.parse(localStorage.getItem(k));
+          if (b && !b._photosStripped) localStorage.setItem(k, JSON.stringify(strip(b)));
+        } catch { localStorage.removeItem(k); continue; }
+      }
+      rows.push({ k, ts, bytes: (k.length + (localStorage.getItem(k) || '').length) * 2 });
     }
-    // Bound the cache by count as well as by age — this store is 10 MB total
-    // and briefings arrive about three a day, so age alone does not bound it.
+    // Newest first, then spend the budget until it runs out. Age and count are
+    // both proxies; bytes are the thing that actually runs out.
     rows.sort((a, b) => b.ts - a.ts);
-    for (const r of rows.slice(LOCAL_MAX_ROWS)) localStorage.removeItem(r.k);
+    let spent = 0;
+    rows.forEach((r, i) => {
+      spent += r.bytes;
+      if (i >= LOCAL_MAX_ROWS || spent > LOCAL_MAX_BYTES) localStorage.removeItem(r.k);
+    });
   } catch {}
 }
 
