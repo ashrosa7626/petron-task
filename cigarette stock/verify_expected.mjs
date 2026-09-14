@@ -1,15 +1,8 @@
-// Run the page's own block derivation against the layout the spreadsheet
-// describes — i.e. the state of the database after 04_sync_to_spreadsheet.sql.
-// Proves the page renders the corrected planogram without a code change.
+// Run the shipped block derivation against the layout the spreadsheet describes
+// — i.e. the state of the database after 04_sync_to_spreadsheet.sql. Proves the
+// pages render the corrected planogram without a code change.
 import { readFileSync } from 'node:fs';
-
-const html = readFileSync(new URL('../stock-count/index.html', import.meta.url), 'utf8');
-const start = html.indexOf('function deriveBlocks');
-const end = html.indexOf('function brandColour');
-if (start < 0 || end < 0) throw new Error('could not locate the derivation functions');
-const { deriveBlocks } = await import(
-  'data:text/javascript,' + encodeURIComponent(html.slice(start, end) + '\nexport { deriveBlocks };')
-);
+import { deriveBlocks } from '../stock-count/planogram.js';
 
 const data = JSON.parse(readFileSync(new URL('./expected_facings.json', import.meta.url), 'utf8'));
 const products = new Map(data.products.map(p => [p.product_id, p]));

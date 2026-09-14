@@ -55,19 +55,26 @@ PLAN = {
 }
 PRICE = 12.70
 
+# One delivery, on the middle day. Without a non-zero add_in anywhere, the Added
+# column could be wired to the wrong Data column and every check would still
+# pass — a column of zeros agrees with anything.
+ADDED = {('One Bad Night', '2026-09-10'): 6}
+
 
 def synthetic():
     rows = []
     for di, d in enumerate(DATES):
         for pi, (name, plan) in enumerate(sorted(PLAN.items())):
             v = plan[di]
+            add = ADDED.get((name, d), 0)
+            sold = 20 + add - 15
             rows.append({
                 'branch_id': 'SAFARI', 'count_date': d, 'shift': None,
                 'staff_name': 'Tester', 'product_id': f'90000{pi}',
                 'plu': f'11111111{pi}', 'short_name': name,
                 'pos_description': name.upper(),
-                'opening_packs': 20, 'add_in': 0, 'closing_packs': 15,
-                'sold_physical': 5, 'sold_pos': None if v is None else 5 - v,
+                'opening_packs': 20, 'add_in': add, 'closing_packs': 15,
+                'sold_physical': sold, 'sold_pos': None if v is None else sold - v,
                 'variance_packs': v,
                 'opening_date': DATES[di - 1] if di else None,
                 'unit_price_used': PRICE,
@@ -133,7 +140,7 @@ check(order[0] == 'Daily', 'Daily is the sheet the file opens on', order)
 check(hidden.get('Data') == 'hidden' and hidden.get('Calc') == 'hidden',
       'Data and Calc are hidden', hidden)
 check('fullCalcOnLoad="1"' in wbx, 'Excel is told to calculate on open')
-check("'Daily'!$A$1:$I$" in wbx, 'Daily has a print area ending at column I')
+check("'Daily'!$A$1:$J$" in wbx, 'Daily has a print area ending at column J')
 check("'Daily'!$9:$9" in wbx, 'and repeats the header row on every printed page')
 check('fitToPage="1"' in daily and 'fitToWidth="1"' in daily,
       'Daily is set to print on a single page')
@@ -169,9 +176,11 @@ check(qdata.count('<row ') == 1, 'query mode leaves Data empty apart from the he
 # openpyxl writes inline strings here, not a shared table, so look in the
 # sheet itself rather than guessing which.
 data_xml = z.read(f'xl/worksheets/sheet{order.index("Data") + 1}.xml').decode()
-check('Added' not in daily, 'no "Added" column is surfaced on Daily')
+check('Added' in daily,
+      'Daily surfaces an "Added" column — restocks put real numbers in add_in, and '
+      'without it Sold (counted) stops adding up on a delivery day')
 check('add_in' in data_xml,
-      'but add_in is still carried on the hidden Data sheet, as the raw query')
+      'and add_in is carried on the hidden Data sheet, as the raw query returns it')
 check('branch_id' not in daily and 'pos_description' not in daily,
       'branch_id and pos_description are gone from the report')
 
@@ -210,8 +219,10 @@ if '--excel' in sys.argv:
   set out to out & "pos=" & (value of range "H6" of d as text) & "|"
   set out to out & "msg=" & (value of range "A7" of d as text) & "|"
   repeat with i from 10 to 14
-    set out to out & "r" & (i as text) & "=" & (value of (range ("A" & i)) of d as text) & "/" & (value of (range ("F" & i)) of d as text) & "/" & (value of (range ("G" & i)) of d as text) & "|"
+    set out to out & "r" & (i as text) & "=" & (value of (range ("A" & i)) of d as text) & "/" & (value of (range ("G" & i)) of d as text) & "/" & (value of (range ("H" & i)) of d as text) & "|"
   end repeat
+  set out to out & "added11=" & (value of range "C11" of d as text) & "/" & (value of range "E11" of d as text) & "|"
+  set out to out & "added12=" & (value of range "C12" of d as text) & "/" & (value of range "E12" of d as text) & "|"
   set out to out & "T5=" & (value of range "A5" of t as text) & "/" & (value of range "P5" of t as text) & "/" & (value of range "Q5" of t as text) & "|"
   set out to out & "T6=" & (value of range "A6" of t as text) & "/" & (value of range "P6" of t as text) & "|"
   set out to out & "T9=" & (value of range "A9" of t as text) & "/" & (value of range "P9" of t as text) & "|"
@@ -237,6 +248,15 @@ if '--excel' in sys.argv:
     check(got.get('r14', '') == 'Never Checked/—/—',
           'row 14 is the unchecked product, shown as dashes and NOT as zeros',
           got.get('r14'))
+
+    # The whole point of the column: on the day 6 packs were put out, the shelf
+    # lost 11 rather than 5, and the arithmetic on screen has to say so.
+    check(got.get('added11') == '6.0/11.0',
+          'the restocked row shows Added 6 and Sold (counted) 20+6-15 = 11',
+          got.get('added11'))
+    check(got.get('added12') == '0.0/5.0',
+          'a row with no delivery shows Added 0 and Sold (counted) 5',
+          got.get('added12'))
 
     check(got.get('T5', '').startswith('Steady Leak/3'),
           'Trends puts the 3-night leak first, with 3 days off', got.get('T5'))

@@ -473,8 +473,11 @@
         </thead>
         <tbody>
           <tr><td class="k">Opening</td><td>What the previous submitted count left on the shelf</td></tr>
+          <tr><td class="k">Added</td><td>Packs put onto the shelf since that opening count, from the
+            restock records. Several restocks in the same stretch are added together</td></tr>
           <tr><td class="k">Closing</td><td>What was counted on the trading day named at the top</td></tr>
-          <tr><td class="k">Sold (counted)</td><td>Opening &minus; Closing. What the shelf says went out</td></tr>
+          <tr><td class="k">Sold (counted)</td><td>Opening &plus; Added &minus; Closing. What the shelf
+            says went out</td></tr>
           <tr><td class="k">Sold (POS)</td><td>What the till says it sold, from the imported sales report</td></tr>
           <tr><td class="k">Variance</td><td><code>Sold (counted) &minus; Sold (POS)</code>, straight from
             the database view &mdash; never recalculated here, so it cannot drift from what the system believes</td></tr>
@@ -805,8 +808,8 @@ in
       </div>
       <div class="lg neg">
         <div class="lg-v">&minus;40</div>
-        <div class="lg-t"><b>The POS sold more than the shelf lost.</b> Nearly always a delivery that
-          was not recorded as <code>add_in</code>.</div>
+        <div class="lg-t"><b>The POS sold more than the shelf lost.</b> Nearly always a delivery
+          that nobody recorded. Check the <b>Added</b> column first.</div>
       </div>
       <div class="lg nil">
         <div class="lg-v">&mdash;</div>
@@ -818,10 +821,12 @@ in
 
   <section>
     <h2>Two things that will skew it</h2>
-    <p><b>Deliveries are not recorded.</b> The count screen collects one number per product and no
-      longer captures stock added during the day, so <code>add_in</code> is always zero. On any day
-      stock went onto the shelf, Sold (counted) understates what was sold and the day reads as
-      negative variance.</p>
+    <p><b>A delivery nobody recorded.</b> The count screen collects one number per product and does
+      not capture stock put out during the day. That is what the
+      <a href="https://ashrosa7626.github.io/petron-task/stock-count/restock.html">Restock screen</a>
+      is for, and what the <b>Added</b> column shows. Packs that reach the shelf without a restock
+      record make Sold (counted) understate what was sold, and the day reads as negative variance
+      &mdash; as far as the shelf is concerned those packs appeared from nowhere.</p>
     <p><b>Counts must be consecutive.</b> Opening is the previous <i>submitted</i> count&rsquo;s
       closing, whatever date that was &mdash; skip a day and two days of sales fold into one, which
       reads as a large variance the day after the gap. That is what <b>Opening from</b> in the summary

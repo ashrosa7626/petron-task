@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Restock the Shelf – Petron Tasks</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link rel="stylesheet" href="planogram.css">
+  <style>
+    /* A restock is an addition, not a count. Green says "counted" on the other
+       screen; here a block with a number on it is amber — the colour this
+       system already uses for "something was added". */
+    .blk.done{background:rgba(245,158,11,0.13);border-color:rgba(245,158,11,0.5)}
+    .blk.done .pk{border-color:rgba(245,158,11,0.5);color:var(--p-amber)}
+    .prog-fill{background:linear-gradient(90deg,var(--p-amber),var(--p-orange))}
+    .prog-n b{color:var(--p-amber)}
+
+    .fld{margin-bottom:14px}
+    .lbl{display:block;font-size:0.78rem;font-weight:700;color:var(--p-amber);
+         text-transform:uppercase;letter-spacing:0.7px;margin-bottom:6px}
+    .inp{width:100%;background:var(--p-btn-sec);border:1px solid var(--p-border);border-radius:8px;
+         color:var(--p-text);padding:11px 13px;font-size:1rem;font-family:var(--font);outline:none}
+    .inp:focus{border-color:var(--p-amber)}
+    .inp[type=date]{font-family:var(--mono)}
+    .hint{font-size:0.79rem;color:var(--p-text3);margin-top:6px;line-height:1.5}
+    .hint.warn{color:var(--p-amber)}
+    .sheet-bd .note{border-radius:8px;padding:11px 13px;font-size:0.84rem;line-height:1.55;margin-bottom:12px}
+    .note.warn{background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);color:var(--p-amber)}
+    .note.err{background:rgba(255,77,79,0.08);border:1px solid rgba(255,77,79,0.3);color:var(--p-red)}
+    .sumrow{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--p-border)}
+    .sumrow:last-child{border-bottom:none}
+    .sumnm{flex:1;font-size:0.9rem;font-weight:600}
+    .sumpos{font-family:var(--mono);font-size:0.74rem;color:var(--p-text3)}
+    .sumn{font-family:var(--mono);font-weight:700;color:var(--p-amber);min-width:42px;text-align:right}
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="start.html">&larr; Back</a>
+  <div class="topbar-title"><span class="br" id="brLabel">Safari</span> <span id="pgLabel">Restock</span></div>
+  <div class="zoomctl">
+    <button class="zbtn" id="zOut" title="Zoom out">&minus;</button>
+    <button class="zbtn" id="zIn" title="Zoom in">+</button>
+    <button class="zbtn wide" id="zOv" title="Overview">Overview</button>
+  </div>
+</div>
+
+<div class="metabar" id="meta"></div>
+<div id="status" class="status">Loading planogram&hellip;</div>
+
+<div class="scroller" id="scroller" hidden>
+  <div class="grid" id="grid"></div>
+</div>
+
+<div class="footer" id="footer" hidden>
+  <div class="prog">
+    <div class="prog-n" id="progN">nothing added yet</div>
+    <div class="prog-bar"><div class="prog-fill" id="progFill"></div></div>
+  </div>
+  <button class="btn sec" id="btnDetails">Details</button>
+  <button class="btn pri" id="btnSubmit" disabled>Submit</button>
+</div>
+
+<!-- Step 1. Who, which trading day, and what this delivery was. -->
+<div class="ovl" id="setupOvl" hidden>
+  <div class="sheet">
+    <div class="sheet-hd">Restock the shelf</div>
+    <div class="sheet-sub">Packs going <b>onto</b> the gondola. This is not a count &mdash;
+      enter only what you added, and leave everything else blank.</div>
+    <div class="sheet-bd">
+      <div id="setupNotes"></div>
+      <div class="fld">
+        <label class="lbl" for="fStaff">Who is restocking</label>
+        <input class="inp" id="fStaff" type="text" autocomplete="off" placeholder="Your name">
+        <div class="hint">A margin note saying who was at the keyboard. It is not a sign-in.</div>
+      </div>
+      <div class="fld">
+        <label class="lbl" for="fDate">Trading day</label>
+        <input class="inp" id="fDate" type="date">
+        <div class="hint" id="dateHint"></div>
+      </div>
+      <div class="fld">
+        <label class="lbl" for="fNote">Note <span style="opacity:0.6">&mdash; optional</span></label>
+        <input class="inp" id="fNote" type="text" autocomplete="off"
+               placeholder="Monday delivery, from the store room&hellip;">
+      </div>
+    </div>
+    <div class="sheet-ft">
+      <button class="btn sec" id="setupCancel" style="flex:1">Cancel</button>
+      <button class="btn pri" id="setupGo" style="flex:1" disabled>Loading&hellip;</button>
+    </div>
+  </div>
+</div>
+
+<!-- Step 3. Everything entered, read back before it is written. -->
+<div class="ovl" id="confirmOvl" hidden>
+  <div class="sheet">
+    <div class="sheet-hd" id="confirmHd">Confirm the restock</div>
+    <div class="sheet-sub" id="confirmSub"></div>
+    <div class="sheet-bd" id="confirmBd"></div>
+    <div class="sheet-ft">
+      <button class="btn sec" id="confirmBack" style="flex:1">Back</button>
+      <button class="btn pri" id="confirmGo" style="flex:1">Submit restock</button>
+    </div>
+  </div>
+</div>
+
+<div class="ovl" id="doneOvl" hidden>
+  <div class="sheet">
+    <div class="sheet-hd">Restock recorded</div>
+    <div class="sheet-sub" id="doneSub"></div>
+    <div class="sheet-ft">
+      <button class="btn sec" id="doneAgain" style="flex:1">Another restock</button>
+      <button class="btn pri" id="doneClose" style="flex:1">Done</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { createGrid, esc } from './planogram.js';
+
+const SUPABASE_URL = 'https://vwffiuciogthfzekkkkz.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ3ZmZpdWNpb2d0aGZ6ZWtra2t6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4NzcwMTAsImV4cCI6MjA5MTQ1MzAxMH0.OTEyOMn1fmUNV7pR51KMOLsMTNAfytt62uGS_AkQXyw';
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const el = id => document.getElementById(id);
+const setStatus = (msg, isErr) => {
+  const s = el('status');
+  s.hidden = false; s.textContent = msg;
+  s.className = 'status' + (isErr ? ' err' : '');
+};
+
+/* The trading day the packs went onto the shelf — NOT the clock date. Same 7am
+   MYT rollover as the count, so a delivery entered at 1am belongs to the day
+   that is closing rather than the one that just began. A default only: the
+   field is what gets written. */
+function tradingDay() {
+  const myt = new Date(Date.now() + 8 * 60 * 60 * 1000);
+  if (myt.getUTCHours() < 7) myt.setUTCDate(myt.getUTCDate() - 1);
+  return myt.toISOString().slice(0, 10);
+}
+const ddmmyyyy = iso => { const [y, m, d] = iso.split('-'); return `${d}/${m}/${y}`; };
+
+/* ============================ state ============================ */
+/* adds: product_id -> packs (a positive integer). A product that was not
+   restocked has NO entry — blank is not zero here, which is the whole
+   difference between this screen and the count. */
+let adds = {};
+let grid = null;
+let ctx = { branchId: null, branchName: '', versionId: null, lastCount: null, fellBack: false };
+let entry = { staff: '', date: '', note: '' };
+
+const DRAFT = 'cig_restock_draft';
+const PENDING = 'cig_restock_pending';   // a restock_id that reached the database
+
+function saveDraft() {
+  try {
+    localStorage.setItem(DRAFT, JSON.stringify({ adds, entry, updated: new Date().toISOString() }));
+  } catch (e) { console.warn('local draft save failed', e); }
+}
+function loadDraft() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(DRAFT) || 'null');
+    if (raw && raw.adds) { adds = raw.adds; entry = raw.entry || entry; }
+  } catch (e) { /* a corrupt draft must not block a delivery being recorded */ }
+}
+const clearDraft = () => { try { localStorage.removeItem(DRAFT); } catch (e) {} };
+
+const totals = () => {
+  const ids = Object.keys(adds).filter(pid => adds[pid] > 0);
+  return { products: ids.length, packs: ids.reduce((n, pid) => n + adds[pid], 0), ids };
+};
+
+/* ========================== step 1: setup ========================== */
+function note(kind, html) {
+  el('setupNotes').insertAdjacentHTML('beforeend', `<div class="note ${kind}">${html}</div>`);
+}
+
+function updateDateHint() {
+  const iso = el('fDate').value;
+  const h = el('dateHint');
+  if (!iso) { h.textContent = ''; h.className = 'hint'; return; }
+  const today = tradingDay();
+  const last = ctx.lastCount;
+  // A restock dated into a period that has already been counted and submitted
+  // is legitimate — it is how you correct a day whose delivery was never
+  // recorded — but it restates that day's variance the next time the workbook
+  // refreshes. Say so rather than let it be a surprise.
+  if (last && iso <= last) {
+    h.className = 'hint warn';
+    h.innerHTML = `The count for <b>${ddmmyyyy(last)}</b> is already submitted. ` +
+      `Adding packs to this day will change that day&rsquo;s variance the next time ` +
+      `the reconciliation is read. Correct if the delivery really was that day.`;
+    return;
+  }
+  h.className = 'hint';
+  h.innerHTML = iso === today
+    ? 'Today&rsquo;s trading day. These packs are added to what the next count sells down from.'
+    : (iso < today ? '<b>Back-dated.</b> These packs count towards the day being closed.'
+                   : '<b>In the future.</b> Check this is the day you mean.');
+}
+
+function validateSetup() {
+  const ok = !!el('fStaff').value.trim() && !!el('fDate').value && !!ctx.branchId;
+  el('setupGo').disabled = !ok;
+  return ok;
+}
+['fStaff', 'fDate'].forEach(id => el(id).addEventListener('input', () => {
+  if (id === 'fDate') updateDateHint();
+  validateSetup();
+}));
+
+function openSetup() {
+  el('setupOvl').hidden = false;
+  setTimeout(() => el('fStaff').focus(), 80);
+}
+
+el('setupCancel').addEventListener('click', () => { location.href = 'start.html'; });
+el('setupGo').addEventListener('click', () => {
+  if (!validateSetup()) return;
+  entry = {
+    staff: el('fStaff').value.trim(),
+    date: el('fDate').value,
+    note: el('fNote').value.trim()
+  };
+  localStorage.setItem('cig_restock_staff', entry.staff);
+  saveDraft();
+  el('setupOvl').hidden = true;
+  paintMeta();
+  const t = totals();
+  if (!t.products) grid.goTo(grid.order[0]);
+});
+
+/* ========================== step 2: the grid ========================== */
+function render(facings, products) {
+  grid = createGrid({
+    scroller: el('scroller'),
+    grid: el('grid'),
+    zoomIn: el('zIn'),
+    zoomOut: el('zOut'),
+    overview: el('zOv'),
+    cellHtml: (pid, name) =>
+      `<input class="pk" type="number" inputmode="numeric" min="0" step="1"
+              data-pid="${esc(pid)}" aria-label="Packs added for ${esc(name)}"
+              placeholder="+">`,
+    // Enter moves to the next product that has nothing on it yet. On a restock
+    // that is just a way to walk the shelf; there is no requirement to reach
+    // the end, unlike the count.
+    onEnter: (pid, input) => {
+      const nxt = grid.next(pid, p => !(adds[p] > 0));
+      if (nxt) grid.goTo(nxt); else input.blur();
+    }
+  });
+
+  grid.render(facings, products);
+
+  el('status').hidden = true;
+  el('scroller').hidden = false;
+  el('footer').hidden = false;
+
+  el('grid').addEventListener('input', e => {
+    const t = e.target;
+    if (!t.dataset || !t.dataset.pid || !t.classList.contains('pk')) return;
+    const pid = t.dataset.pid;
+    const v = t.value.trim();
+    const n = v === '' ? 0 : Math.max(0, Math.floor(Number(v) || 0));
+    // Zero and blank are the same thing here: not restocked. Only positive
+    // numbers are ever written, which is what stock_restock_line checks.
+    if (n > 0) adds[pid] = n; else delete adds[pid];
+    saveDraft();
+    syncProduct(pid, t);
+    updateProgress();
+  });
+
+  syncAll();
+  grid.log();
+  window.adds = adds;
+}
+
+/* One number per product, shared across every block that product owns — the
+   same rule as the count. LD Red is one entry, not three. */
+function syncProduct(pid, exclude) {
+  const n = adds[pid] || 0;
+  for (const b of grid.blockEls(pid)) {
+    b.classList.toggle('done', n > 0);
+    const pk = b.querySelector('.pk');
+    if (pk && pk !== exclude) pk.value = n > 0 ? n : '';
+  }
+}
+function syncAll() {
+  for (const pid of grid.order) syncProduct(pid);
+  updateProgress();
+}
+
+function updateProgress() {
+  const t = totals();
+  el('progN').innerHTML = t.products
+    ? `<b>${t.products}</b> product${t.products === 1 ? '' : 's'} &middot; <b>${t.packs}</b> pack${t.packs === 1 ? '' : 's'}`
+    : 'nothing added yet';
+  // The bar has no "complete" to fill towards — most restocks touch a handful
+  // of products — so it shows the share of the gondola touched, nothing more.
+  el('progFill').style.width = (grid.order.length ? (t.products / grid.order.length * 100) : 0) + '%';
+  el('btnSubmit').disabled = t.products === 0;
+  el('btnDetails').disabled = t.products === 0;
+}
+
+el('btnDetails').addEventListener('click', () => showConfirm(true));
+el('btnSubmit').addEventListener('click', () => showConfirm(false));
+
+/* ========================== step 3: confirm ========================== */
+function showConfirm(reviewOnly) {
+  const t = totals();
+  if (!t.products) return;
+  const rows = t.ids.map(pid => {
+    const p = grid.products.get(pid) || {};
+    const where = grid.blocks.filter(b => b.productId === pid).map(b => b.label).join(' | ');
+    return { pid, name: p.short_name || pid, where, n: adds[pid] };
+  }).sort((a, b) => a.where.localeCompare(b.where));
+
+  el('confirmHd').textContent = reviewOnly ? 'What has been entered' : 'Confirm the restock';
+  el('confirmSub').innerHTML =
+    `<b>${t.packs}</b> pack${t.packs === 1 ? '' : 's'} across <b>${t.products}</b> ` +
+    `product${t.products === 1 ? '' : 's'}, added on <b>${ddmmyyyy(entry.date)}</b> by ` +
+    `${esc(entry.staff)}.` +
+    (reviewOnly ? '' : ' Once submitted this is frozen — a mistake is corrected by voiding it ' +
+      'from the results page and entering a fresh one.');
+  el('confirmBd').innerHTML = rows.map(r => `<div class="sumrow">
+      <div class="sumnm">${esc(r.name)}</div>
+      <div class="sumpos">${esc(r.where)}</div>
+      <div class="sumn">+${r.n}</div>
+    </div>`).join('');
+  el('confirmGo').hidden = reviewOnly;
+  el('confirmBack').textContent = reviewOnly ? 'Close' : 'Back';
+  el('confirmOvl').hidden = false;
+}
+el('confirmBack').addEventListener('click', () => { el('confirmOvl').hidden = true; });
+
+el('confirmGo').addEventListener('click', async () => {
+  const btn = el('confirmGo');
+  btn.disabled = true;
+  btn.textContent = 'Submitting…';
+  try {
+    await submitRestock();
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = 'Submit restock';
+    alert('Could not record the restock.\n\n' + e.message);
+    console.error(e);
+  }
+});
+
+/* The header row is created here rather than when the page opens. A restock is
+   a casual, any-time action — somebody will open this screen, look at the shelf
+   and back out — and creating a draft on entry would litter the table with
+   empty rows nobody ever submits.
+
+   The three writes are not a transaction, so a restock_id that reached the
+   database is remembered: a retry after a failed step reuses it instead of
+   creating a second delivery. */
+async function submitRestock() {
+  const t = totals();
+  let restockId = null;
+  try { restockId = JSON.parse(localStorage.getItem(PENDING) || 'null'); } catch (e) {}
+
+  if (restockId) {
+    // Only reuse it if it is still a draft and still ours to finish.
+    const { data } = await db.from('stock_restock')
+      .select('restock_id,status').eq('restock_id', restockId).limit(1);
+    const row = (data || [])[0];
+    if (!row || row.status !== 'draft') restockId = null;
+  }
+
+  if (!restockId) {
+    const ins = await db.from('stock_restock').insert({
+      branch_id: ctx.branchId,
+      restock_date: entry.date,
+      staff_name: entry.staff,
+      note: entry.note || null,
+      status: 'draft'
+    }).select('restock_id').single();
+    if (ins.error) throw describe(ins.error, 'creating the restock');
+    restockId = ins.data.restock_id;
+    localStorage.setItem(PENDING, JSON.stringify(restockId));
+  }
+
+  const lines = t.ids.map(pid => ({ restock_id: restockId, product_id: pid, packs: adds[pid] }));
+  const up = await db.from('stock_restock_line')
+    .upsert(lines, { onConflict: 'restock_id,product_id' });
+  if (up.error) throw describe(up.error, 'writing the restock lines');
+
+  // An upsert cannot remove a row. On a retry after a failed attempt the draft
+  // may still carry a product the user has since cleared, so anything not in
+  // this submission goes. Only ever reaches a draft — the trigger refuses once
+  // the restock is submitted.
+  const del = await db.from('stock_restock_line')
+    .delete().eq('restock_id', restockId)
+    .not('product_id', 'in', `(${t.ids.map(id => '"' + id + '"').join(',')})`);
+  if (del.error) throw describe(del.error, 'clearing products removed since the last attempt');
+
+  const fin = await db.from('stock_restock')
+    .update({ status: 'submitted', submitted_at: new Date().toISOString() })
+    .eq('restock_id', restockId).select('restock_id');
+  if (fin.error) throw describe(fin.error, 'marking the restock submitted');
+  if (!fin.data || !fin.data.length) {
+    throw new Error('The restock was not updated. It may already have been submitted.');
+  }
+
+  localStorage.removeItem(PENDING);
+  clearDraft();
+  const rn = el('resumeNote');
+  if (rn && rn.parentElement) rn.parentElement.remove();
+  el('confirmOvl').hidden = true;
+  el('doneSub').innerHTML =
+    `<b>${t.packs}</b> pack${t.packs === 1 ? '' : 's'} across <b>${t.products}</b> ` +
+    `product${t.products === 1 ? '' : 's'} added on <b>${ddmmyyyy(entry.date)}</b>. ` +
+    `Reconciliation for that trading day now expects them to have sold down.`;
+  el('doneOvl').hidden = false;
+  el('footer').hidden = true;
+}
+
+function describe(error, what) {
+  if (error.code === '42P01') {
+    return new Error(
+      `The restock tables are not in the database yet (while ${what}).\n\n` +
+      `Run 11_restocks.sql in the Supabase SQL editor.`);
+  }
+  if (error.code === '42501') {
+    return new Error(
+      `Blocked by row level security while ${what}.\n\n` +
+      `Check that 11_restocks.sql ran in full — it creates the anon insert and ` +
+      `update policies as well as the tables.`);
+  }
+  return new Error(error.message + (error.details ? ' — ' + error.details : ''));
+}
+
+el('doneClose').addEventListener('click', () => { location.href = 'start.html'; });
+el('doneAgain').addEventListener('click', () => {
+  adds = {};
+  entry.note = '';
+  el('fNote').value = '';
+  el('doneOvl').hidden = true;
+  el('footer').hidden = false;
+  syncAll();
+  saveDraft();
+  openSetup();
+});
+
+/* ============================ chrome ============================ */
+function paintMeta() {
+  const chips = [];
+  if (entry.staff) {
+    chips.push(`<div class="chip">adding on <b>${esc(ddmmyyyy(entry.date))}</b></div>`);
+    chips.push(`<div class="chip">${esc(entry.staff)}</div>`);
+    if (entry.note) chips.push(`<div class="chip">${esc(entry.note)}</div>`);
+  }
+  chips.push(`<div class="chip"><b>${grid ? grid.order.length : 0}</b> products on the shelf</div>`);
+  chips.push(`<div class="chip warn">not a count &mdash; leave untouched products blank</div>`);
+  if (ctx.fellBack) chips.push(`<div class="chip warn">showing ${esc(ctx.branchName)}</div>`);
+  el('meta').innerHTML = chips.join('');
+  el('brLabel').textContent = ctx.branchName || 'Safari';
+}
+
+/* ============================= load ============================= */
+async function load() {
+  loadDraft();
+
+  const selected = localStorage.getItem('selectedBranch') || 'Safari';
+  el('fStaff').value = entry.staff || localStorage.getItem('cig_restock_staff') || '';
+  el('fDate').value = entry.date || tradingDay();
+  el('fNote').value = entry.note || '';
+
+  const [verRes, brRes] = await Promise.all([
+    db.from('planogram_version').select('version_id,branch_id').eq('status', 'active'),
+    db.from('branch').select('branch_id,name')
+  ]);
+  if (verRes.error) return setStatus('Could not read planogram_version: ' + verRes.error.message, true);
+
+  const versions = verRes.data || [], branches = brRes.data || [];
+  if (!versions.length) return setStatus('No active planogram version found.', true);
+
+  // Same branch resolution as start.html: the selected branch if it has an
+  // active planogram, otherwise whatever does, said out loud.
+  const norm = s => String(s || '').toLowerCase().replace(/[^a-z]/g, '');
+  const match = branches.find(b => norm(b.branch_id) === norm(selected) || norm(b.name).includes(norm(selected)));
+  let version = match && versions.find(v => v.branch_id === match.branch_id);
+  ctx.fellBack = !version;
+  const fellBack = ctx.fellBack;
+  if (!version) version = versions[0];
+
+  ctx.branchId = version.branch_id;
+  ctx.versionId = version.version_id;
+  ctx.branchName = (branches.find(b => b.branch_id === version.branch_id) || {}).name || version.branch_id;
+  if (fellBack) note('warn', `No active planogram for <b>${esc(selected)}</b> — restocking <b>${esc(ctx.branchName)}</b>.`);
+
+  const [facRes, prodRes, lastRes] = await Promise.all([
+    db.from('planogram_facing').select('shelf,position,product_id').eq('version_id', version.version_id),
+    db.from('product').select('product_id,short_name,plu,brand'),
+    // The latest submitted count, purely so the date field can warn about
+    // back-dating into a period that has already been reconciled. No quantity
+    // is read: the count is blind and this screen must not leak one.
+    db.from('stock_count').select('count_date')
+      .eq('branch_id', version.branch_id).eq('status', 'submitted')
+      .order('count_date', { ascending: false }).limit(1)
+  ]);
+  if (facRes.error) return setStatus('Could not read planogram_facing: ' + facRes.error.message, true);
+  if (prodRes.error) return setStatus('Could not read product: ' + prodRes.error.message, true);
+
+  ctx.lastCount = ((lastRes.data || [])[0] || {}).count_date || null;
+
+  const facings = facRes.data || [];
+  if (!facings.length) return setStatus('Active version ' + version.version_id + ' has no facings.', true);
+
+  render(facings, new Map((prodRes.data || []).map(p => [p.product_id, p])));
+  paintMeta();
+  updateDateHint();
+  validateSetup();
+  el('setupGo').textContent = 'Start restocking';
+
+  const t = totals();
+  if (t.products) {
+    note('warn', `<span id="resumeNote">An unsubmitted restock is on this device: <b>${t.packs}</b> pack` +
+      `${t.packs === 1 ? '' : 's'} across <b>${t.products}</b> product` +
+      `${t.products === 1 ? '' : 's'}. Carrying on keeps it.</span>`);
+  }
+  openSetup();
+}
+
+load().catch(e => { console.error(e); setStatus('Failed to load: ' + e.message, true); });
+</script>
+</body>
+</html>

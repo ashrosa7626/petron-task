@@ -1,15 +1,8 @@
-// Extract deriveBlocks/rowRuns/makeBlock straight out of the page and run them
-// against the live data, so the test exercises the shipped code, not a copy.
+// Run the shipped block derivation against the live data. planogram.js is the
+// module the count screen and the restock screen both import, so this exercises
+// exactly the code that draws the gondola — not a copy of it.
 import { readFileSync } from 'node:fs';
-
-const html = readFileSync(new URL('../stock-count/index.html', import.meta.url), 'utf8');
-const start = html.indexOf('function deriveBlocks');
-const end = html.indexOf('function brandColour');
-if (start < 0 || end < 0) throw new Error('could not locate the derivation functions');
-const src = html.slice(start, end);
-const { deriveBlocks } = await import(
-  'data:text/javascript,' + encodeURIComponent(src + '\nexport { deriveBlocks };')
-);
+import { deriveBlocks } from '../stock-count/planogram.js';
 
 const KEY = readFileSync(new URL('../app.js', import.meta.url), 'utf8').match(/eyJ[A-Za-z0-9_.-]+/)[0];
 const get = async p => {

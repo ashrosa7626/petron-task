@@ -84,6 +84,26 @@
     .btn{border:none;border-radius:9px;padding:10px 14px;font-family:var(--font);font-weight:700;
          font-size:0.84rem;cursor:pointer;background:var(--p-btn-sec);color:var(--p-text)}
     .btn:hover{background:#2A3A5F}
+    .btn.danger{background:rgba(255,77,79,0.12);border:1px solid rgba(255,77,79,0.4);color:var(--p-red)}
+    .btn.danger:hover{background:rgba(255,77,79,0.2)}
+    .btn:disabled{opacity:0.45;cursor:default}
+
+    .tabs{display:flex;gap:8px;margin-bottom:16px}
+    .tab{background:var(--p-card);border:1px solid var(--p-border);border-radius:99px;
+         padding:7px 16px;font-size:0.85rem;font-weight:700;color:var(--p-text2);cursor:pointer;
+         font-family:var(--font)}
+    .tab.on{border-color:var(--p-orange);color:var(--p-orange);background:rgba(249,115,22,0.1)}
+
+    .tag.void{background:rgba(100,116,139,0.14);color:var(--p-slate);border:1px solid rgba(100,116,139,0.4)}
+    .row.voided .row-t{text-decoration:line-through;color:var(--p-text3)}
+    .voidbox{background:var(--p-card);border:1px solid rgba(255,77,79,0.4);border-radius:var(--radius);
+             padding:14px 16px;margin-bottom:14px}
+    .voidbox p{font-size:0.85rem;line-height:1.55;color:var(--p-text2);margin-bottom:10px}
+    .voidbox input{width:100%;background:var(--p-btn-sec);border:1px solid var(--p-border);
+                   border-radius:8px;color:var(--p-text);padding:10px 12px;font-size:0.92rem;
+                   font-family:var(--font);outline:none;margin-bottom:10px}
+    .voidbox input:focus{border-color:var(--p-red)}
+    .voidbox .bar{margin-bottom:0}
     .bar{display:flex;gap:9px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
     .bar .grow{flex:1}
     [hidden]{display:none !important}
@@ -101,10 +121,41 @@
   <div id="status" class="status">Loading&hellip;</div>
 
   <div id="listView" hidden>
-    <div class="hd">Submitted counts</div>
-    <div class="sub">Every count taken for this branch, newest first.
+    <div class="tabs">
+      <button class="tab on" id="tabCounts">Counts</button>
+      <button class="tab" id="tabRestocks">Restocks</button>
+    </div>
+    <div class="hd" id="listHd">Submitted counts</div>
+    <div class="sub" id="listSub">Every count taken for this branch, newest first.
       A submitted count is frozen and cannot be reopened.</div>
+    <div id="listNotes"></div>
     <div id="listRows"></div>
+  </div>
+
+  <div id="restockView" hidden>
+    <div class="hd" id="rTitle"></div>
+    <div class="sub" id="rSub"></div>
+    <div class="cards" id="rCards"></div>
+    <div id="rNotes"></div>
+    <div id="rVoidBox" hidden class="voidbox">
+      <p>Voiding takes these packs back out of reconciliation for the trading day they were
+        added to, and that day&rsquo;s variance changes the next time it is read. The record
+        stays, marked void with the reason below. Enter the correct figures as a fresh restock.</p>
+      <input id="rVoidReason" type="text" autocomplete="off"
+             placeholder="Why is this wrong? e.g. typed 40, should have been 4">
+      <div class="bar">
+        <div class="grow"></div>
+        <button class="btn" id="rVoidCancel">Cancel</button>
+        <button class="btn danger" id="rVoidGo">Void this restock</button>
+      </div>
+    </div>
+    <div class="bar">
+      <div class="grow"></div>
+      <button class="btn danger" id="btnVoid" hidden>Void this restock</button>
+      <button class="btn" id="btnRCsv">Download CSV</button>
+      <button class="btn" id="btnRPrint">Print</button>
+    </div>
+    <div class="tblwrap"><table id="rTable"></table></div>
   </div>
 
   <div id="detailView" hidden>
@@ -134,7 +185,9 @@ const ddmmyyyy = iso => { const [y, m, d] = String(iso).split('-'); return `${d}
 const stamp = t => t ? new Date(t).toLocaleString('en-GB',
   { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
 
-let ctx = { branchId: null, branchName: '', counts: [], products: new Map(), order: new Map() };
+let ctx = { branchId: null, branchName: '', counts: [], restocks: [], restockErr: null,
+            products: new Map(), order: new Map() };
+let tab = 'counts';
 
 async function init() {
   const selected = localStorage.getItem('selectedBranch') || 'Safari';
@@ -183,20 +236,79 @@ async function init() {
   }
   ctx.counts.forEach(c => { c.lineCount = tally.get(c.count_id) || 0; });
 
+  await loadRestocks();
   renderList();
 
-  // Deep link: history.html?count=4
-  const want = Number(new URLSearchParams(location.search).get('count'));
-  if (want && ctx.counts.some(c => c.count_id === want)) openCount(want);
+  // Deep links: history.html?count=4 or ?restock=7
+  const q = new URLSearchParams(location.search);
+  const wantCount = Number(q.get('count'));
+  const wantRestock = Number(q.get('restock'));
+  if (wantCount && ctx.counts.some(c => c.count_id === wantCount)) openCount(wantCount);
+  else if (wantRestock && ctx.restocks.some(r => r.restock_id === wantRestock)) {
+    tab = 'restocks';
+    openRestock(wantRestock);
+  }
 }
+
+/* Restocks: packs put ONTO the shelf between counts. They are separate records,
+   several a day if need be, and reconciliation adds the submitted ones into
+   add_in for the period they fall in. A void one is excluded, which is what
+   makes voiding a correction rather than a deletion.
+
+   The tables arrive with 11_restocks.sql. Until it is run the rest of this page
+   must still work, so a missing relation is reported in place rather than
+   thrown. */
+async function loadRestocks() {
+  const { data, error } = await db.from('stock_restock')
+    .select('restock_id,restock_date,staff_name,note,status,void_reason,created_at,submitted_at,voided_at')
+    .eq('branch_id', ctx.branchId)
+    .order('restock_date', { ascending: false })
+    .order('created_at', { ascending: false });
+  if (error) {
+    ctx.restockErr = /does not exist|relation/i.test(error.message || '')
+      ? 'The restock tables are not in the database yet — run 11_restocks.sql in the Supabase SQL editor.'
+      : error.message;
+    ctx.restocks = [];
+    return;
+  }
+  ctx.restocks = data || [];
+
+  const ids = ctx.restocks.map(r => r.restock_id);
+  if (!ids.length) return;
+  const { data: ls } = await db.from('stock_restock_line')
+    .select('restock_id,product_id,packs').in('restock_id', ids);
+  const byId = new Map();
+  for (const l of (ls || [])) {
+    if (!byId.has(l.restock_id)) byId.set(l.restock_id, []);
+    byId.get(l.restock_id).push(l);
+  }
+  ctx.restocks.forEach(r => {
+    r.lines = byId.get(r.restock_id) || [];
+    r.packs = r.lines.reduce((n, l) => n + l.packs, 0);
+  });
+}
+
+el('tabCounts').addEventListener('click', () => { tab = 'counts'; renderList(); });
+el('tabRestocks').addEventListener('click', () => { tab = 'restocks'; renderList(); });
 
 function renderList() {
   el('status').hidden = true;
   el('detailView').hidden = true;
+  el('restockView').hidden = true;
   el('btnBack').hidden = true;
   el('lnkImport').hidden = false;
   el('listView').hidden = false;
   history.replaceState(null, '', location.pathname);
+
+  el('tabCounts').classList.toggle('on', tab === 'counts');
+  el('tabRestocks').classList.toggle('on', tab === 'restocks');
+  el('listNotes').innerHTML = '';
+
+  if (tab === 'restocks') return renderRestockList();
+
+  el('listHd').textContent = 'Submitted counts';
+  el('listSub').innerHTML = 'Every count taken for this branch, newest first. ' +
+    'A submitted count is frozen and cannot be reopened.';
 
   if (!ctx.counts.length) {
     el('listRows').innerHTML =
@@ -229,10 +341,165 @@ function renderList() {
   });
 }
 
+function renderRestockList() {
+  el('listHd').textContent = 'Restocks';
+  el('listSub').innerHTML = 'Packs put <b>onto</b> the shelf between counts, newest first. ' +
+    'These feed <b>Add-in</b> on the count they fall before, so what the shelf lost and what ' +
+    'the till sold can still agree on a delivery day.';
+
+  if (ctx.restockErr) {
+    el('listRows').innerHTML = `<div class="status err">${esc(ctx.restockErr)}</div>`;
+    return;
+  }
+  if (!ctx.restocks.length) {
+    el('listRows').innerHTML =
+      `<div class="status">No restocks recorded for ${esc(ctx.branchName)}. ` +
+      `<a href="restock.html" style="color:var(--p-orange)">Record one</a>.</div>`;
+    return;
+  }
+
+  const tags = { submitted: ['sub', 'Submitted'], draft: ['drf', 'Draft'], void: ['void', 'Void'] };
+  el('listRows').innerHTML = ctx.restocks.map(r => {
+    const [cls, label] = tags[r.status] || ['drf', r.status];
+    const n = (r.lines || []).length;
+    return `<div class="row ${r.status === 'void' ? 'voided' : ''}" data-id="${r.restock_id}">
+      <div class="row-main">
+        <div class="row-t">+${r.packs || 0} pack${(r.packs || 0) === 1 ? '' : 's'}${r.note ? ' &middot; ' + esc(r.note) : ''}</div>
+        <div class="row-m">${ddmmyyyy(r.restock_date)} &middot; ${esc(r.staff_name)}</div>
+      </div>
+      <div class="row-r">
+        <span class="tag ${cls}">${label}</span>
+        <div class="row-n">${n} product${n === 1 ? '' : 's'}${r.submitted_at ? ' &middot; ' + stamp(r.submitted_at) : ''}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  el('listRows').querySelectorAll('.row').forEach(el_ => {
+    el_.addEventListener('click', () => openRestock(Number(el_.dataset.id)));
+  });
+}
+
+function openRestock(id) {
+  const r = ctx.restocks.find(x => x.restock_id === id);
+  if (!r) return;
+  el('status').hidden = true;
+  el('listView').hidden = true;
+  el('detailView').hidden = true;
+  el('restockView').hidden = false;
+  el('btnBack').hidden = false;
+  el('lnkImport').hidden = true;
+  el('rVoidBox').hidden = true;
+  history.replaceState(null, '', location.pathname + '?restock=' + id);
+
+  const rows = (r.lines || []).map(l => {
+    const p = ctx.products.get(l.product_id) || {};
+    return {
+      product_id: l.product_id,
+      short_name: p.short_name || l.product_id,
+      plu: p.plu || '',
+      pos: ctx.order.get(l.product_id) || 'zzz',
+      packs: l.packs
+    };
+  }).sort((a, b) => a.pos.localeCompare(b.pos) || a.short_name.localeCompare(b.short_name));
+
+  el('rTitle').textContent = `Restock of ${ddmmyyyy(r.restock_date)}`;
+  el('rSub').innerHTML = `Added by <b>${esc(r.staff_name)}</b> &middot; ${esc(ctx.branchName)}` +
+    (r.submitted_at ? ` &middot; submitted ${esc(stamp(r.submitted_at))}` : ' &middot; draft') +
+    (r.note ? ` &middot; ${esc(r.note)}` : '');
+
+  el('rCards').innerHTML = [
+    ['Products', rows.length, ''],
+    ['Packs added', r.packs || 0, 'a']
+  ].map(([l, v, k]) => `<div class="card"><div class="card-l">${l}</div>
+      <div class="card-v ${k}">${v}</div></div>`).join('');
+
+  const notes = [];
+  if (r.status === 'void') {
+    notes.push(`<div class="note warn"><b>Voided.</b> ${esc(r.void_reason || 'No reason recorded.')}
+      ${r.voided_at ? ' &middot; ' + esc(stamp(r.voided_at)) : ''}<br>
+      These packs are excluded from reconciliation. The record is kept so the correction
+      is visible rather than silent.</div>`);
+  } else if (r.status === 'draft') {
+    notes.push(`<div class="note warn">This restock was never submitted, so it does not reach
+      reconciliation. It is what is left when a submit failed part way.</div>`);
+  } else {
+    notes.push(`<div class="note info">Counted towards <b>Add-in</b> on the first submitted count
+      on or after ${ddmmyyyy(r.restock_date)}. If no count has been taken since, it is waiting
+      for one.</div>`);
+  }
+  el('rNotes').innerHTML = notes.join('');
+
+  el('btnVoid').hidden = r.status !== 'submitted';
+  el('btnVoid').onclick = () => {
+    el('rVoidBox').hidden = false;
+    el('rVoidReason').value = '';
+    el('rVoidReason').focus();
+  };
+  el('rVoidCancel').onclick = () => { el('rVoidBox').hidden = true; };
+  el('rVoidGo').onclick = () => voidRestock(r);
+
+  el('rTable').innerHTML =
+    `<thead><tr><th>At</th><th>Product</th><th>PLU</th>
+      <th style="text-align:right">Packs added</th></tr></thead><tbody>` +
+    rows.map(x => `<tr>
+      <td class="pos">${esc(String(x.pos).replace(/(\d+)$/, m => String(Number(m))))}</td>
+      <td>${esc(x.short_name)}</td>
+      <td class="plu">${esc(x.plu)}</td>
+      <td class="n">+${x.packs}</td>
+    </tr>`).join('') + '</tbody>';
+
+  el('btnRCsv').onclick = () => downloadRestockCsv(r, rows);
+  el('btnRPrint').onclick = () => window.print();
+}
+
+/* Void, never delete. There is no anon delete path on stock_restock, and the
+   database trigger allows exactly submitted -> void and refuses to go back. */
+async function voidRestock(r) {
+  const reason = el('rVoidReason').value.trim();
+  if (!reason) { el('rVoidReason').focus(); return; }
+  const btn = el('rVoidGo');
+  btn.disabled = true;
+  btn.textContent = 'Voiding…';
+  const { data, error } = await db.from('stock_restock')
+    .update({ status: 'void', void_reason: reason, voided_at: new Date().toISOString() })
+    .eq('restock_id', r.restock_id).select('restock_id');
+  btn.disabled = false;
+  btn.textContent = 'Void this restock';
+  if (error) return alert('Could not void the restock.\n\n' + error.message);
+  if (!data || !data.length) {
+    return alert('The restock was not changed. It may already have been voided.');
+  }
+  r.status = 'void';
+  r.void_reason = reason;
+  r.voided_at = new Date().toISOString();
+  openRestock(r.restock_id);
+}
+
+function downloadRestockCsv(r, rows) {
+  const q = v => {
+    if (v === null || v === undefined) return '';
+    const s2 = String(v);
+    return /[",\n]/.test(s2) ? '"' + s2.replace(/"/g, '""') + '"' : s2;
+  };
+  const lines = [['at', 'product_id', 'short_name', 'plu', 'packs_added'].join(',')];
+  for (const x of rows) {
+    lines.push([String(x.pos).replace(/(\d+)$/, m => String(Number(m))),
+      x.product_id, x.short_name, x.plu, x.packs].map(q).join(','));
+  }
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = ('restock-' + r.restock_date + '-' + r.restock_id).replace(/[^\w-]+/g, '_') + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+}
+
 async function openCount(id) {
   const c = ctx.counts.find(x => x.count_id === id);
   if (!c) return;
   el('listView').hidden = true;
+  el('restockView').hidden = true;
   setStatus('Loading count…');
   history.replaceState(null, '', location.pathname + '?count=' + id);
 

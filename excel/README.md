@@ -32,11 +32,15 @@ Daily and Trends are formulas over `Data`, addressed **by whole column**
 
 ### Daily
 
-Columns are `Opening`, `Closing`, `Sold (counted)`, `Sold (POS)`, `Variance`,
+Columns are `Opening`, `Added`, `Closing`, `Sold (counted)`, `Sold (POS)`, `Variance`,
 `Variance RM`, then `Item ID` and `PLU` pushed out to the far right where they stay
-available without being in the way. `branch_id` and `pos_description` are gone. So is
-`Added` — `add_in` is always zero, so a column of zeros would only imply something had
-been checked. It is still on the hidden sheet.
+available without being in the way. `branch_id` and `pos_description` are gone.
+
+`Added` was dropped for a while, because `add_in` was always zero and a column of zeros
+only implies something has been checked. The
+[Restock screen](https://ashrosa7626.github.io/petron-task/stock-count/restock.html)
+puts real numbers in it, so it is back — and it has to be, or `Sold (counted)` stops
+adding up on the day a delivery went out.
 
 Rows are ordered by **absolute** variance descending, so the problems are at the top
 instead of wherever the alphabet put them. Variance is grey at zero and red from one
@@ -120,10 +124,11 @@ RM figure, and the workbook leaves it blank rather than showing a confident zero
 
 ## Two things that will skew it
 
-**Deliveries are not recorded.** The count screen collects one number per
-product and no longer captures stock added during the day, so `add_in` is always
-zero. On any day stock went onto the shelf, `Sold (counted)` understates what
-was sold and the day reads as negative variance.
+**A delivery nobody recorded.** The count screen collects one number per product
+and does not capture stock put out during the day — that is what the Restock
+screen is for, and what `Added` shows. Packs that went onto the shelf without a
+restock record make `Sold (counted)` understate what was sold, and the day reads
+as negative variance. Check `Added` before believing a large negative.
 
 **Counts must be consecutive.** `Opening` is the previous *submitted* count's
 closing, whatever date that was — skip a day and two days of sales fold into

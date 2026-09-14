@@ -127,6 +127,14 @@ Pages, all under `stock-count/`:
   a link to previous quantities sitting next to the inputs defeats that.
 - `import-sales.html` — loads the POS Merchandise Sales Report PDF into
   `pos_sales_daily`. Reached from `start.html` and `history.html`.
+- `restock.html` — packs put **onto** the shelf, at any time of day. Same grid,
+  blank means "not restocked". Reached from `start.html`; results under the
+  **Restocks** tab on `history.html`.
+- `planogram.js` / `planogram.css` — the grid itself: `deriveBlocks`, the block
+  markup, zoom, panning, split-block highlighting, and the geometry those depend
+  on. Imported by both `index.html` and `restock.html` so the derivation cannot
+  drift between them, and imported directly by the `verify_*.mjs` tests. Same
+  reason `sales-parse.js` exists.
 
 Excel reporting lives in `excel/` — see the export section below. The published
 setup guide is at https://claude.ai/code/artifact/f2489e09-bf24-4782-978b-4ed5cef39172
@@ -218,13 +226,12 @@ Supporting notes:
     deliveries
   - `counted_or_absent` is satisfied because `packs` is always present
   - loading a line or local draft carrying `not_on_shelf` reads it back as 0
-- **Known gap from the above:** `sold_physical = opening + add_in − closing`, and
-  `add_in` is now always 0, so on any day stock was added to the shelf the
-  reconciliation **understates what was sold** by exactly the delivery quantity,
-  and shows it as negative variance. Deliveries must reach `stock_count_line.add_in`
-  some other way (a separate loader, or restoring the field) before variance can be
-  trusted on delivery days. Raised twice and confirmed as intended — do not
-  silently re-add the field.
+- **The gap that left, and how:** `sold_physical = opening + add_in − closing`, and
+  `add_in` on the count line is always 0, so every delivery day used to understate
+  what was sold by exactly the delivery quantity and show it as negative variance.
+  Deliveries now arrive through the **Restock module** below, which reconciliation
+  adds on top. Do **not** answer this by re-adding the field to the count screen —
+  that was raised twice and confirmed as intended.
 - **Schema fixes found by building the count screen** (both in `cigarette stock/`):
   `05_fix_submit_policy.sql` — `update_count` declared only `USING (status =
   'draft')`, and Postgres reuses `USING` as `WITH CHECK` when none is given, so a
@@ -330,6 +337,48 @@ Supporting notes:
     the 09/09 and 10/09 scans with every mistake left in. Offline, no PDFs needed.
     `verify_sales_parse.mjs` was deleted — it tested the Qty-column picker, which the
     arithmetic proof replaced.
+- **Restock module** (`stock-count/restock.html`, `11_restocks.sql`, Sep 2026).
+  Packs going **onto** the shelf, recorded whenever they go on, several times a day
+  if need be. It is **not a count**: only the products restocked get a number, and
+  a blank means "not restocked" — explicitly not zero. Submit needs one product
+  with packs ≥ 1, not all 54.
+  - **Its own tables, not `stock_count_line.add_in`.** Four reasons, all fatal to
+    the obvious approach: at 3pm the day's count row does not exist yet; a
+    submitted count is frozen by RLS; `doSubmit()` upserts every line with
+    `add_in: 0` and would wipe it; and several deliveries a day cannot accumulate
+    in one column without a read-modify-write race.
+  - **Restocks attach to the count PERIOD, not the calendar day** —
+    `restock_date > opening_date and <= count_date`. Matching `= count_date` would
+    drop a delivery on any day whose count was skipped, and a skipped count is
+    exactly when one count spans two days of selling. `opening_date` comes from
+    migration 10.
+  - **A back-dated restock restates a past day's variance** the next time the
+    workbook refreshes. That is correct — the day's data was incomplete — and the
+    date field warns when the chosen day is on or before the last submitted count.
+  - **Void, never delete.** There is no anon delete path on `stock_restock`; a
+    wrong entry is voided from the **Restocks** tab with a reason and re-entered.
+    `vw_restock_daily` sums `status = 'submitted'` only, so voiding is what takes
+    the packs back out. A `before update` **trigger** enforces
+    draft→submitted→void and refuses to go back — RLS could not, because multiple
+    permissive UPDATE policies OR their `USING` *and* their `WITH CHECK` together,
+    so a submit policy and a void policy between them would permit
+    submitted→draft. Same family as the `05` bug.
+  - `stock_restock_line` has the module's **only delete policy**, and only while
+    the parent is a draft: the page writes lines then flips the parent, so a failed
+    attempt can leave a product the user has since cleared. A draft reconciles
+    nothing, so clearing it on retry is free.
+  - **The header row is created on submit**, not on entry — unlike `start.html`.
+    Restocking is casual and people back out; creating a draft on entry would
+    litter the table. The `restock_id` that reached the database is kept in
+    `localStorage.cig_restock_pending` so a retry finishes it rather than
+    duplicating the delivery.
+  - **No sign-in**, and no quantities shown anywhere — the count is blind and this
+    screen draws the same shelf. The name box is a margin note, same framing as the
+    sales import page.
+  - `vw_daily_reconciliation` keeps **exactly the same 17 columns in the same
+    order**; only what `add_in` contains changed. `counts_query.m` pins that list
+    and `build_workbook.py` addresses `Data` by position, so the shape is not free
+    to move.
 - **Excel reporting: generated layout, Power Query data** (`excel/`, Sep 2026).
   `build_workbook.py` writes `Cigarette Reconciliation.xlsx` — **Daily** (one trading
   day from a dropdown, summary block, sorted by *absolute* variance desc, prints on one
@@ -360,7 +409,11 @@ Supporting notes:
   - The M computes `abs_variance` (unknown = **-1**, so it sorts below every known zero),
     `rank`, `day_no`, `prod_no`, `row_key`. `prepare()` in the builder mirrors it exactly;
     **if one changes, both change.**
-  - `Added` is dropped everywhere a person looks (`add_in` is always 0); still on Data.
+  - `Added` is back on Daily (column C) now that restocks put real numbers in
+    `add_in`. It was dropped while the column was always zero — a column of zeros
+    implies something was checked — but without it `Sold (counted)` stops adding up
+    on a delivery day. The column shift moved variance to G/H and the print area to
+    `A1:J`; `verify_workbook.py` reads both back out of Excel.
     `branch_id`/`pos_description` dropped; `product_id`/`plu` moved to the far right.
   - **Two build modes, one layout.** `--mode query` is the deliverable; `--mode snapshot`
     bakes the data in and needs no query. Snapshot exists because it uses the **same
@@ -401,10 +454,12 @@ write, so migrations are run by hand in the Supabase SQL editor):
 - `diff_xlsx_vs_db.py` — diffs the workbook against live Supabase, cross-checks the
   grid against the `Positions` column, regenerates `04_sync_to_spreadsheet.sql` and
   writes `expected_facings.json`.
-- `verify_blocks.mjs` / `verify_expected.mjs` — import `deriveBlocks` **straight out
-  of `stock-count/index.html`** so the tests exercise shipped code, then assert
-  facings reconcile, no block overlaps another, every drawn cell matches its facing
-  row, and every split block carries a correct "n of m" marker.
+- `verify_blocks.mjs` / `verify_expected.mjs` — `import { deriveBlocks } from
+  '../stock-count/planogram.js'`, so the tests exercise the shipped module rather
+  than a copy, then assert facings reconcile, no block overlaps another, every
+  drawn cell matches its facing row, and every split block carries a correct
+  "n of m" marker. They used to slice the functions out of `index.html` with
+  `indexOf`; the extraction removed the need.
 
 ## Recent Fixes (Apr–May 2026)
 - **lead.html**: dead `leadBranchLabel` reference caused tasks stuck on "Loading..."
@@ -422,7 +477,9 @@ write, so migrations are run by hand in the Supabase SQL editor):
 Verified against the live database, not from memory. Re-check before trusting — this
 section has been wrong twice by assuming a migration's state rather than probing it.
 
-**Migrations applied:** 01–08 and **10** are in. **`09` is NOT** — probed 14 Sep 2026:
+**Migrations applied:** 01–08 and **10** are in. **`09` is NOT**, and **`11` (restocks)
+has not been run yet** — it was written 14 Sep 2026 and is the one thing standing
+between `restock.html` and working. Probed 14 Sep 2026:
 `pos_sales_daily.imported_by` errors `42703`, while `product.unit_price`,
 `pos_sales_daily.unit_price` and the view's `opening_date` / `unit_price_used` /
 `variance_rm` all exist. So the import page stores no `imported_by` (the name gates the
@@ -475,6 +532,9 @@ counted off the paper); 10/09 gives 27 lines balancing to RM1,376.70. Captured a
 — it is the fixture case for uploading the wrong one.
 
 **Not done:**
+- **`11_restocks.sql` has not been run.** Until it is, `restock.html` fails on submit
+  (`42P01`, which it names) and the Restocks tab on `history.html` says so in place.
+  Nothing else is affected — the view change is in the same file.
 - **No sales report has been imported since 09/09** — 10/09 through 13/09 are all
   counted and all missing their POS side. Loading any one of them completes the
   variance chain, and it is the single next action.

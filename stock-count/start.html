@@ -58,7 +58,8 @@
 
 <div class="content">
   <div class="section-hd">Start a count</div>
-  <div class="section-sub">One count per branch per trading day.</div>
+  <div class="section-sub">One count per branch per trading day. Packs put onto the shelf
+    between counts are recorded separately &mdash; see <b>Restock</b> below.</div>
 
   <div id="notes"></div>
 
@@ -82,6 +83,7 @@
 
     <button class="btn" id="btnGo" disabled>Loading…</button>
     <button class="btn sec" id="btnOpen" hidden>Open the planogram read-only</button>
+    <button class="btn sec" id="btnRestock">Restock &mdash; add packs to the shelf</button>
     <button class="btn sec" id="btnHistory">View past counts</button>
     <button class="btn sec" id="btnImport">Import POS sales</button>
   </div>
@@ -216,6 +218,12 @@ const escapeHtml = s => String(s == null ? '' : s)
   .replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 el('btnOpen').addEventListener('click', () => { location.href = 'index.html?readonly=1'; });
+/* A restock is not a count and needs none of the state above — no title, no
+   trading day chosen here, no draft. It is its own record, taken whenever packs
+   go onto the shelf, and it reaches reconciliation as add_in. It lives on the
+   hub rather than on the count grid for the same reason the results page does:
+   nothing beside the count inputs may hint at a quantity. */
+el('btnRestock').addEventListener('click', () => { location.href = 'restock.html'; });
 el('btnHistory').addEventListener('click', () => { location.href = 'history.html'; });
 el('btnImport').addEventListener('click', () => { location.href = 'import-sales.html'; });
 

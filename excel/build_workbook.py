@@ -343,6 +343,11 @@ def value(ws, cell, formula, fmt=None, size=14, bold=True, color=INK):
 DAILY_HEADERS = [
     ('Product', 30, 'left'),
     ('Opening', 11, 'right'),
+    # Added was dropped while the count screen was the only way in and add_in was
+    # always zero — a column of zeros implies something was checked. Restocks put
+    # real numbers in it, and without the column Sold (counted) stops adding up:
+    # opening minus closing no longer explains it on a delivery day.
+    ('Added', 10, 'right'),
     ('Closing', 11, 'right'),
     ('Sold (counted)', 15, 'right'),
     ('Sold (POS)', 13, 'right'),
@@ -376,7 +381,7 @@ def write_daily(ws):
                 f'&" days loaded, latest "&TEXT(MAX({D["count_date"]}),"dd mmm yyyy"))')
     ws['F1'].font = Font(name='Calibri', size=10, bold=True, color=MUTED)
     ws['F1'].alignment = Alignment(horizontal='right')
-    ws.merge_cells('F1:I1')
+    ws.merge_cells('F1:J1')
 
     label(ws, 'A2', 'TRADING DAY (CLOSING)')
     ws['A3'] = 'Show:'
@@ -421,7 +426,7 @@ def write_daily(ws):
                 f'{pick("O")})')
     ws['A7'].font = Font(name='Calibri', size=10, bold=True, color=WARN_AMBER)
     ws['A7'].alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
-    ws.merge_cells('A7:I7')
+    ws.merge_cells('A7:J7')
     ws['A7'].fill = PatternFill('solid', fgColor=AMBER_FILL)
     ws.row_dimensions[7].height = 32
 
@@ -462,21 +467,22 @@ def write_daily(ws):
 
         cell('A', 'short_name', None, 'left', dash=False)
         cell('B', 'opening_packs', INT_FMT)
-        cell('C', 'closing_packs', INT_FMT, dash=False)
-        cell('D', 'sold_physical', INT_FMT)
-        cell('E', 'sold_pos', INT_FMT)
-        cell('F', 'variance_packs', INT_FMT, bold=True)
-        cell('G', 'variance_rm', RM_FMT)
-        cell('H', 'product_id', None, 'left', dash=False).font = \
+        cell('C', 'add_in', INT_FMT, dash=False)
+        cell('D', 'closing_packs', INT_FMT, dash=False)
+        cell('E', 'sold_physical', INT_FMT)
+        cell('F', 'sold_pos', INT_FMT)
+        cell('G', 'variance_packs', INT_FMT, bold=True)
+        cell('H', 'variance_rm', RM_FMT)
+        cell('I', 'product_id', None, 'left', dash=False).font = \
             Font(name='Consolas', size=9, color=MUTED)
-        cell('I', 'plu', None, 'left', dash=False).font = \
+        cell('J', 'plu', None, 'left', dash=False).font = \
             Font(name='Consolas', size=9, color=MUTED)
 
     ws.column_dimensions['L'].hidden = True
-    variance_rules(ws, f'F{FIRST_ROW}:G{last_row}', f'$F{FIRST_ROW}')
+    variance_rules(ws, f'G{FIRST_ROW}:H{last_row}', f'$G{FIRST_ROW}')
     ws.freeze_panes = f'A{FIRST_ROW}'
 
-    ws.print_area = f'A1:I{last_row}'
+    ws.print_area = f'A1:J{last_row}'
     ws.print_title_rows = f'{HDR_ROW}:{HDR_ROW}'
     ws.page_setup.orientation = 'portrait'
     ws.page_setup.fitToWidth = 1
@@ -612,8 +618,10 @@ NOTES = [
     ('Opening — what the previous submitted count left on the shelf. "Opening from" in '
      'the summary is the day that count was taken. If it is not the day before, a day '
      'was skipped, and two days of sales are folded into one figure.', ''),
+    ('Added — packs put onto the shelf since that opening count, from the restock records. '
+     'Several restocks in the same period are summed.', ''),
     ('Closing — what was counted on the trading day named at the top.', ''),
-    ('Sold (counted) — Opening minus Closing. What the shelf says went out.', ''),
+    ('Sold (counted) — Opening plus Added minus Closing. What the shelf says went out.', ''),
     ('Sold (POS) — what the till says it sold, from the imported sales report.', ''),
     ('Variance — Sold (counted) minus Sold (POS), straight from the database view. '
      'It is not recalculated here, so it cannot drift from what the system believes.', ''),
@@ -632,11 +640,11 @@ NOTES = [
      'The leak sits at the top. Anything older than 14 days is still on the Data sheet.', ''),
     ('', ''),
     ('Two things that will skew variance', 'h2'),
-    ('Deliveries are not recorded. The count screen collects one number per product and '
-     'no longer captures stock added during the day, so add_in is always zero. On any day '
-     'stock went onto the shelf, Sold (counted) understates what was sold and the day '
-     'reads as negative variance. That column is deliberately not shown here — it would '
-     'be a column of zeros implying something was checked.', ''),
+    ('Deliveries have to be recorded to count. The count screen collects one number per '
+     'product and does not capture stock put out during the day; that is what the Restock '
+     'screen is for, and what the Added column shows. A delivery nobody recorded still '
+     'reads as negative variance, because as far as the shelf is concerned the packs '
+     'appeared from nowhere. Check Added before believing a large negative day.', ''),
     ('Counts must be consecutive. Opening is the previous submitted count\'s closing, '
      'whatever date that was. Check "Opening from" before believing a large variance.', ''),
     ('', ''),
