@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Edit the Shelf – Petron Tasks</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --p-bg:#0B0F1A; --p-card:#121826; --p-border:#1F2A44; --p-header:#0F1B3D;
+      --p-blue:#3B82F6; --p-blue-lt:#60A5FA; --p-green:#22C55E; --p-amber:#F59E0B;
+      --p-red:#FF4D4F; --p-orange:#F97316; --p-slate:#64748B;
+      --p-text:#E6EDF7; --p-text2:#94A3B8; --p-text3:#64748B; --p-btn-sec:#1F2A44;
+      --font:'IBM Plex Sans',sans-serif; --mono:'IBM Plex Mono',monospace;
+      --radius:12px; --radius-sm:8px;
+    }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{background:var(--p-bg);color:var(--p-text);font-family:var(--font);min-height:100vh;font-size:17px}
+    .topbar{background:var(--p-header);border-bottom:1px solid var(--p-border);padding:0 16px;height:56px;
+            display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100}
+    .topbar-title{font-size:1.05rem;font-weight:800;font-family:'Syne',sans-serif;flex:1;text-align:center}
+    .topbar-title .br{color:var(--p-blue-lt)}
+    .topbar a,.topbar button.lnk{color:var(--p-text2);text-decoration:none;font-size:0.85rem;background:none;
+            border:none;font-family:var(--font);cursor:pointer;white-space:nowrap}
+    .topbar a:hover,.topbar button.lnk:hover{color:var(--p-text)}
+    .spacer{min-width:70px;text-align:right}
+
+    .wrap{max-width:860px;margin:0 auto;padding:20px 16px 80px}
+    .hd{font-size:1.3rem;font-weight:800;font-family:'Syne',sans-serif;margin:2px 0 4px}
+    .sub{font-size:0.88rem;color:var(--p-text3);margin-bottom:18px;line-height:1.6}
+    .card{background:var(--p-card);border:1px solid var(--p-border);border-radius:var(--radius);
+          padding:18px;margin-bottom:14px}
+    .lbl{font-size:0.75rem;font-weight:700;color:var(--p-amber);text-transform:uppercase;
+         letter-spacing:0.7px;margin-bottom:8px}
+    .hint{font-size:0.82rem;color:var(--p-text3);line-height:1.6;margin-top:8px}
+    .inp{width:100%;background:var(--p-btn-sec);border:1px solid var(--p-border);border-radius:var(--radius-sm);
+         color:var(--p-text);padding:12px 14px;font-size:1rem;font-family:var(--font);outline:none;
+         margin-bottom:10px}
+    .inp:focus{border-color:var(--p-blue)}
+    .btn{border:none;border-radius:var(--radius-sm);padding:12px 18px;font-family:var(--font);
+         font-weight:800;font-size:0.9rem;cursor:pointer;background:var(--p-btn-sec);color:var(--p-text)}
+    .btn:hover{background:#2A3A5F}
+    .btn.pri{background:linear-gradient(135deg,var(--p-orange),var(--p-amber));color:#0B0F1A}
+    .btn.go{background:linear-gradient(135deg,var(--p-green),#16A34A);color:#05140A}
+    .btn:disabled{opacity:0.45;cursor:default}
+    .btn.wide{width:100%}
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+
+    .drop{border:2px dashed var(--p-border);border-radius:var(--radius);padding:30px 18px;text-align:center;
+          cursor:pointer;transition:border-color 0.15s,background 0.15s}
+    .drop:hover,.drop.over{border-color:var(--p-orange);background:rgba(249,115,22,0.06)}
+    .drop-t{font-weight:700;margin-bottom:5px}
+    .drop-s{font-size:0.82rem;color:var(--p-text3)}
+
+    .note{border-radius:var(--radius-sm);padding:12px 14px;font-size:0.86rem;line-height:1.6;margin-bottom:12px}
+    .note.info{background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.3);color:var(--p-blue-lt)}
+    .note.warn{background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);color:var(--p-amber)}
+    .note.err{background:rgba(255,77,79,0.08);border:1px solid rgba(255,77,79,0.3);color:var(--p-red)}
+    .note.ok{background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.3);color:var(--p-green)}
+
+    .stats{display:flex;flex-wrap:wrap;gap:9px;margin-bottom:14px}
+    .stat{background:var(--p-btn-sec);border:1px solid var(--p-border);border-radius:var(--radius-sm);
+          padding:9px 13px;min-width:92px}
+    .stat-l{font-size:0.66rem;color:var(--p-text3);text-transform:uppercase;letter-spacing:0.6px}
+    .stat-v{font-size:1.15rem;font-weight:800;font-family:'Syne',sans-serif;margin-top:2px}
+    .stat-v.g{color:var(--p-green)} .stat-v.a{color:var(--p-amber)} .stat-v.r{color:var(--p-red)}
+
+    .chg{border-top:1px solid var(--p-border);padding-top:12px;margin-top:12px}
+    .chg:first-child{border-top:none;padding-top:0;margin-top:0}
+    .chg-h{font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;
+           color:var(--p-text2);margin-bottom:8px}
+    .chg-r{display:flex;gap:10px;align-items:baseline;padding:6px 0;font-size:0.88rem;
+           border-bottom:1px solid rgba(31,42,68,0.55)}
+    .chg-r:last-child{border-bottom:none}
+    .chg-r .nm{flex:1;min-width:0}
+    .mono{font-family:var(--mono);font-size:0.82rem;color:var(--p-text2)}
+    .was{color:var(--p-text3);text-decoration:line-through}
+    .now{color:var(--p-green);font-weight:700}
+    .gone{color:var(--p-red);font-weight:700}
+    .new{color:var(--p-amber);font-weight:700}
+    ul.errs{margin:6px 0 0 18px}
+    ul.errs li{margin-bottom:6px;line-height:1.55}
+    [hidden]{display:none !important}
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="start.html">&larr; Count</a>
+  <div class="topbar-title"><span class="br" id="brLabel">Safari</span> Edit the Shelf</div>
+  <div class="spacer"><button class="lnk" id="btnOut" hidden>Sign out</button></div>
+</div>
+
+<div class="wrap">
+  <div id="status" class="note info">Loading&hellip;</div>
+
+  <!-- ---------------- sign in ---------------- -->
+  <div id="loginCard" class="card" hidden>
+    <div class="hd">Sign in to edit</div>
+    <div class="sub">The shelf decides what every count means, so changing it needs an account &mdash;
+      the same one you use for sign-off. Reading the planogram never does.</div>
+    <input class="inp" id="email" type="email" autocomplete="username" placeholder="Email">
+    <input class="inp" id="password" type="password" autocomplete="current-password" placeholder="Password">
+    <button class="btn pri wide" id="btnIn">Sign in</button>
+    <div class="note err" id="loginErr" hidden></div>
+  </div>
+
+  <!-- ---------------- the loop ---------------- -->
+  <div id="work" hidden>
+    <div class="card">
+      <div class="hd">1 &middot; Get today&rsquo;s sheet</div>
+      <div class="sub">Always start from this, never from an old copy on your desktop. It is written
+        from the database as it stands right now, so what you edit is what is live.</div>
+      <div class="row">
+        <button class="btn pri" id="btnDl">Download the planogram</button>
+        <span class="mono" id="dlWhat"></span>
+      </div>
+      <div class="hint">Two sheets. <b>Full Stock List</b> is the products &mdash; change a
+        <b>PLU</b>, a <b>Short Name</b>, or set <b>Active</b> to FALSE to drop an item.
+        <b>Planogram</b> is the 6&times;27 grid &mdash; type a product&rsquo;s name into a cell to put it
+        there. Keep the two agreeing: if you move something on the grid, fix its
+        <b>Positions</b> too.</div>
+    </div>
+
+    <div class="card">
+      <div class="hd">2 &middot; Send it back</div>
+      <div class="sub">Nothing is saved until you have read what it would change.</div>
+      <input type="file" id="file" accept=".xlsx" hidden>
+      <div class="drop" id="drop">
+        <div class="drop-t">Drop the edited .xlsx here</div>
+        <div class="drop-s">or click to choose it</div>
+      </div>
+      <div id="readNote"></div>
+    </div>
+
+    <div class="card" id="review" hidden>
+      <div class="hd">3 &middot; What this would change</div>
+      <div class="sub" id="reviewSub"></div>
+      <div class="stats" id="stats"></div>
+      <div id="notes"></div>
+      <div id="changes"></div>
+      <div class="row" style="margin-top:16px">
+        <button class="btn" id="btnCancel">Cancel</button>
+        <button class="btn go" id="btnApply" disabled>Apply to the database</button>
+      </div>
+      <div class="hint" id="applyHint"></div>
+    </div>
+
+    <div class="card">
+      <div class="lbl">History</div>
+      <div id="versions" class="hint">&mdash;</div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { readXlsx, writeXlsx } from './xlsx.js';
+import { diffPlanogram, formatPositions, EDITOR_COLUMNS } from './planogram-diff.js';
+import { deriveBlocks } from './planogram.js';
+
+const SUPABASE_URL = 'https://vwffiuciogthfzekkkkz.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ3ZmZpdWNpb2d0aGZ6ZWtra2t6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4NzcwMTAsImV4cCI6MjA5MTQ1MzAxMH0.OTEyOMn1fmUNV7pR51KMOLsMTNAfytt62uGS_AkQXyw';
+
+/* The ONE page under stock-count/ that keeps its session.
+   Every other page here is pinned with persistSession:false, because a stray
+   authenticated session silently emptied every query when the policies were
+   `to anon` only. This page is the exception on purpose: the session IS the
+   permission. It needs 12_authenticated_role.sql to be in, or its reads come
+   back as an empty array with no error. */
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const el = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const setStatus = (msg, kind) => {
+  const s = el('status');
+  s.hidden = false; s.innerHTML = msg; s.className = 'note ' + (kind || 'info');
+};
+
+const ctx = {
+  branchId: null, branchName: 'Safari', versionId: null, me: null,
+  products: new Map(), aliases: new Map(), facings: new Map(), counts: new Map(),
+  diff: null, sheets: null
+};
+
+/* ============================ sign in ============================ */
+async function whoAmI() {
+  const { data: { session } } = await db.auth.getSession();
+  if (!session) return null;
+  const { data } = await db.from('users')
+    .select('id,name,role').eq('auth_id', session.user.id).limit(1);
+  const me = (data || [])[0];
+  if (!me || !['supervisor', 'lead'].includes(me.role)) return { user: session.user, me, denied: true };
+  return { user: session.user, me };
+}
+
+el('btnIn').addEventListener('click', async () => {
+  const btn = el('btnIn');
+  el('loginErr').hidden = true;
+  btn.disabled = true; btn.textContent = 'Signing in…';
+  const { error } = await db.auth.signInWithPassword({
+    email: el('email').value.trim(), password: el('password').value
+  });
+  btn.disabled = false; btn.textContent = 'Sign in';
+  if (error) {
+    el('loginErr').textContent = error.message;
+    el('loginErr').hidden = false;
+    return;
+  }
+  await init();
+});
+
+el('btnOut').addEventListener('click', async () => {
+  await db.auth.signOut();
+  location.reload();
+});
+
+/* ============================ load ============================ */
+async function init() {
+  el('loginCard').hidden = true;
+  el('work').hidden = true;
+  setStatus('Checking your account…');
+
+  const who = await whoAmI();
+  if (!who) {
+    el('status').hidden = true;
+    el('loginCard').hidden = false;
+    return;
+  }
+  if (who.denied) {
+    setStatus(who.me
+      ? `Signed in as <b>${esc(who.me.name)}</b>, whose role is <b>${esc(who.me.role)}</b>. ` +
+        `Editing the shelf needs a supervisor or lead account.`
+      : 'That account is not in the staff list. Ask whoever set up the system.', 'err');
+    el('btnOut').hidden = false;
+    return;
+  }
+  ctx.me = who.me;
+  el('btnOut').hidden = false;
+
+  const selected = localStorage.getItem('selectedBranch') || 'Safari';
+  const [verRes, brRes] = await Promise.all([
+    db.from('planogram_version').select('version_id,branch_id,status,effective_from,note')
+      .order('version_id', { ascending: false }),
+    db.from('branch').select('branch_id,name')
+  ]);
+  if (verRes.error) return setStatus('Could not read planogram_version: ' + esc(verRes.error.message), 'err');
+
+  const branches = brRes.data || [];
+  const norm = s => String(s || '').toLowerCase().replace(/[^a-z]/g, '');
+  const match = branches.find(b => norm(b.branch_id) === norm(selected) || norm(b.name).includes(norm(selected)));
+  const versions = verRes.data || [];
+  const active = versions.find(v => v.status === 'active' &&
+    (!match || v.branch_id === match.branch_id)) || versions.find(v => v.status === 'active');
+
+  if (!active) {
+    // Nilai Desa Jati has never had one. Say so rather than failing blankly.
+    return setStatus(
+      `No active planogram for <b>${esc(selected)}</b>. This page can create the first one, but ` +
+      `that is not built yet &mdash; it currently edits an existing shelf rather than starting one.`, 'warn');
+  }
+  ctx.branchId = active.branch_id;
+  ctx.versionId = active.version_id;
+  ctx.branchName = (branches.find(b => b.branch_id === active.branch_id) || {}).name || active.branch_id;
+  el('brLabel').textContent = ctx.branchName;
+
+  const [prodRes, aliasRes, facRes, lineRes] = await Promise.all([
+    db.from('product').select('product_id,plu,pos_description,short_name,brand,active'),
+    db.from('product_alias').select('alias,product_id'),
+    db.from('planogram_facing').select('shelf,position,product_id').eq('version_id', active.version_id),
+    db.from('stock_count_line').select('product_id')
+  ]);
+  for (const r of [prodRes, aliasRes, facRes]) {
+    if (r.error) return setStatus('Could not read the planogram: ' + esc(r.error.message), 'err');
+  }
+  if (!(facRes.data || []).length) {
+    return setStatus(
+      `Version ${active.version_id} came back with no facings. If you are signed in and this ` +
+      `worked signed out, <b>12_authenticated_role.sql</b> has not been run &mdash; the policies ` +
+      `are <span class="mono">to anon</span> only, so an authenticated read returns nothing ` +
+      `at all rather than an error.`, 'err');
+  }
+
+  ctx.products = new Map((prodRes.data || []).map(p => [p.product_id, p]));
+  ctx.aliases = new Map((aliasRes.data || []).map(a => [a.alias, a.product_id]));
+  ctx.facings = new Map((facRes.data || []).map(f => [f.shelf + ':' + f.position, f.product_id]));
+  ctx.counts = new Map();
+  for (const l of (lineRes.data || [])) {
+    ctx.counts.set(l.product_id, (ctx.counts.get(l.product_id) || 0) + 1);
+  }
+
+  el('status').hidden = true;
+  el('work').hidden = false;
+  el('dlWhat').textContent =
+    `version ${active.version_id} · ${new Set(ctx.facings.values()).size} products · ${ctx.facings.size} facings`;
+  renderVersions(versions.filter(v => !match || v.branch_id === ctx.branchId));
+}
+
+function renderVersions(versions) {
+  el('versions').innerHTML = versions.length
+    ? versions.map(v =>
+        `<div style="padding:3px 0"><span class="mono">v${v.version_id}</span> &middot; ` +
+        `<b style="color:${v.status === 'active' ? 'var(--p-green)' : 'var(--p-text3)'}">${esc(v.status)}</b>` +
+        ` &middot; from ${esc(v.effective_from || '?')}` +
+        (v.note ? ` &middot; ${esc(v.note)}` : '') + `</div>`).join('')
+    : '&mdash;';
+}
+
+/* ============================ download ============================ */
+/* Written from the database, never from a file. That is the point: you cannot
+   edit a stale copy if the copy is minted fresh each time. */
+el('btnDl').addEventListener('click', async () => {
+  const shelves = [...new Set([...ctx.facings.keys()].map(k => k.split(':')[0]))].sort();
+  const maxPos = Math.max(...[...ctx.facings.keys()].map(k => Number(k.split(':')[1])));
+
+  const byProduct = new Map();
+  for (const [cell, pid] of ctx.facings) {
+    if (!byProduct.has(pid)) byProduct.set(pid, []);
+    const [s, p] = cell.split(':');
+    byProduct.get(pid).push([s, Number(p)]);
+  }
+
+  // Grid: a product's SHORT NAME, because that is what a person reads on the
+  // shelf and what the count screen shows.
+  const nameOf = pid => {
+    const p = ctx.products.get(pid);
+    return (p && (p.short_name || p.pos_description)) || pid;
+  };
+  const planRows = [['', 'Planogram'], ['', '']];
+  for (let i = 1; i <= maxPos; i++) planRows[1].push(String(i));
+  for (const sh of shelves) {
+    const row = ['', sh];
+    for (let i = 1; i <= maxPos; i++) row.push(ctx.facings.has(sh + ':' + i) ? nameOf(ctx.facings.get(sh + ':' + i)) : '');
+    planRows.push(row);
+  }
+
+  const stockRows = [['', ...EDITOR_COLUMNS]];
+  const order = [...ctx.products.values()].sort((a, b) =>
+    String(a.short_name || a.pos_description).localeCompare(String(b.short_name || b.pos_description)));
+  for (const p of order) {
+    const cells = byProduct.get(p.product_id) || [];
+    // A product with no facings is off the shelf; show it as such rather than
+    // leaving a blank that reads like an oversight.
+    stockRows.push(['', p.pos_description || '', p.product_id, p.plu || '',
+      p.short_name || '', p.brand || '',
+      (p.active && cells.length) ? 'TRUE' : 'FALSE',
+      formatPositions(cells)]);
+  }
+
+  const blob = await writeXlsx([
+    { name: 'Planogram', rows: planRows },
+    { name: 'Full Stock List', rows: stockRows }
+  ]);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `PLANOGRAM ${ctx.branchName} v${ctx.versionId}.xlsx`.replace(/[\\/:*?"<>|]/g, '-');
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+});
+
+/* ============================ upload ============================ */
+const drop = el('drop');
+drop.addEventListener('click', () => el('file').click());
+drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+drop.addEventListener('drop', e => {
+  e.preventDefault(); drop.classList.remove('over');
+  if (e.dataTransfer.files[0]) handle(e.dataTransfer.files[0]);
+});
+el('file').addEventListener('change', e => { if (e.target.files[0]) handle(e.target.files[0]); });
+
+async function handle(file) {
+  el('readNote').innerHTML = `<div class="note info">Reading ${esc(file.name)}…</div>`;
+  el('review').hidden = true;
+  try {
+    ctx.sheets = await readXlsx(await file.arrayBuffer());
+  } catch (e) {
+    el('readNote').innerHTML =
+      `<div class="note err">Could not read that file: ${esc(e.message)}. ` +
+      `It must be a <b>.xlsx</b> saved from Excel &mdash; not .xls, not .csv, not a Numbers file.</div>`;
+    return;
+  }
+  el('readNote').innerHTML = `<div class="note ok">Read <b>${esc(file.name)}</b>.</div>`;
+  review();
+}
+
+/* ============================ review ============================ */
+function review() {
+  const d = diffPlanogram(ctx.sheets, {
+    products: ctx.products, aliases: ctx.aliases, facings: ctx.facings, counts: ctx.counts
+  });
+  ctx.diff = d;
+  el('review').hidden = false;
+
+  const before = { products: new Set(ctx.facings.values()).size, facings: ctx.facings.size };
+  el('reviewSub').innerHTML = d.errors.length
+    ? 'Fix these in the spreadsheet and upload it again. Nothing has been written.'
+    : (d.empty
+      ? 'This file matches the database exactly. There is nothing to apply.'
+      : 'Read this before applying. Nothing is written until you press the button.');
+
+  // Blocks are recomputed with the same function the count screen draws with,
+  // so a move that accidentally splits a product is visible here rather than
+  // discovered by whoever counts it.
+  let blocksNow = '—', splitNow = '—';
+  if (!d.errors.length) {
+    const shelves = d.shelves.length ? d.shelves
+      : [...new Set([...d.facings.keys()].map(k => k.split(':')[0]))].sort();
+    const facings = [...d.facings.entries()].map(([k, pid]) => {
+      const [shelf, position] = k.split(':');
+      return { shelf, position: Number(position), product_id: pid };
+    });
+    try {
+      const der = deriveBlocks(facings, shelves);
+      blocksNow = der.blocks.length;
+      splitNow = new Set(der.blocks.filter(b => b.regionTotal > 1).map(b => b.productId)).size;
+    } catch (e) { /* a broken grid is already reported as an error above */ }
+  }
+
+  const arrow = (a, b) => a === b ? String(a) : `${a} &rarr; <b>${b}</b>`;
+  el('stats').innerHTML = [
+    ['Products', arrow(before.products, d.after.products), d.after.products !== before.products ? 'a' : ''],
+    ['Facings', arrow(before.facings, d.after.facings), d.after.facings !== before.facings ? 'a' : ''],
+    ['Blocks', blocksNow, ''],
+    ['Split products', splitNow, ''],
+    ['Problems', d.errors.length, d.errors.length ? 'r' : 'g']
+  ].map(([l, v, k]) =>
+    `<div class="stat"><div class="stat-l">${l}</div><div class="stat-v ${k}">${v}</div></div>`).join('');
+
+  const notes = [];
+  if (d.errors.length) {
+    notes.push(`<div class="note err"><b>${d.errors.length} problem${d.errors.length > 1 ? 's' : ''}
+      stop this being applied.</b><ul class="errs">` +
+      d.errors.map(e => `<li>${esc(e)}</li>`).join('') + `</ul></div>`);
+  }
+  if (!d.errors.length && d.shelfChanged) {
+    notes.push(`<div class="note info">The shelf itself changes, so this creates
+      <b>planogram version ${ctx.versionId + 1}</b> and archives version ${ctx.versionId}.
+      Every count already taken keeps pointing at the version it was counted against, and
+      undoing this is a matter of making the old version active again.</div>`);
+  }
+  if (!d.errors.length && !d.shelfChanged && !d.empty) {
+    notes.push(`<div class="note info">Nothing moves on the shelf, so no new version is made
+      &mdash; these change the products, not the layout.</div>`);
+  }
+  if (d.deactivated.length) {
+    const withCounts = d.deactivated.filter(x => x.counts > 0);
+    notes.push(`<div class="note warn"><b>${d.deactivated.length} product${d.deactivated.length > 1 ? 's' : ''}
+      will be switched off.</b> They are never deleted &mdash;
+      ${withCounts.length ? `${withCounts.length} of them ${withCounts.length > 1 ? 'are' : 'is'} referenced by
+        counts already taken, and those must keep resolving. ` : ''}
+      They stop appearing on the count screen and stop being written as a zero by the sales import.</div>`);
+  }
+  el('notes').innerHTML = notes.join('');
+
+  const sec = (title, rows) => rows.length
+    ? `<div class="chg"><div class="chg-h">${title}</div>${rows.join('')}</div>` : '';
+  const nameOf = pid => {
+    const p = ctx.products.get(pid);
+    return esc((p && (p.short_name || p.pos_description)) || pid);
+  };
+  const at = cell => { const [s, p] = cell.split(':'); return s + p; };
+
+  el('changes').innerHTML = d.errors.length ? '' : [
+    sec('PLU', d.plu.map(p => `<div class="chg-r"><span class="nm">${esc(p.short_name || p.pos_description)}</span>
+      <span class="mono was">${esc(p.from) || '(blank)'}</span>
+      <span class="mono now">${esc(p.to) || '(blank)'}</span></div>`)),
+    sec('Names', d.renamed.map(p => `<div class="chg-r"><span class="nm">${esc(p.pos_description)}</span>
+      <span class="mono">${Object.keys(p.changed).map(f =>
+        `${f}: <span class="was">${esc(p.from[f]) || '(blank)'}</span> ` +
+        `<span class="now">${esc(p.changed[f]) || '(blank)'}</span>`).join(' &nbsp; ')}</span></div>`)),
+    sec('Added', d.added.map(p => `<div class="chg-r"><span class="nm">${esc(p.pos_description)}</span>
+      <span class="mono">${esc(p.product_id)}</span><span class="new">new</span></div>`)),
+    sec('Switched off', d.deactivated.map(p => `<div class="chg-r"><span class="nm">${esc(p.pos_description)}</span>
+      <span class="mono">${esc(p.why || '')}${p.counts ? ` · ${p.counts} count lines kept` : ''}</span>
+      <span class="gone">off</span></div>`)),
+    sec('Switched back on', d.reactivated.map(p => `<div class="chg-r"><span class="nm">${esc(p.pos_description)}</span>
+      <span class="now">on</span></div>`)),
+    sec(`Facings (${d.moved.length})`, d.moved.map(m => `<div class="chg-r">
+      <span class="nm mono">${at(m.cell)}</span>
+      <span class="was">${m.before ? nameOf(m.before) : '(empty)'}</span>
+      <span class="now">${m.after ? nameOf(m.after) : '(empty)'}</span></div>`)),
+    sec('New grid labels', [...d.newAliases.entries()].map(([label, pid]) =>
+      `<div class="chg-r"><span class="nm">${esc(label)}</span>
+       <span class="mono">&rarr; ${esc(pid)} ${nameOf(pid)}</span></div>`))
+  ].join('');
+
+  const blocked = d.errors.length > 0 || d.empty;
+  el('btnApply').disabled = blocked;
+  el('applyHint').textContent = d.errors.length
+    ? 'Blocked until the problems above are fixed.'
+    : (d.empty ? 'Nothing to apply.' : '');
+}
+
+el('btnCancel').addEventListener('click', () => {
+  ctx.diff = null; ctx.sheets = null;
+  el('review').hidden = true;
+  el('readNote').innerHTML = '';
+  el('file').value = '';
+});
+
+/* ============================ apply ============================ */
+el('btnApply').addEventListener('click', async () => {
+  const d = ctx.diff;
+  if (!d || d.errors.length || d.empty) return;
+  const btn = el('btnApply');
+  btn.disabled = true; btn.textContent = 'Applying…';
+  try {
+    await apply(d);
+    setStatus('Saved. Reloading the current state…', 'ok');
+    el('review').hidden = true;
+    el('readNote').innerHTML = '';
+    el('file').value = '';
+    await init();
+    setStatus('Saved. The count screen will show this the next time it is opened — ' +
+      'no deploy needed, because the layout comes from the database.', 'ok');
+  } catch (e) {
+    console.error(e);
+    btn.disabled = false; btn.textContent = 'Apply to the database';
+    setStatus(describe(e), 'err');
+  }
+});
+
+function describe(e) {
+  const m = String(e.message || e);
+  if (/row-level security|42501/i.test(m)) {
+    return 'Blocked by row level security. Either <b>13_planogram_editing.sql</b> has not been ' +
+      'run, or this account is not a supervisor or lead.<br><span class="mono">' + esc(m) + '</span>';
+  }
+  if (/42P01|does not exist/i.test(m)) {
+    return 'A table or function is missing — run <b>12_authenticated_role.sql</b> then ' +
+      '<b>13_planogram_editing.sql</b>.<br><span class="mono">' + esc(m) + '</span>';
+  }
+  return 'Could not save: ' + esc(m);
+}
+
+const boom = res => { if (res.error) throw new Error(res.error.message); return res.data; };
+
+/* Order matters. Products first, because a facing has a foreign key to one;
+   the new version last, because flipping it active is what makes the change
+   visible to everybody. If a later step fails, what has landed so far is
+   harmless on its own: a product nobody references, or a version nobody has
+   activated. */
+async function apply(d) {
+  // 1. products — insert the new, update what changed. Never a delete.
+  const upserts = [];
+  for (const p of d.added) {
+    upserts.push({
+      product_id: p.product_id, plu: p.plu || '',
+      pos_description: p.pos_description,
+      short_name: p.short_name || p.pos_description,
+      brand: p.brand || (p.pos_description || '').split(/\s+/)[0] || null,
+      active: true
+    });
+  }
+  for (const p of d.plu) upserts.push({ product_id: p.product_id, plu: p.to });
+  for (const p of d.renamed) upserts.push({ product_id: p.product_id, ...p.changed });
+  for (const p of d.reactivated) upserts.push({ product_id: p.product_id, active: true });
+  for (const p of d.deactivated) upserts.push({ product_id: p.product_id, active: false });
+
+  // Merge per product so one row carries every change to it.
+  const byId = new Map();
+  for (const u of upserts) byId.set(u.product_id, { ...(byId.get(u.product_id) || {}), ...u });
+
+  for (const row of byId.values()) {
+    if (ctx.products.has(row.product_id)) {
+      const { product_id, ...rest } = row;
+      boom(await db.from('product').update(rest).eq('product_id', product_id).select('product_id'));
+    } else {
+      boom(await db.from('product').insert(row).select('product_id'));
+    }
+  }
+
+  // 2. aliases for any new grid label, so a later spreadsheet import resolves it
+  if (d.newAliases.size) {
+    boom(await db.from('product_alias').upsert(
+      [...d.newAliases.entries()].map(([alias, product_id]) => ({ alias, product_id })),
+      { onConflict: 'alias' }));
+  }
+
+  if (!d.shelfChanged) return;
+
+  // 3. a new version, built whole, then made active
+  const note = [
+    d.added.length ? `+${d.added.length}` : '',
+    d.deactivated.length ? `-${d.deactivated.length}` : '',
+    `${d.moved.length} facing${d.moved.length === 1 ? '' : 's'}`
+  ].filter(Boolean).join(' ') + ` · ${ctx.me.name}`;
+
+  const version = boom(await db.from('planogram_version').insert({
+    branch_id: ctx.branchId, status: 'draft', note
+  }).select('version_id').single());
+
+  const rows = [...d.facings.entries()].map(([cell, product_id]) => {
+    const [shelf, position] = cell.split(':');
+    return { version_id: version.version_id, shelf, position: Number(position), product_id };
+  });
+  for (let i = 0; i < rows.length; i += 200) {
+    boom(await db.from('planogram_facing').insert(rows.slice(i, i + 200)).select('shelf'));
+  }
+
+  // Archive first: planogram_version_one_active would reject two active rows,
+  // and it is better to be briefly without an active version than to have the
+  // insert rejected and leave the old one silently still in charge.
+  boom(await db.from('planogram_version').update({ status: 'archived' })
+    .eq('version_id', ctx.versionId).select('version_id'));
+  boom(await db.from('planogram_version').update({ status: 'active' })
+    .eq('version_id', version.version_id).select('version_id'));
+}
+
+init().catch(e => { console.error(e); setStatus('Failed to load: ' + esc(e.message), 'err'); });
+</script>
+
+<script src="../sidebar.js"></script>
+</body>
+</html>

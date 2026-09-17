@@ -15,7 +15,6 @@ from read_xlsx import load
 
 BASE = "https://vwffiuciogthfzekkkkz.supabase.co/rest/v1"
 KEY = re.search(r"eyJ[A-Za-z0-9_.-]+", open("../app.js").read()).group(0)
-VERSION = 1
 
 
 def get(path):
@@ -25,6 +24,11 @@ def get(path):
 
 def sq(s):
     return "'" + str(s).replace("'", "''") + "'"
+
+
+# The ACTIVE version, not a hard-coded 1. stock-count/planogram.html archives
+# the old version and makes a new one on every shelf change, so a fixed 1 would
+# have this comparing the spreadsheet against a layout nobody is counting.
 
 
 # ---------- spreadsheet ----------
@@ -62,6 +66,11 @@ for row in sheets["Planogram"][2:]:
             grid_labels.add(label)
 
 # ---------- database ----------
+_active = get("planogram_version?select=version_id&status=eq.active")
+if not _active:
+    raise SystemExit("No active planogram version.")
+VERSION = _active[0]["version_id"]
+
 db_products = {p["product_id"]: p for p in get("product?select=product_id,plu,pos_description,short_name,brand")}
 db_alias = {a["alias"]: a["product_id"] for a in get("product_alias?select=alias,product_id")}
 db_facings = {(f["shelf"], f["position"]): f["product_id"]

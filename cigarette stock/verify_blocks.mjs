@@ -11,14 +11,20 @@ const get = async p => {
   return r.json();
 };
 
-const facings = await get('planogram_facing?select=shelf,position,product_id&version_id=eq.1');
+// The ACTIVE version, never a hard-coded 1. Once the shelf is edited from
+// planogram.html the active version is 2, then 3 — and a test still checking
+// version 1 would be quietly checking an archived layout and passing.
+const version = (await get('planogram_version?select=version_id&status=eq.active'))[0];
+if (!version) throw new Error('no active planogram version');
+const facings = await get(
+  `planogram_facing?select=shelf,position,product_id&version_id=eq.${version.version_id}`);
 const products = new Map((await get('product?select=product_id,short_name,plu,brand')).map(p => [p.product_id, p]));
 const shelves = [...new Set(facings.map(f => f.shelf))].sort();
 
 const { blocks, nonRect, productCount } = deriveBlocks(facings, shelves);
 
 const drawn = blocks.reduce((n, b) => n + b.facings, 0);
-console.log(`products ${productCount} · facings ${facings.length} · blocks ${blocks.length} · drawn ${drawn}`);
+console.log(`version ${version.version_id} · products ${productCount} · facings ${facings.length} · blocks ${blocks.length} · drawn ${drawn}`);
 console.log(drawn === facings.length ? 'OK  facings reconcile' : 'FAIL facings do not reconcile');
 console.log(nonRect.length ? `WARN non-rectangular: ${JSON.stringify(nonRect)}` : 'OK  every region is a solid rectangle');
 

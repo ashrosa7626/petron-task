@@ -178,6 +178,8 @@ Pages, all under `stock-count/`:
   a link to previous quantities sitting next to the inputs defeats that.
 - `import-sales.html` — loads the POS Merchandise Sales Report PDF into
   `pos_sales_daily`. Reached from `start.html` and `history.html`.
+- `planogram.html` — edit the shelf from Excel. The one page here that needs an
+  account. Reached from `start.html`.
 - `restock.html` — packs put **onto** the shelf, at any time of day. Same grid,
   blank means "not restocked". Reached from `start.html`; results under the
   **Restocks** tab on `history.html`.
@@ -212,6 +214,39 @@ The app's identity is the PIN session: `sessionStorage.staff_id` / `staff_name`,
   exactly this. **That page no longer signs in at all** (see the sales loader below),
   so the report was answered by removing the dependency rather than the bug — the
   dropped `next` in `pin.html` is still there for any other page that needs it.
+
+**Editing the shelf: `stock-count/planogram.html`** (Sep 2026). Download the planogram
+as `.xlsx` **generated from the live database**, edit it in Excel, upload it back, read
+what it would change, apply. No terminal, no SQL.
+- **The only page in `stock-count/` that signs in**, and the only one whose Supabase
+  client is NOT pinned `persistSession: false` — here the session *is* the permission.
+  It needs **`12_authenticated_role.sql`** or its reads come back `200 OK []`.
+- **Writes are `to authenticated` + `is_planogram_editor()`** (`13_planogram_editing.sql`),
+  which checks `users.role in ('supervisor','lead')`. **`anon` gains nothing** — the key
+  is public, and a silent facing change cannot be noticed by a blind count.
+- **Download before every edit.** The file is minted from the database each time, so a
+  stale desktop copy cannot be uploaded over live data.
+- **A missing COLUMN means leave alone, never blank.** The repo workbook has no
+  Short Name or Brand column; treating absent as empty reported all 54 as renamed and
+  would have overwritten every curated `short_name` with the shouted POS description.
+- **A product with no facings is off the shelf**, Active column or not. Left active it
+  keeps getting a zero row from the sales importer while never appearing on a count, so
+  it drops out of reconciliation silently instead of showing as a discrepancy.
+- **Removal is never a delete** — `active = false`, facings freed. The FKs from
+  `stock_count_line` and `pos_sales_daily` would refuse a delete, and should.
+- **A shelf change makes a new `planogram_version`** and archives the old one; PLU and
+  name edits do not. `stock_count.version_id` records what each count was counted
+  against, so editing facings in place would falsify it retroactively. Undo = make the
+  old version active again. **Nothing may hard-code `version_id = 1`** —
+  `diff_xlsx_vs_db.py` and `verify_blocks.mjs` look up the active version.
+- The gondola is **full**: 6 × 27 is exactly 162 facings. Adding a product always takes
+  a facing from another one; there is no spare cell.
+- `xlsx.js` reads/writes .xlsx in the browser with no library
+  (`DecompressionStream`/`CompressionStream`). Cells are written as **inline strings** so
+  a PLU keeps its leading zero. `planogram-diff.js` is pure and decides what an edit
+  means. Tests: `verify_xlsx.mjs` (offline) pins that a round trip with no edits is a
+  **no-op**, and checks the reader against `read_xlsx.py`; `verify_planogram_diff.mjs`
+  (live) pins the real workbook diffing to nothing plus every refusal.
 
 **`CIGARETTES PLANOGRAM.xlsx` is the source of truth for the layout**, not the seed
 and not the database. `Planogram` sheet = the 6×27 grid; `Full Stock List` = product

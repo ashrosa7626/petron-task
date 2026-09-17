@@ -86,6 +86,7 @@
     <button class="btn sec" id="btnRestock">Restock &mdash; add packs to the shelf</button>
     <button class="btn sec" id="btnHistory">View past counts</button>
     <button class="btn sec" id="btnImport">Import POS sales</button>
+    <button class="btn sec" id="btnShelf">Edit the shelf &mdash; PLU, add, remove</button>
   </div>
 </div>
 
@@ -240,6 +241,10 @@ el('btnOpen').addEventListener('click', () => { location.href = 'index.html?read
 el('btnRestock').addEventListener('click', () => { location.href = 'restock.html'; });
 el('btnHistory').addEventListener('click', () => { location.href = 'history.html'; });
 el('btnImport').addEventListener('click', () => { location.href = 'import-sales.html'; });
+/* The only page here that needs an account. Everything else about counting is
+   deliberately sign-in free; the shelf decides what every count MEANS, so
+   changing it is the one thing that is not. */
+el('btnShelf').addEventListener('click', () => { location.href = 'planogram.html'; });
 
 el('btnGo').addEventListener('click', async () => {
   const date = el('fDate').value;
