@@ -228,6 +228,11 @@ what it would change, apply. No terminal, no SQL.
 - **The only page in `stock-count/` that signs in**, and the only one whose Supabase
   client is NOT pinned `persistSession: false` — here the session *is* the permission.
   It needs **`12_authenticated_role.sql`** or its reads come back `200 OK []`.
+- **An RLS refusal is NOT an error, and this module has been bitten three times.**
+  PostgREST answers a blocked write with **200 and an empty array** and a blocked read
+  with **200 and `[]`** — `res.error` is null both times. The editor page therefore
+  states how many rows each write must return and throws if it gets fewer; `.select()`
+  is what makes rows come back at all. Never trust `!error` as "it worked".
 - **Writes are `to authenticated` + `is_planogram_editor()`** (`13_planogram_editing.sql`),
   which checks `users.role in ('supervisor','lead')`. **`anon` gains nothing** — the key
   is public, and a silent facing change cannot be noticed by a blind count.
