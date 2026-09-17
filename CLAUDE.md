@@ -316,6 +316,18 @@ Supporting notes:
     *whole* to OCR, because such a line is proved by nothing and flagged by nothing.
     A gap that divides evenly by a price names the missing row (50.80 = 4 × 12.70 on
     09/09). It no longer blocks — a mismatch can equally mean a misread price.
+  - **The missing line can be typed back, and the total re-checks it** (Sep 2026, at
+    Rosa's request). A lost line is not in `ctx.rows`, so nothing flags it and there
+    was no way to supply it. `ctx.added` rows carry **money as well as quantity**
+    (`nett_sales = qty × price`) — that is what makes the difference move — and the
+    projection recalculates on every keystroke, before anything is committed. **The
+    report's own Grand Total therefore checks the person exactly as the per-line
+    arithmetic checks the OCR**: 4 × 12.70 closes the 09/09 gap to zero, 3 leaves it
+    short by 12.70, 5 puts it over. A line added with **no price moves the quantity
+    but not the money**, so the gap stays open rather than appearing to close — never
+    fake a price to make it balance. Correcting a *misread quantity* still leaves the
+    money as printed: the paper's figure is right, only our reading of it was wrong.
+    Pinned in `verify_ocr_parse.mjs`.
   - **PLU is cross-checked against the Item ID**, and still never joined on. They are
     two labels for the same pack printed side by side; disagreement means one was
     misread. Advisory only. Two cautions make it usable: the report's category code

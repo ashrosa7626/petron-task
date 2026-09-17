@@ -138,6 +138,47 @@ check(why.some(h => h.qty === 4 && Math.abs(h.price - 12.70) < 0.01),
   'the gap divides evenly as 4 x 12.70, naming the missing row',
   JSON.stringify(why));
 
+// ---------------------------------------------------------------------------
+// Putting it back. The import page lets someone type the line the scan lost,
+// and the row it builds carries the MONEY as well as the quantity — that is
+// what makes the difference move. The report's own Grand Total then checks the
+// person the same way the per-line arithmetic checks the OCR.
+//
+// The shape here must match what applied() builds in import-sales.html.
+// ---------------------------------------------------------------------------
+const handAdded = (qty, price) => ({
+  product_id: '100760', qty, price,
+  total_sales: Math.round(qty * price * 100) / 100,
+  nett_sales: Math.round(qty * price * 100) / 100,
+  ok: true, added: true
+});
+
+const right = reconcileTotals(lDrop.concat(handAdded(4, 12.70)), g09);
+check(right.balances, 'typing the missing line back at 4 x 12.70 closes the gap exactly',
+  right.shortfall);
+check(Math.abs(right.summed - g09.nett_sales) < 0.01,
+  'and the summed total now equals the report\'s own Grand Total',
+  `${right.summed} vs ${g09.nett_sales}`);
+
+const short = reconcileTotals(lDrop.concat(handAdded(3, 12.70)), g09);
+check(!short.balances && Math.abs(short.shortfall - 12.70) < 0.01,
+  'one pack too few and it is still short by one pack — the total refuses the wrong number',
+  short.shortfall);
+
+const over = reconcileTotals(lDrop.concat(handAdded(5, 12.70)), g09);
+check(!over.balances && Math.abs(over.shortfall + 12.70) < 0.01,
+  'one pack too many and it goes over, rather than quietly passing',
+  over.shortfall);
+
+// A line added with no price moves the quantity but cannot move the money, so
+// the gap must stay exactly where it was rather than appearing to close.
+const noPrice = reconcileTotals(
+  lDrop.concat({ product_id: '100760', qty: 4, price: null,
+                 total_sales: null, nett_sales: null, ok: true, added: true }), g09);
+check(Math.abs(noPrice.shortfall - recDrop.shortfall) < 0.01,
+  'adding a line with no price leaves the difference untouched, not falsely closed',
+  noPrice.shortfall);
+
 // ===========================================================================
 console.log('\nthe Item ID, and the things that have broken it before\n');
 // ===========================================================================

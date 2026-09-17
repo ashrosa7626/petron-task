@@ -130,6 +130,20 @@
           letter-spacing:0.6px;padding:2px 8px;border-radius:99px;margin-left:6px}
     .pill.g{background:rgba(34,197,94,0.15);color:var(--p-green)}
     .pill.a{background:rgba(245,158,11,0.15);color:var(--p-amber)}
+
+    /* Adding a line the scan lost. The report's own Grand Total then checks
+       what the person typed, the same way the arithmetic checks the OCR. */
+    .addbox{border-top:1px solid var(--p-border);margin-top:14px;padding-top:14px}
+    .addbox .fix-in .inp{width:120px}
+    .addbox select.inp{width:260px}
+    .addrow{display:flex;align-items:center;gap:10px;padding:7px 0;
+            border-bottom:1px solid var(--p-border);font-size:0.86rem}
+    .addrow:last-of-type{border-bottom:none}
+    .addrow .nm{flex:1}
+    .addrow .mono{color:var(--p-text2)}
+    .proj{font-size:0.85rem;font-family:var(--mono);margin-top:10px;line-height:1.6}
+    .proj b{font-family:var(--font)}
+    .proj.g{color:var(--p-green)} .proj.a{color:var(--p-amber)} .proj.r{color:var(--p-red)}
   </style>
 </head>
 <body>
@@ -190,6 +204,25 @@
       <div class="lbl" id="totLbl">Does the file add up?</div>
       <div class="tot" id="totBody"></div>
       <div class="hint" id="totHint"></div>
+
+      <div class="addbox" id="addBox" hidden>
+        <div class="lbl" style="margin-bottom:6px">Put the missing line back</div>
+        <div class="hint" style="margin-bottom:12px">Type what the paper says for the line that did
+          not come through. The difference above recalculates as you type, so the report&rsquo;s own
+          Grand Total tells you whether you have it right &mdash; the same arithmetic that checks the
+          scan, now checking you.</div>
+        <div id="addList"></div>
+        <div class="fix-in" style="margin-top:10px">
+          <div><label for="addPid">Product</label>
+            <select class="inp" id="addPid"></select></div>
+          <div><label for="addQty">Packs sold</label>
+            <input class="inp" id="addQty" type="number" min="0" step="1"></div>
+          <div><label for="addPrice">Price each</label>
+            <input class="inp" id="addPrice" type="number" min="0" step="0.01"></div>
+          <button class="btn pri sm" id="addGo">Add line</button>
+        </div>
+        <div class="proj" id="addProj"></div>
+      </div>
     </div>
 
     <div class="card" id="fixCard" hidden>
@@ -247,7 +280,7 @@
 <script type="module">
 import {
   parseLines, mergeDuplicates, findBusinessDate, findGrandTotal, identifyReport,
-  reconcileTotals, explainShortfall, buildPayload, pluAgrees
+  reconcileTotals, explainShortfall, buildPayload, pluAgrees, CENT
 } from './sales-parse.js';
 
 const SUPABASE_URL = 'https://vwffiuciogthfzekkkkz.supabase.co';
@@ -306,7 +339,8 @@ el('who').textContent = el('fStaff').value;
 
 const ctx = {
   branchId: null, branchName: '', products: new Map(), hasImportedBy: false,
-  rows: [], fix: {}, date: null, grand: null, fileName: '', source: '', dpi: 0, turn: 0
+  rows: [], fix: {}, added: [], date: null, grand: null, fileName: '', source: '',
+  dpi: 0, turn: 0
 };
 
 /* ==================================================================
@@ -689,11 +723,41 @@ async function handle(file) {
 // asks whether the report's own figures add up to the report's own total —
 // correcting a quantity we misread does not change what the paper says.
 function applied() {
-  return ctx.rows.map(r => {
+  const fixed = ctx.rows.map(r => {
     const f = ctx.fix[r.uid];
     if (!f || !f.confirmed) return r;
     return Object.assign({}, r, { qty: f.qty, ok: true, corrected: true });
   });
+
+  // A line the scan lost whole is not in ctx.rows at all — nothing flags it,
+  // because it is not there to be flagged. Only the Grand Total notices. So a
+  // hand-added line carries its money as well as its quantity: that is what
+  // makes the difference above move, and what turns the report's own total into
+  // a check on what the person typed.
+  const add = ctx.added.map(a => ({
+    uid: a.uid,
+    product_id: a.product_id,
+    description: (ctx.products.get(a.product_id) || {}).short_name || a.product_id,
+    qty: a.qty,
+    price: a.price || null,
+    total_sales: a.price ? round2c(a.qty * a.price) : null,
+    nett_sales: a.price ? round2c(a.qty * a.price) : null,
+    scanned_plu: null,
+    ok: true,
+    added: true,
+    suggestions: [],
+    reason: ''
+  }));
+  return fixed.concat(add);
+}
+
+const round2c = n => Math.round(n * 100) / 100;
+
+// What the difference WOULD become if this line were added. Used live, while
+// the boxes are being typed into, and by the committed list.
+function projectedShortfall(extraNett) {
+  if (!ctx.rec || ctx.rec.grand === null) return null;
+  return round2c(ctx.rec.shortfall - (extraNett || 0));
 }
 
 function showPreview() {
@@ -780,6 +844,7 @@ function render() {
   const zeros = payload.filter(r => r.qty_sold === 0).length;
   el('stats').innerHTML = [
     ['Lines in report', merged.length, ''],
+    ['Added by hand', ctx.added.length, ctx.added.length ? 'a' : ''],
     ['Packs sold', good.reduce((n, r) => n + (r.qty || 0), 0), ''],
     ['Need you', bad.length, bad.length ? 'r' : 'g'],
     ['Rows to write', payload.length, 'g'],
@@ -819,6 +884,7 @@ function render() {
       const p = ctx.products.get(r.product_id) || {};
       const hit = soldMap.get(r.product_id);
       const src = !hit ? 'absent &rarr; zero'
+        : hit.added ? 'you added it'
         : hit.corrected ? 'you entered it'
         : 'report';
       return `<tr><td>${esc(p.short_name || r.product_id)}</td>` +
@@ -846,6 +912,7 @@ function renderTotals(rec, merged) {
   ].map(([l, v]) => `<div><span>${l}</span>${v}</div>`).join('');
 
   if (ok) {
+    renderAddBox(rec, []);
     el('totHint').innerHTML =
       'The money the lines add up to matches what the report says it should, so no line was lost ' +
       'reading the scan. This is not a price check &mdash; no price is ever written &mdash; it is the ' +
@@ -854,12 +921,14 @@ function renderTotals(rec, merged) {
     return;
   }
   if (!rec.grand) {
+    renderAddBox(rec, []);
     el('totHint').innerHTML =
       'No Grand Total was found in the report, so there is no way to tell whether every line came ' +
       'through. Check the last page of the PDF is included. The quantities read are unaffected.';
     return;
   }
   const hits = explainShortfall(rec.shortfall, merged);
+  renderAddBox(rec, hits);
   el('totHint').innerHTML =
     `The lines read come to <b>${money(rec.summed)}</b> but the report totals ` +
     `<b>${money(rec.grand)}</b> &mdash; a gap of <b>${money(Math.abs(rec.shortfall))}</b>, which ` +
@@ -871,6 +940,112 @@ function renderTotals(rec, merged) {
     `Compare the list below against the paper before writing. This does not block the import &mdash; ` +
     `it can also just mean a price was misread, which changes nothing that gets written.`;
 }
+
+/* The add-a-line box.
+
+   It stays visible once anything has been added, even after the total balances
+   — otherwise the moment you get it right the controls vanish and there is no
+   way to take a mistake back out. */
+function renderAddBox(rec, hits) {
+  const show = (!rec.balances && rec.grand !== null) || ctx.added.length > 0;
+  el('addBox').hidden = !show;
+  if (!show) return;
+
+  // Committed lines, each removable. Removing one puts the difference straight
+  // back, which is what makes trying a figure safe.
+  el('addList').innerHTML = ctx.added.map(a => {
+    const p = ctx.products.get(a.product_id) || {};
+    const money = a.price ? 'RM ' + round2c(a.qty * a.price).toFixed(2) : 'no price';
+    return `<div class="addrow" data-uid="${esc(a.uid)}">
+      <span class="nm">${esc(p.short_name || a.product_id)}</span>
+      <span class="mono">${a.qty} &times; ${a.price ? a.price.toFixed(2) : '—'} = ${money}</span>
+      <button class="btn sec sm" data-act="unadd">Remove</button>
+    </div>`;
+  }).join('');
+  el('addList').querySelectorAll('[data-act="unadd"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const uid = btn.closest('.addrow').dataset.uid;
+      ctx.added = ctx.added.filter(a => a.uid !== uid);
+      render();
+    });
+  });
+
+  // Rebuild the picker only when it is not in use, so a re-render mid-typing
+  // does not throw away the selection.
+  const sel = el('addPid');
+  if (document.activeElement !== sel || !sel.options.length) {
+    const keep = sel.value;
+    const opts = [...ctx.products.entries()]
+      .map(([pid, p]) => ({ pid, name: p.short_name || pid }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    sel.innerHTML = '<option value="">Which product?</option>' +
+      opts.map(o => `<option value="${esc(o.pid)}">${esc(o.name)}</option>`).join('');
+    if (keep) sel.value = keep;
+  }
+
+  // A gap that divides evenly by one price is the strongest hint there is, so
+  // offer that quantity and price rather than making someone work it out.
+  if (hits && hits.length === 1 && !el('addQty').value && !el('addPrice').value) {
+    el('addQty').value = hits[0].qty;
+    el('addPrice').value = hits[0].price.toFixed(2);
+  }
+  paintProjection();
+}
+
+/* Live, on every keystroke: what the difference becomes if this is added. */
+function paintProjection() {
+  const box = el('addProj');
+  const pid = el('addPid').value;
+  const qty = parseInt(el('addQty').value, 10);
+  const price = parseFloat(el('addPrice').value);
+  const money = n => 'RM ' + Math.abs(n).toFixed(2);
+
+  const dup = pid && ctx.merged && ctx.merged.some(r => r.product_id === pid);
+  const warn = dup
+    ? `<br><b>${esc((ctx.products.get(pid) || {}).short_name || pid)}</b> already has a line in this
+       report. Adding another adds the two together &mdash; right if the paper really prints it
+       twice, wrong if you are correcting a quantity (use the list below for that).`
+    : '';
+
+  if (!Number.isFinite(qty) || qty < 0 || !Number.isFinite(price) || price <= 0) {
+    box.className = 'proj';
+    box.innerHTML = 'Enter packs and the price each to see what the difference becomes.' + warn;
+    return;
+  }
+  const adds = round2c(qty * price);
+  const after = projectedShortfall(adds);
+  if (after === null) {
+    box.className = 'proj';
+    box.innerHTML = `Adds <b>${money(adds)}</b>. There is no Grand Total to check it against.` + warn;
+    return;
+  }
+  const balanced = Math.abs(after) < CENT;
+  box.className = 'proj ' + (balanced ? 'g' : (Math.abs(after) < Math.abs(ctx.rec.shortfall) ? 'a' : 'r'));
+  box.innerHTML = balanced
+    ? `Adds <b>${money(adds)}</b> &mdash; difference becomes <b>RM 0.00</b>. That is the report&rsquo;s
+       own total agreeing with what you typed.` + warn
+    : `Adds <b>${money(adds)}</b> &mdash; difference becomes <b>${money(after)}</b>` +
+      (after > 0 ? ' still short' : ' over') + `. Check the packs and the price against the paper.` + warn;
+}
+
+['addPid', 'addQty', 'addPrice'].forEach(id =>
+  el(id).addEventListener('input', paintProjection));
+
+el('addGo').addEventListener('click', () => {
+  const pid = el('addPid').value;
+  const qty = parseInt(el('addQty').value, 10);
+  const price = parseFloat(el('addPrice').value);
+  if (!pid) return el('addPid').focus();
+  if (!Number.isFinite(qty) || qty < 0) return el('addQty').focus();
+  ctx.added.push({
+    uid: 'add:' + pid + ':' + ctx.added.length,
+    product_id: pid,
+    qty,
+    price: Number.isFinite(price) && price > 0 ? price : null
+  });
+  el('addPid').value = ''; el('addQty').value = ''; el('addPrice').value = '';
+  render();
+});
 
 function renderFixList(bad) {
   el('fixCard').hidden = bad.length === 0;
