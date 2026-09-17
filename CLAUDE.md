@@ -97,6 +97,13 @@ Hosted on GitHub Pages: https://ashrosa7626.github.io/petron-task/
 
 ## Common Issues & Fixes
 - GitHub Pages caches aggressively — use ?v=X or Disable Cache in DevTools
+- **A `?v=` on the HTML does NOT refresh its ES modules.** `Cache-Control: max-age=600`,
+  so after a deploy the page can be new while `planogram.js` / `planogram-diff.js` /
+  `xlsx.js` / `sales-parse.js` are up to ten minutes old — and the page then runs the
+  OLD logic while `fetch()` of the same file returns the new one. Cost an hour of
+  "the fix didn't deploy" on 17 Sep. Either wait ten minutes, hard-reload, or check
+  with `await import('./mod.js?probe=' + Date.now())` and compare against the module
+  the page actually holds.
 - Never use terminal for JS with !, ?, special chars — write to .py file instead
 - After header redesigns, always check for dead element references in JS
 - Emojis in JS strings can cause syntax errors — use HTML entities instead
