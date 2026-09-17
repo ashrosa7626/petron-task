@@ -28,6 +28,15 @@ Hosted on GitHub Pages: https://ashrosa7626.github.io/petron-task/
 ## Branch System
 - Two branches: Safari and Nilai Desa Jati
 - Branch stored in localStorage key: selectedBranch
+- **Chosen in the sidebar** (`sidebar.js`), which writes that key and **reloads**. Too
+  much of a page derives from the branch to repaint half of it.
+- **No page may fall back to another branch.** Every cigarette page used to, when the
+  selected branch had no active planogram — showing Safari's grid, counts and history
+  under a Nilai Desa Jati heading. A count taken from that screen is filed against the
+  wrong branch and nothing afterwards can tell. The named branch or a clear refusal;
+  never `|| branches[0]`, never `|| versions[0]`.
+- The `branch` table held only `SAFARI` until `14_add_branch.sql`. A branch with no
+  planogram version is **real but empty** — the pages say the shelf is not set up.
 - All pages have a branch toggle dropdown in the header
 - Data must always be filtered by branch
 
@@ -38,8 +47,15 @@ Hosted on GitHub Pages: https://ashrosa7626.github.io/petron-task/
 - Title updates dynamically when branch changes via switchBranch function
 
 ## Sidebar
-- sidebar.js injected before </body> on all pages
-- Shows hamburger menu top-left
+- sidebar.js injected before </body> on all pages, **including every `stock-count/` page**
+- Shows hamburger menu top-left. It is the ONLY way out of a cigarette page — the
+  per-page back links were removed, since each went one place and none led out of the
+  module. Pages leave a `.sb-gap` (44px) in the topbar for it.
+- **Every href resolves against `sidebar.js`'s own URL**, never the including page.
+  Bare relative hrefs meant that from `stock-count/start.html`, Home → `index.html`
+  → *the count grid*. `document.currentScript.src` gives the app root wherever the
+  file is loaded from, and `active` is matched on the resolved path so the two
+  `index.html` files cannot be confused.
 - Dark theme matching briefing.html
 
 ## Task Assignment Reset
@@ -260,8 +276,14 @@ what it would change, apply. No terminal, no SQL.
   **no-op**, and checks the reader against `read_xlsx.py`; `verify_planogram_diff.mjs`
   (live) pins the real workbook diffing to nothing plus every refusal.
 
-**`CIGARETTES PLANOGRAM.xlsx` is the source of truth for the layout**, not the seed
-and not the database. `Planogram` sheet = the 6×27 grid; `Full Stock List` = product
+**The DATABASE is now the source of truth for the layout.** It was
+`CIGARETTES PLANOGRAM.xlsx` while the only way to change the shelf was to edit that
+file and run a migration; `planogram.html` changed that, and the repo copy has already
+drifted (two PLUs, 17 Sep). It is kept as a parser fixture for `verify_xlsx.mjs` and
+nothing else — **do not treat it as current**. The editor's download is generated from
+the database by `buildWorkbookRows()`, which the page and `verify_planogram_diff.mjs`
+share so the round-trip property is testable. Historically, and still true of the
+`02_seed.sql` era: `Planogram` sheet = the 6×27 grid; `Full Stock List` = product
 id, PLU and positions. When they disagree, the workbook wins and the database gets a
 migration.
 
