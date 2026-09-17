@@ -143,11 +143,54 @@ console.log('\nadding a product\n');
   check(d.after.products === 55 && d.after.facings === 162,
     'the shape becomes 55 products across the same 162 facings — the shelf is full',
     `${d.after.products} / ${d.after.facings}`);
-  check(d.newAliases.has('ROTHMANS DEMI BLUE'),
-    'its grid label is registered as an alias, so a later import resolves it');
+  check(d.newAliases.size === 0,
+    'no alias is proposed — the label IS the product\'s own name, so it already resolves',
+    JSON.stringify([...d.newAliases.keys()]));
   check(d.deactivated.length === 0,
     'and Dunhill Classic is NOT treated as removed — it still has nine facings',
     JSON.stringify(d.deactivated.map(x => x.product_id)));
+}
+
+// An alias is for a label that is NOT the product's own name — the "RED Winston"
+// case. Those still have to be captured, or the label stops resolving the next
+// time the sheet is read.
+{
+  const s = clone();
+  const plan = s['Planogram'];
+  let done = false;
+  outer2: for (const row of plan) {
+    for (let c = 0; c < row.length; c++) {
+      if (String(row[c]).trim().toUpperCase() === 'DUNHILL CLASSIC') {
+        row[c] = 'Dunhill Classic';   // same product, different capitalisation
+        done = true;
+        break outer2;
+      }
+    }
+  }
+  const d = diffPlanogram(s, db);
+  check(done && d.errors.length === 0 && d.newAliases.size === 0,
+    'a label differing only in case needs no alias either — matching is case-insensitive',
+    d.errors.join(' | '));
+}
+{
+  // A genuinely non-canonical label: resolves by prefix, so it DOES need an alias.
+  const s = clone();
+  const plan = s['Planogram'];
+  let hits = 0;
+  for (const row of plan) {
+    for (let c = 0; c < row.length; c++) {
+      // The grid's own label is the shortened "PETER STUY REMIX", which already
+      // has an alias. Replace it with a different shortening that does not.
+      if (String(row[c]).trim().toUpperCase() === 'PETER STUY REMIX') {
+        row[c] = 'PETER STUYVESANT REM'; hits++;
+      }
+    }
+  }
+  const d = diffPlanogram(s, db);
+  const posOk = d.errors.every(e => !/nothing on Full Stock List matches/.test(e));
+  check(hits > 0 && posOk && d.newAliases.has('PETER STUYVESANT REM'),
+    'a shortened label resolves by prefix and IS registered as an alias, so it keeps working',
+    JSON.stringify([...d.newAliases.keys()]));
 }
 
 // ---------------------------------------------------------------------------

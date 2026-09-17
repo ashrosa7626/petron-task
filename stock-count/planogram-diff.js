@@ -210,6 +210,10 @@ export function resolveGrid(grid, products, aliases) {
 
   for (const [cell, label] of grid) {
     const u = upper(label);
+    // A label that IS the product's own name needs no alias — it resolves on
+    // its own, here and in diff_xlsx_vs_db.py. An alias exists for the names
+    // that are not canonical: "RED Winston" and "B&H".
+    const itsOwnName = byDesc.has(u) || byShort.has(u);
     let pid = byAlias.get(u) ?? byDesc.get(u) ?? byShort.get(u) ?? null;
     if (!pid) {
       // A unique prefix match is how the workbook's shorter labels resolve.
@@ -223,7 +227,10 @@ export function resolveGrid(grid, products, aliases) {
       continue;
     }
     facings.set(cell, pid);
-    if (!byAlias.has(u)) newAliases.set(label, pid);
+    // Proposing an alias for a name that already works would mean a freshly
+    // downloaded file came back with changes in it, and then nobody could tell
+    // an untouched round trip from a real edit.
+    if (!byAlias.has(u) && !itsOwnName) newAliases.set(label, pid);
   }
   return { facings, unresolved, newAliases };
 }
