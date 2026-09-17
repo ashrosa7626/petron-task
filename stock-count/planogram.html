@@ -536,7 +536,28 @@ function describe(e) {
   return 'Could not save: ' + esc(m);
 }
 
-const boom = res => { if (res.error) throw new Error(res.error.message); return res.data; };
+/* An RLS refusal is NOT an error.
+
+   PostgREST answers a write that matches no row with 200 and an empty array,
+   so `res.error` is null and everything looks fine. That is how this page
+   reported "Saved" while the database was untouched — the same shape as the
+   bug where an authenticated read came back empty instead of forbidden.
+
+   So every write says how many rows it expects to come back, and getting
+   fewer is a failure. Chaining .select() is what makes them come back at all;
+   without it the count is always zero. */
+function boom(res, what, expect) {
+  if (res.error) throw new Error(`${what}: ${res.error.message}`);
+  const got = (res.data || []).length;
+  if (expect !== undefined && got < expect) {
+    throw new Error(
+      `${what}: the database accepted the request but changed ${got} row` +
+      `${got === 1 ? '' : 's'} instead of ${expect}. That is row level security ` +
+      `refusing it silently — either 13_planogram_editing.sql has not been run, ` +
+      `or this account is not a supervisor or lead.`);
+  }
+  return res.data;
+}
 
 /* Order matters. Products first, because a facing has a foreign key to one;
    the new version last, because flipping it active is what makes the change
@@ -567,9 +588,11 @@ async function apply(d) {
   for (const row of byId.values()) {
     if (ctx.products.has(row.product_id)) {
       const { product_id, ...rest } = row;
-      boom(await db.from('product').update(rest).eq('product_id', product_id).select('product_id'));
+      boom(await db.from('product').update(rest).eq('product_id', product_id).select('product_id'),
+        `updating ${product_id}`, 1);
     } else {
-      boom(await db.from('product').insert(row).select('product_id'));
+      boom(await db.from('product').insert(row).select('product_id'),
+        `adding ${row.product_id}`, 1);
     }
   }
 
@@ -577,7 +600,7 @@ async function apply(d) {
   if (d.newAliases.size) {
     boom(await db.from('product_alias').upsert(
       [...d.newAliases.entries()].map(([alias, product_id]) => ({ alias, product_id })),
-      { onConflict: 'alias' }));
+      { onConflict: 'alias' }).select('alias'), 'saving grid labels', d.newAliases.size);
   }
 
   if (!d.shelfChanged) return;
@@ -589,25 +612,30 @@ async function apply(d) {
     `${d.moved.length} facing${d.moved.length === 1 ? '' : 's'}`
   ].filter(Boolean).join(' ') + ` · ${ctx.me.name}`;
 
-  const version = boom(await db.from('planogram_version').insert({
+  const vrows = boom(await db.from('planogram_version').insert({
     branch_id: ctx.branchId, status: 'draft', note
-  }).select('version_id').single());
+  }).select('version_id'), 'creating the new version', 1);
+  const version = vrows[0];
 
   const rows = [...d.facings.entries()].map(([cell, product_id]) => {
     const [shelf, position] = cell.split(':');
     return { version_id: version.version_id, shelf, position: Number(position), product_id };
   });
   for (let i = 0; i < rows.length; i += 200) {
-    boom(await db.from('planogram_facing').insert(rows.slice(i, i + 200)).select('shelf'));
+    const batch = rows.slice(i, i + 200);
+    boom(await db.from('planogram_facing').insert(batch).select('shelf'),
+      `writing facings ${i + 1}-${i + batch.length}`, batch.length);
   }
 
   // Archive first: planogram_version_one_active would reject two active rows,
   // and it is better to be briefly without an active version than to have the
   // insert rejected and leave the old one silently still in charge.
   boom(await db.from('planogram_version').update({ status: 'archived' })
-    .eq('version_id', ctx.versionId).select('version_id'));
+    .eq('version_id', ctx.versionId).select('version_id'),
+    `archiving version ${ctx.versionId}`, 1);
   boom(await db.from('planogram_version').update({ status: 'active' })
-    .eq('version_id', version.version_id).select('version_id'));
+    .eq('version_id', version.version_id).select('version_id'),
+    `activating version ${version.version_id}`, 1);
 }
 
 init().catch(e => { console.error(e); setStatus('Failed to load: ' + esc(e.message), 'err'); });
