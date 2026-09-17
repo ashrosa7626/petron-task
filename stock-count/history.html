@@ -106,13 +106,17 @@
     .voidbox .bar{margin-bottom:0}
     .bar{display:flex;gap:9px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
     .bar .grow{flex:1}
+    /* Room for the menu button the sidebar puts at top-left. It is the only
+       way out of a page now — the old back links went one place each, and from
+       inside the cigarette module there was no route to the rest of the app. */
+    .sb-gap{width:44px;flex-shrink:0}
     [hidden]{display:none !important}
   </style>
 </head>
 <body>
 
 <div class="topbar">
-  <a href="start.html">&larr; Count</a>
+  <div class="sb-gap"></div>
   <div class="topbar-title"><span class="br" id="brLabel">Safari</span> Count Results</div>
   <div class="spacer"><a href="import-sales.html" id="lnkImport">Import sales</a><button class="lnk" id="btnBack" hidden>All counts</button></div>
 </div>
@@ -215,9 +219,15 @@ async function init() {
 
   const branches = brRes.data || [];
   const norm = s => String(s || '').toLowerCase().replace(/[^a-z]/g, '');
-  const match = branches.find(b => norm(b.branch_id) === norm(selected) || norm(b.name).includes(norm(selected)))
-    || branches[0];
-  if (!match) return setStatus('No branches configured.', true);
+  /* Named branch only — never `|| branches[0]`.
+     That fallback meant a branch with no match silently showed the first
+     branch's counts and restocks under its own name. History must belong to
+     exactly one branch or it is worse than no history. */
+  const match = branches.find(b => norm(b.branch_id) === norm(selected) || norm(b.name).includes(norm(selected)));
+  if (!match) {
+    return setStatus(`No branch called "${esc(selected)}" is configured, so there is no history ` +
+      `to show. Switch branch in the menu.`, true);
+  }
   ctx.branchId = match.branch_id;
   ctx.branchName = match.name;
   ctx.products = new Map((prodRes.data || []).map(p => [p.product_id, p]));

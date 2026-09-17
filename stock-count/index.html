@@ -12,7 +12,7 @@
 <body>
 
 <div class="topbar">
-  <a href="start.html">&larr; Count</a>
+  <div class="sb-gap"></div>
   <div class="topbar-title"><span class="br" id="brLabel">Safari</span> <span id="pgLabel">Planogram</span></div>
   <div class="zoomctl">
     <button class="zbtn" id="zOut" title="Zoom out">&minus;</button>
@@ -171,7 +171,7 @@ const isDone = pid => {
 let grid = null;
 
 /* ============================ render ============================ */
-function render(facings, products, version, branches, fellBack) {
+function render(facings, products, version, branches) {
   grid = createGrid({
     scroller: el('scroller'),
     grid: el('grid'),
@@ -195,12 +195,12 @@ function render(facings, products, version, branches, fellBack) {
 
   wireInput();
   syncAll();
-  paintMeta(version, branches, fellBack, derived, facings);
+  paintMeta(version, branches, derived, facings);
   grid.log();
   window.lines = lines;
 }
 
-function paintMeta(version, branches, fellBack, derived, facings) {
+function paintMeta(version, branches, derived, facings) {
   const branchName = (branches.find(b => b.branch_id === version.branch_id) || {}).name || version.branch_id;
   const splitCount = new Set(grid.blocks.filter(b => b.regionTotal > 1).map(b => b.productId)).size;
   const chips = [];
@@ -222,7 +222,6 @@ function paintMeta(version, branches, fellBack, derived, facings) {
   if (grid.missingProducts.length) {
     chips.push(`<div class="chip warn">${grid.missingProducts.length} with no product row</div>`);
   }
-  if (fellBack) chips.push(`<div class="chip warn">showing ${esc(branchName)}</div>`);
   el('meta').innerHTML = chips.join('');
   paintStorageChip();      // paintMeta rewrites the bar; the warning outranks it
   el('brLabel').textContent = session ? (session.branch_name || branchName) : branchName;
@@ -412,13 +411,20 @@ async function load() {
   const versions = verRes.data || [], branches = brRes.data || [];
   if (!versions.length) return setStatus('No active planogram version found.', true);
 
-  let version = null, fellBack = false;
+  /* A session pins the version it was started against. Without one, the branch
+     decides — and only the branch that was actually asked for. There is no
+     falling back to another branch's shelf: the count is blind, so somebody
+     counting Safari's layout under a Nilai Desa Jati heading could not tell. */
+  let version = null;
   if (session) version = versions.find(v => v.version_id === session.version_id) || null;
   if (!version) {
     const norm = s => String(s || '').toLowerCase().replace(/[^a-z]/g, '');
     const match = branches.find(b => norm(b.branch_id) === norm(selected) || norm(b.name).includes(norm(selected)));
-    version = (match && versions.find(v => v.branch_id === match.branch_id)) || versions[0];
-    fellBack = !match || version.branch_id !== (match && match.branch_id);
+    version = (match && versions.find(v => v.branch_id === match.branch_id)) || null;
+  }
+  if (!version) {
+    return setStatus(`${selected} has no cigarette planogram, so there is no shelf to show. ` +
+      `Switch branch in the menu.`, true);
   }
 
   const [facRes, prodRes] = await Promise.all([
@@ -445,10 +451,11 @@ async function load() {
   }
 
   render(facings, new Map((prodRes.data || []).map(p => [p.product_id, p])),
-    version, branches, fellBack);
+    version, branches);
 }
 
 load().catch(e => { console.error(e); setStatus('Failed to load: ' + e.message, true); });
 </script>
+<script src="../sidebar.js"></script>
 </body>
 </html>

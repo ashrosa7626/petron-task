@@ -36,6 +36,11 @@ body{background:var(--p-bg);color:var(--p-text);font-family:var(--font);font-siz
 .topbar a{color:var(--p-text2);text-decoration:none;font-size:0.85rem;white-space:nowrap}
 .topbar a:hover{color:var(--p-text)}
 
+/* Room for the menu button the sidebar puts at top-left. It is the only way
+   out of a page now: the old back links went one place each, so from inside
+   the cigarette module there was no route to the rest of the app at all. */
+.sb-gap{width:44px;flex-shrink:0}
+
 .zoomctl{display:flex;gap:5px;align-items:center}
 .zbtn{background:var(--p-btn-sec);border:1px solid var(--p-border);color:var(--p-text);border-radius:8px;
       width:34px;height:34px;font-size:1rem;font-weight:700;cursor:pointer;font-family:var(--font);

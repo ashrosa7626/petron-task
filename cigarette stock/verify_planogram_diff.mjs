@@ -20,14 +20,9 @@ const check = (ok, msg, extra) => {
 // Same DOM shim the xlsx test uses, so xlsx.js runs unmodified.
 await import('./xlsx_dom_shim.mjs');
 
-const { readXlsx } = await import('../stock-count/xlsx.js');
-const { diffPlanogram, expandPositions, formatPositions, isActive } =
+const { readXlsx, writeXlsx } = await import('../stock-count/xlsx.js');
+const { diffPlanogram, buildWorkbookRows, expandPositions, formatPositions, isActive } =
   await import('../stock-count/planogram-diff.js');
-
-// ---------------------------------------------------------------------------
-const WB = new URL('./CIGARETTES PLANOGRAM.xlsx', import.meta.url);
-const raw = readFileSync(WB);
-const sheets = await readXlsx(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength));
 
 const KEY = readFileSync(new URL('../app.js', import.meta.url), 'utf8').match(/eyJ[A-Za-z0-9_.-]+/)[0];
 const get = async p => {
@@ -53,11 +48,26 @@ for (const l of await get('stock_count_line?select=product_id')) {
 console.log(`\nactive version ${version.version_id} — ${db.products.size} products, ` +
   `${db.aliases.size} aliases, ${db.facings.size} facings\n`);
 
+/* The baseline is GENERATED from the database, not read from the repo's
+   CIGARETTES PLANOGRAM.xlsx.
+
+   That file was the source of truth while the only way to change the shelf was
+   to edit it and run a migration. The editor page changed that: the database is
+   now authoritative and the workbook is a snapshot, which drifts the moment
+   anyone edits a PLU in the browser — as it already has. Asserting against the
+   stale file would fail for the right reason and the wrong purpose.
+
+   What still has to hold is the round trip: download, upload unchanged, no
+   diff. Generating the baseline the same way the download button does is the
+   only way to test that honestly. */
+const wb = await writeXlsx(buildWorkbookRows(db));
+const sheets = await readXlsx(await wb.arrayBuffer());
+
 // ---------------------------------------------------------------------------
-console.log('the workbook and the database agree today\n');
+console.log('a freshly generated workbook is a no-op\n');
 // ---------------------------------------------------------------------------
 const base = diffPlanogram(sheets, db);
-check(base.errors.length === 0, 'the real workbook passes every validation',
+check(base.errors.length === 0, 'it passes every validation',
   base.errors.slice(0, 3).join(' | '));
 check(base.moved.length === 0, 'no facing differs from the database', base.moved.length);
 check(base.added.length === 0 && base.deactivated.length === 0,
@@ -65,9 +75,25 @@ check(base.added.length === 0 && base.deactivated.length === 0,
   `+${base.added.length} -${base.deactivated.length}`);
 check(base.plu.length === 0, 'no PLU differs', JSON.stringify(base.plu.slice(0, 2)));
 check(base.empty, 'so uploading it untouched is a no-op — the baseline the editor needs');
-check(base.after.facings === 162 && base.after.products === 54,
-  'and it still describes 54 products across 162 facings',
+check(base.after.facings === db.facings.size &&
+      base.after.products === new Set(db.facings.values()).size,
+  `and it describes the same shelf: ${new Set(db.facings.values()).size} products ` +
+  `across ${db.facings.size} facings`,
   `${base.after.products} / ${base.after.facings}`);
+
+// The repo's workbook is a snapshot, kept for the xlsx parser tests. Report how
+// far it has drifted rather than asserting it has not — drift is expected now.
+{
+  const raw = readFileSync(new URL('./CIGARETTES PLANOGRAM.xlsx', import.meta.url));
+  const old = await readXlsx(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength));
+  const d = diffPlanogram(old, db);
+  const drift = d.plu.length + d.added.length + d.deactivated.length + d.moved.length;
+  console.log(drift
+    ? `     note: the repo's CIGARETTES PLANOGRAM.xlsx is ${drift} change(s) behind the ` +
+      `database (${d.plu.map(p => p.product_id).join(', ') || 'no PLUs'}). Expected — the ` +
+      `editor writes to the database, and that file is now only a snapshot.`
+    : `     note: the repo's CIGARETTES PLANOGRAM.xlsx still matches the database.`);
+}
 
 // ---------------------------------------------------------------------------
 console.log('\nediting a PLU — the thing Rosa asked for first\n');
@@ -88,14 +114,18 @@ const rowOf = (s, pid) => {
   const s = clone();
   const [rows, , pluCol] = stockCol(s, 'PLU');
   const r = rowOf(s, '100734');                       // Mevius Sky Blue
-  rows[r][pluCol] = '4902210200804';                  // the 13-digit reading both scans gave
+  // Derived from whatever is there now, never a literal: a fixed value silently
+  // became a no-op the day that PLU was corrected in the database for real.
+  const was = String(rows[r][pluCol]);
+  const now = was === '490221200804' ? '4902210200804' : '490221200804';
+  rows[r][pluCol] = now;
   const d = diffPlanogram(s, db);
   check(d.errors.length === 0, 'a PLU edit passes validation', d.errors.join(' | '));
   check(d.plu.length === 1 && d.plu[0].product_id === '100734',
     'exactly one PLU change is reported', JSON.stringify(d.plu));
-  check(d.plu[0].to === '4902210200804' && d.plu[0].from === '490221200804',
+  check(d.plu[0].to === now && d.plu[0].from === was,
     'with both the old and the new value, so it can be read before it is applied',
-    `${d.plu[0].from} -> ${d.plu[0].to}`);
+    `${d.plu[0] && d.plu[0].from} -> ${d.plu[0] && d.plu[0].to}`);
   check(d.shelfChanged === false,
     'and it does NOT change the shelf, so no new planogram version is made');
 }
@@ -179,9 +209,10 @@ console.log('\nadding a product\n');
   let hits = 0;
   for (const row of plan) {
     for (let c = 0; c < row.length; c++) {
-      // The grid's own label is the shortened "PETER STUY REMIX", which already
-      // has an alias. Replace it with a different shortening that does not.
-      if (String(row[c]).trim().toUpperCase() === 'PETER STUY REMIX') {
+      // The generated grid uses the short name. Shorten it further into
+      // something that is nobody's name but still prefix-matches exactly one
+      // description — that is what an alias is for.
+      if (String(row[c]).trim().toUpperCase() === 'PETER STUYVESANT REMIX') {
         row[c] = 'PETER STUYVESANT REM'; hits++;
       }
     }
@@ -216,9 +247,8 @@ console.log('\nremoving a product — never a delete\n');
   const gone = d.deactivated.find(x => x.product_id === '100760');
   check(!!gone, 'it is reported as deactivated, not deleted',
     JSON.stringify(d.deactivated.map(x => x.product_id)));
-  check(gone && /no facings/.test(gone.why || ''),
-    'and the reason is stated — a product with no facings is off the shelf even ' +
-    'when the older workbook has no Active column to say so', gone && gone.why);
+  check(gone && /Active = FALSE/.test(gone.why || ''),
+    'the reason names the Active column, since that is what was set', gone && gone.why);
   check(gone && gone.counts > 0,
     'the number of historical count lines still referencing it is shown, ' +
     'because those must keep resolving', gone && gone.counts);
@@ -226,6 +256,30 @@ console.log('\nremoving a product — never a delete\n');
         d.moved.every(m => m.after === null),
     'its facings are freed and nothing takes them',
     `${d.moved.length} freed, was at ${was}`);
+}
+
+// Clearing the grid ALONE has to remove it too. That is how the older workbook
+// said it, having no Active column — and it is the truth of the matter either
+// way: a product with no facings never appears on a count, so leaving it active
+// would have the sales importer writing it a zero row that reconciles against
+// nothing.
+{
+  const s = clone();
+  const [rows, , posCol] = stockCol(s, 'POSITIONS');
+  rows[rowOf(s, '100760')][posCol] = '';               // Active left TRUE on purpose
+  const plan = s['Planogram'];
+  for (const row of plan) {
+    for (let c = 0; c < row.length; c++) {
+      if (String(row[c]).trim().toUpperCase().startsWith('LD MENTHOL')) row[c] = '';
+    }
+  }
+  const d = diffPlanogram(s, db);
+  const gone = d.deactivated.find(x => x.product_id === '100760');
+  check(d.errors.length === 0 && !!gone, 'clearing only the grid removes it as well',
+    d.errors.join(' | ') || JSON.stringify(d.deactivated.map(x => x.product_id)));
+  check(gone && /no facings/.test(gone.why || ''),
+    'and the reason says so, rather than claiming a column was set that was not',
+    gone && gone.why);
 }
 
 // ---------------------------------------------------------------------------

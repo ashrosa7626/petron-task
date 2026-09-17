@@ -88,6 +88,10 @@
     .btn:disabled{opacity:0.45;cursor:default}
     .bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px}
     .bar .grow{flex:1}
+    /* Room for the menu button the sidebar puts at top-left. It is the only
+       way out of a page now — the old back links went one place each, and from
+       inside the cigarette module there was no route to the rest of the app. */
+    .sb-gap{width:44px;flex-shrink:0}
     [hidden]{display:none !important}
     .mono{font-family:var(--mono)}
 
@@ -149,7 +153,7 @@
 <body>
 
 <div class="topbar">
-  <a href="start.html">&larr; Count</a>
+  <div class="sb-gap"></div>
   <div class="topbar-title"><span class="br" id="brLabel">Safari</span> Import POS Sales</div>
   <div class="who" id="who"></div>
 </div>
@@ -635,9 +639,17 @@ async function init() {
   el('brLabel').textContent = selected;
   const { data: branches } = await db.from('branch').select('branch_id,name');
   const norm = s => String(s || '').toLowerCase().replace(/[^a-z]/g, '');
+  /* The named branch or nothing. `|| branches[0]` here would have written a
+     day's sales against the wrong branch_id — and pos_sales_daily upserts on
+     (branch_id, sale_date, product_id), so it would land quietly and reconcile
+     against counts that were never taken from that shelf. */
   const match = (branches || []).find(b =>
-    norm(b.branch_id) === norm(selected) || norm(b.name).includes(norm(selected))) || (branches || [])[0];
-  if (!match) return note('parseNotes', 'err', 'No branches configured.');
+    norm(b.branch_id) === norm(selected) || norm(b.name).includes(norm(selected)));
+  if (!match) {
+    return note('parseNotes', 'err',
+      `No branch called "${esc(selected)}" is configured, so there is nowhere to file these ` +
+      `sales. Switch branch in the menu.`);
+  }
   ctx.branchId = match.branch_id;
   ctx.branchName = match.name;
 

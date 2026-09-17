@@ -45,13 +45,17 @@
     .note.err{background:rgba(255,77,79,0.08);border:1px solid rgba(255,77,79,0.3);color:var(--p-red)}
     .note.ok{background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.3);color:var(--p-green)}
     .note b{font-weight:700}
+    /* Room for the menu button the sidebar puts at top-left. It is the only
+       way out of a page now — the old back links went one place each, and from
+       inside the cigarette module there was no route to the rest of the app. */
+    .sb-gap{width:44px;flex-shrink:0}
     [hidden]{display:none !important}
   </style>
 </head>
 <body>
 
 <div class="topbar">
-  <a href="../index.html">&larr; Back</a>
+  <div class="sb-gap"></div>
   <div class="topbar-title"><span class="br" id="brLabel">Safari</span> Cigarette Count</div>
   <div class="spacer"><a href="history.html">Results</a></div>
 </div>
@@ -153,6 +157,17 @@ function updateDateHint() {
   el('dateHint').innerHTML = msg;
 }
 
+/* No branch may ever stand in for another.
+
+   Every one of these pages used to fall back to whatever branch DID have a
+   planogram when the selected one had none — with a warning, but still showing
+   its grid, its counts and its history. Nilai Desa Jati has never had a
+   planogram, so picking it showed Safari's data under a Nilai Desa Jati
+   heading. A count taken from that screen would have been filed against the
+   wrong branch, and no later reconciliation could tell.
+
+   So the fallback is gone. If the selected branch has no active planogram, the
+   page says so and stops. */
 async function init() {
   let selected = 'Safari';
   try { selected = localStorage.getItem('selectedBranch') || 'Safari'; } catch (e) { /* storage may be unreachable */ }
@@ -174,11 +189,12 @@ async function init() {
   const branches = brRes.data || [];
   const norm = s => String(s || '').toLowerCase().replace(/[^a-z]/g, '');
   const match = branches.find(b => norm(b.branch_id) === norm(selected) || norm(b.name).includes(norm(selected)));
-  let version = match && versions.find(v => v.branch_id === match.branch_id);
+  const version = match && versions.find(v => v.branch_id === match.branch_id);
   if (!version) {
-    version = versions[0];
-    if (!version) return fail('No active planogram version. Seed one before counting.');
-    note('warn', `No active planogram for <b>${selected}</b> — using <b>${version.branch_id}</b>.`);
+    return fail(`<b>${escapeHtml(selected)}</b> has no cigarette planogram yet, so there is ` +
+      `nothing to count here. Counts, restocks and history all belong to a branch and will ` +
+      `not be shown from another one. Switch branch in the menu, or set this branch's shelf ` +
+      `up on the Edit the Shelf page.`);
   }
   ctx.branchId = version.branch_id;
   ctx.versionId = version.version_id;

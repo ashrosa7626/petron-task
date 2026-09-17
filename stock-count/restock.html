@@ -39,7 +39,7 @@
 <body>
 
 <div class="topbar">
-  <a href="start.html">&larr; Back</a>
+  <div class="sb-gap"></div>
   <div class="topbar-title"><span class="br" id="brLabel">Safari</span> <span id="pgLabel">Restock</span></div>
   <div class="zoomctl">
     <button class="zbtn" id="zOut" title="Zoom out">&minus;</button>
@@ -162,7 +162,7 @@ const ddmmyyyy = iso => { const [y, m, d] = iso.split('-'); return `${d}/${m}/${
    difference between this screen and the count. */
 let adds = {};
 let grid = null;
-let ctx = { branchId: null, branchName: '', versionId: null, lastCount: null, fellBack: false };
+let ctx = { branchId: null, branchName: '', versionId: null, lastCount: null };
 let entry = { staff: '', date: '', note: '' };
 
 const DRAFT = 'cig_restock_draft';
@@ -491,7 +491,6 @@ function paintMeta() {
   // The restock still submits — only the local draft is lost — but a device that
   // cannot save anything should not look like one that can.
   if (storageFull) chips.push(`<div class="chip warn">device storage full &mdash; draft not kept</div>`);
-  if (ctx.fellBack) chips.push(`<div class="chip warn">showing ${esc(ctx.branchName)}</div>`);
   el('meta').innerHTML = chips.join('');
   el('brLabel').textContent = ctx.branchName || 'Safari';
 }
@@ -518,15 +517,18 @@ async function load() {
   // active planogram, otherwise whatever does, said out loud.
   const norm = s => String(s || '').toLowerCase().replace(/[^a-z]/g, '');
   const match = branches.find(b => norm(b.branch_id) === norm(selected) || norm(b.name).includes(norm(selected)));
-  let version = match && versions.find(v => v.branch_id === match.branch_id);
-  ctx.fellBack = !version;
-  const fellBack = ctx.fellBack;
-  if (!version) version = versions[0];
+  /* The asked-for branch or nothing. Restocks feed add_in for a branch's own
+     reconciliation, so one filed against the wrong branch would move a number
+     nobody could trace back. */
+  const version = match && versions.find(v => v.branch_id === match.branch_id);
+  if (!version) {
+    return setStatus(`${selected} has no cigarette planogram, so there is no shelf to restock. ` +
+      `Switch branch in the menu.`, true);
+  }
 
   ctx.branchId = version.branch_id;
   ctx.versionId = version.version_id;
   ctx.branchName = (branches.find(b => b.branch_id === version.branch_id) || {}).name || version.branch_id;
-  if (fellBack) note('warn', `No active planogram for <b>${esc(selected)}</b> — restocking <b>${esc(ctx.branchName)}</b>.`);
 
   const [facRes, prodRes, lastRes] = await Promise.all([
     db.from('planogram_facing').select('shelf,position,product_id').eq('version_id', version.version_id),
@@ -563,5 +565,6 @@ async function load() {
 
 load().catch(e => { console.error(e); setStatus('Failed to load: ' + e.message, true); });
 </script>
+<script src="../sidebar.js"></script>
 </body>
 </html>

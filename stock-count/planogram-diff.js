@@ -358,3 +358,55 @@ export function diffPlanogram(sheets, db) {
 
 const unkey = k => { const [s, p] = k.split(':'); return [s, Number(p)]; };
 const pretty = k => { const [s, p] = k.split(':'); return s + p; };
+
+/* ------------------------------------------------------------------------
+   The workbook the editor hands out, built from the database.
+
+   Lives here rather than in the page so the tests use the SAME builder the
+   download button does. The property that matters — download, upload
+   unchanged, get no diff — is only meaningful if both halves agree, and two
+   implementations would drift the first time a column moved.
+   ------------------------------------------------------------------------ */
+export function buildWorkbookRows(db) {
+  const shelves = [...new Set([...db.facings.keys()].map(k => k.split(':')[0]))].sort();
+  const maxPos = Math.max(0, ...[...db.facings.keys()].map(k => Number(k.split(':')[1])));
+
+  const byProduct = new Map();
+  for (const [cell, pid] of db.facings) {
+    if (!byProduct.has(pid)) byProduct.set(pid, []);
+    const [sh, p] = cell.split(':');
+    byProduct.get(pid).push([sh, Number(p)]);
+  }
+
+  // The grid carries the SHORT NAME — what a person reads on the shelf, and
+  // what the count screen prints on the block.
+  const nameOf = pid => {
+    const p = db.products.get(pid);
+    return (p && (p.short_name || p.pos_description)) || pid;
+  };
+
+  const planRows = [['', 'Planogram'], ['', '']];
+  for (let i = 1; i <= maxPos; i++) planRows[1].push(String(i));
+  for (const sh of shelves) {
+    const row = ['', sh];
+    for (let i = 1; i <= maxPos; i++) {
+      row.push(db.facings.has(sh + ':' + i) ? nameOf(db.facings.get(sh + ':' + i)) : '');
+    }
+    planRows.push(row);
+  }
+
+  const stockRows = [['', ...EDITOR_COLUMNS]];
+  const order = [...db.products.values()].sort((a, b) =>
+    String(a.short_name || a.pos_description).localeCompare(String(b.short_name || b.pos_description)));
+  for (const p of order) {
+    const cells = byProduct.get(p.product_id) || [];
+    // No facings means off the shelf, so say FALSE rather than leaving a blank
+    // that reads like somebody forgot.
+    stockRows.push(['', p.pos_description || '', p.product_id, p.plu || '',
+      p.short_name || '', p.brand || '',
+      (p.active && cells.length) ? 'TRUE' : 'FALSE',
+      formatPositions(cells)]);
+  }
+
+  return [{ name: 'Planogram', rows: planRows }, { name: 'Full Stock List', rows: stockRows }];
+}

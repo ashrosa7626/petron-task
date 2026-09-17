@@ -82,13 +82,17 @@
     .new{color:var(--p-amber);font-weight:700}
     ul.errs{margin:6px 0 0 18px}
     ul.errs li{margin-bottom:6px;line-height:1.55}
+    /* Room for the menu button the sidebar puts at top-left. It is the only
+       way out of a page now — the old back links went one place each, and from
+       inside the cigarette module there was no route to the rest of the app. */
+    .sb-gap{width:44px;flex-shrink:0}
     [hidden]{display:none !important}
   </style>
 </head>
 <body>
 
 <div class="topbar">
-  <a href="start.html">&larr; Count</a>
+  <div class="sb-gap"></div>
   <div class="topbar-title"><span class="br" id="brLabel">Safari</span> Edit the Shelf</div>
   <div class="spacer"><button class="lnk" id="btnOut" hidden>Sign out</button></div>
 </div>
@@ -157,7 +161,7 @@
 
 <script type="module">
 import { readXlsx, writeXlsx } from './xlsx.js';
-import { diffPlanogram, formatPositions, EDITOR_COLUMNS } from './planogram-diff.js';
+import { diffPlanogram, buildWorkbookRows } from './planogram-diff.js';
 import { deriveBlocks } from './planogram.js';
 
 const SUPABASE_URL = 'https://vwffiuciogthfzekkkkz.supabase.co';
@@ -251,14 +255,16 @@ async function init() {
   const norm = s => String(s || '').toLowerCase().replace(/[^a-z]/g, '');
   const match = branches.find(b => norm(b.branch_id) === norm(selected) || norm(b.name).includes(norm(selected)));
   const versions = verRes.data || [];
-  const active = versions.find(v => v.status === 'active' &&
-    (!match || v.branch_id === match.branch_id)) || versions.find(v => v.status === 'active');
+  /* The selected branch's active version, and no other. Falling through to
+     "any active version" would have let someone edit Safari's shelf while the
+     page said Nilai Desa Jati. */
+  const active = match && versions.find(v => v.status === 'active' && v.branch_id === match.branch_id);
 
   if (!active) {
     // Nilai Desa Jati has never had one. Say so rather than failing blankly.
     return setStatus(
-      `No active planogram for <b>${esc(selected)}</b>. This page can create the first one, but ` +
-      `that is not built yet &mdash; it currently edits an existing shelf rather than starting one.`, 'warn');
+      `No active planogram for <b>${esc(selected)}</b>. This page edits an existing shelf; ` +
+      `creating a branch's first one is not built yet. Switch branch in the menu.`, 'warn');
   }
   ctx.branchId = active.branch_id;
   ctx.versionId = active.version_id;
@@ -311,47 +317,11 @@ function renderVersions(versions) {
 /* Written from the database, never from a file. That is the point: you cannot
    edit a stale copy if the copy is minted fresh each time. */
 el('btnDl').addEventListener('click', async () => {
-  const shelves = [...new Set([...ctx.facings.keys()].map(k => k.split(':')[0]))].sort();
-  const maxPos = Math.max(...[...ctx.facings.keys()].map(k => Number(k.split(':')[1])));
-
-  const byProduct = new Map();
-  for (const [cell, pid] of ctx.facings) {
-    if (!byProduct.has(pid)) byProduct.set(pid, []);
-    const [s, p] = cell.split(':');
-    byProduct.get(pid).push([s, Number(p)]);
-  }
-
-  // Grid: a product's SHORT NAME, because that is what a person reads on the
-  // shelf and what the count screen shows.
-  const nameOf = pid => {
-    const p = ctx.products.get(pid);
-    return (p && (p.short_name || p.pos_description)) || pid;
-  };
-  const planRows = [['', 'Planogram'], ['', '']];
-  for (let i = 1; i <= maxPos; i++) planRows[1].push(String(i));
-  for (const sh of shelves) {
-    const row = ['', sh];
-    for (let i = 1; i <= maxPos; i++) row.push(ctx.facings.has(sh + ':' + i) ? nameOf(ctx.facings.get(sh + ':' + i)) : '');
-    planRows.push(row);
-  }
-
-  const stockRows = [['', ...EDITOR_COLUMNS]];
-  const order = [...ctx.products.values()].sort((a, b) =>
-    String(a.short_name || a.pos_description).localeCompare(String(b.short_name || b.pos_description)));
-  for (const p of order) {
-    const cells = byProduct.get(p.product_id) || [];
-    // A product with no facings is off the shelf; show it as such rather than
-    // leaving a blank that reads like an oversight.
-    stockRows.push(['', p.pos_description || '', p.product_id, p.plu || '',
-      p.short_name || '', p.brand || '',
-      (p.active && cells.length) ? 'TRUE' : 'FALSE',
-      formatPositions(cells)]);
-  }
-
-  const blob = await writeXlsx([
-    { name: 'Planogram', rows: planRows },
-    { name: 'Full Stock List', rows: stockRows }
-  ]);
+  // Built by the same function the tests use, so "download then upload
+  // unchanged produces no diff" is a property of one implementation.
+  const blob = await writeXlsx(buildWorkbookRows({
+    products: ctx.products, facings: ctx.facings
+  }));
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = `PLANOGRAM ${ctx.branchName} v${ctx.versionId}.xlsx`.replace(/[\\/:*?"<>|]/g, '-');
