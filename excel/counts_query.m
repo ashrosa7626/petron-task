@@ -32,6 +32,12 @@ let
 
     Resource = "vw_daily_reconciliation",
     Branch   = "SAFARI",
+
+    // This workbook is the CIGARETTE report. The view carries lubes and heated
+    // tobacco too since 15_categories.sql, and without this filter their rows
+    // would land in the Daily sheet — tripling the row count and mixing three
+    // shelves under one trading day. A lubes workbook is a separate file.
+    Category = "CIGARETTES",
     PageSize = 1000,
 
     // The shape the workbook's formulas expect. opening_date, unit_price_used
@@ -45,7 +51,10 @@ let
         "product_id", "plu", "short_name", "pos_description",
         "opening_packs", "add_in", "closing_packs",
         "sold_physical", "sold_pos", "variance_packs",
-        "opening_date", "unit_price_used", "variance_rm"
+        "opening_date", "unit_price_used", "variance_rm",
+        // 18th, added by 15_categories.sql. Kept last so the seventeen above
+        // hold the positions build_workbook.py addresses them by.
+        "category"
     },
 
     // PostgREST caps any response at 1000 rows. At 54 products a day that cap
@@ -64,6 +73,7 @@ let
                     Query = [
                         select    = "*",
                         branch_id = "eq." & Branch,
+                        category  = "eq." & Category,
                         order     = "count_date.asc,short_name.asc",
                         limit     = Text.From(PageSize),
                         offset    = Text.From(Offset)
@@ -126,7 +136,8 @@ let
         {"variance_packs",  Int64.Type},
         {"opening_date",    type date},
         {"unit_price_used", type number},
-        {"variance_rm",     type number}
+        {"variance_rm",     type number},
+        {"category",        type text}
     },
     Typed = Table.TransformColumnTypes(Shaped, TypeMap, "en-US"),
 

@@ -117,6 +117,10 @@
       <div class="hd">1 &middot; Get today&rsquo;s sheet</div>
       <div class="sub">Always start from this, never from an old copy on your desktop. It is written
         from the database as it stands right now, so what you edit is what is live.</div>
+      <div class="row" style="margin-bottom:12px">
+        <label class="lbl" for="fCat" style="margin:0 4px 0 0">Shelf</label>
+        <select class="inp" id="fCat" style="width:auto;margin:0"></select>
+      </div>
       <div class="row">
         <button class="btn pri" id="btnDl">Download the planogram</button>
         <span class="mono" id="dlWhat"></span>
@@ -162,6 +166,9 @@
 <script type="module">
 import { readXlsx, writeXlsx } from './xlsx.js';
 import { diffPlanogram, buildWorkbookRows } from './planogram-diff.js';
+import { currentModule, CATEGORIES, categoryLabel } from './modules.js';
+
+const MOD = currentModule();
 import { deriveBlocks } from './planogram.js';
 
 const SUPABASE_URL = 'https://vwffiuciogthfzekkkkz.supabase.co';
@@ -183,6 +190,9 @@ const setStatus = (msg, kind) => {
 };
 
 const ctx = {
+  // Which shelf is being edited. One at a time: a workbook mixing shelves
+  // could not say which planogram a facing belonged to.
+  category: MOD.categories[0],
   branchId: null, branchName: 'Safari', versionId: null, me: null,
   products: new Map(), aliases: new Map(), facings: new Map(), counts: new Map(),
   diff: null, sheets: null
@@ -243,9 +253,25 @@ async function init() {
   ctx.me = who.me;
   el('btnOut').hidden = false;
 
+  // One shelf at a time. Switching reloads everything, because a workbook and a
+  // diff belong to exactly one planogram.
+  if (!el('fCat').options.length) {
+    el('fCat').innerHTML = Object.keys(CATEGORIES)
+      .map(c => `<option value="${c}">${esc(CATEGORIES[c].label)}</option>`).join('');
+    el('fCat').value = ctx.category;
+    el('fCat').addEventListener('change', () => {
+      ctx.category = el('fCat').value;
+      ctx.diff = null; ctx.sheets = null;
+      el('review').hidden = true;
+      el('readNote').innerHTML = '';
+      el('file').value = '';
+      init();
+    });
+  }
+
   const selected = localStorage.getItem('selectedBranch') || 'Safari';
   const [verRes, brRes] = await Promise.all([
-    db.from('planogram_version').select('version_id,branch_id,status,effective_from,note')
+    db.from('planogram_version').select('version_id,branch_id,status,category,effective_from,note')
       .order('version_id', { ascending: false }),
     db.from('branch').select('branch_id,name')
   ]);
@@ -258,13 +284,17 @@ async function init() {
   /* The selected branch's active version, and no other. Falling through to
      "any active version" would have let someone edit Safari's shelf while the
      page said Nilai Desa Jati. */
-  const active = match && versions.find(v => v.status === 'active' && v.branch_id === match.branch_id);
+  const active = match && versions.find(v => v.status === 'active' &&
+    v.branch_id === match.branch_id && v.category === ctx.category);
 
   if (!active) {
     // Nilai Desa Jati has never had one. Say so rather than failing blankly.
+    el('work').hidden = false;
+    el('status').hidden = false;
     return setStatus(
-      `No active planogram for <b>${esc(selected)}</b>. This page edits an existing shelf; ` +
-      `creating a branch's first one is not built yet. Switch branch in the menu.`, 'warn');
+      `<b>${esc(selected)}</b> has no <b>${esc(categoryLabel(ctx.category).toLowerCase())}</b> ` +
+      `planogram. This page edits an existing shelf; creating a branch's first one is not built ` +
+      `yet. Pick another shelf above, or switch branch in the menu.`, 'warn');
   }
   ctx.branchId = active.branch_id;
   ctx.versionId = active.version_id;
@@ -272,7 +302,8 @@ async function init() {
   el('brLabel').textContent = ctx.branchName;
 
   const [prodRes, aliasRes, facRes, lineRes] = await Promise.all([
-    db.from('product').select('product_id,plu,pos_description,short_name,brand,active'),
+    db.from('product').select('product_id,plu,pos_description,short_name,brand,active,category')
+      .eq('category', ctx.category),
     db.from('product_alias').select('alias,product_id'),
     db.from('planogram_facing').select('shelf,position,product_id').eq('version_id', active.version_id),
     db.from('stock_count_line').select('product_id')
@@ -300,7 +331,7 @@ async function init() {
   el('work').hidden = false;
   el('dlWhat').textContent =
     `version ${active.version_id} · ${new Set(ctx.facings.values()).size} products · ${ctx.facings.size} facings`;
-  renderVersions(versions.filter(v => !match || v.branch_id === ctx.branchId));
+  renderVersions(versions.filter(v => v.branch_id === ctx.branchId && v.category === ctx.category));
 }
 
 function renderVersions(versions) {
@@ -324,7 +355,8 @@ el('btnDl').addEventListener('click', async () => {
   }));
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `PLANOGRAM ${ctx.branchName} v${ctx.versionId}.xlsx`.replace(/[\\/:*?"<>|]/g, '-');
+  a.download = `PLANOGRAM ${categoryLabel(ctx.category)} ${ctx.branchName} v${ctx.versionId}.xlsx`
+    .replace(/[\\/:*?"<>|]/g, '-');
   document.body.appendChild(a);
   a.click();
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
@@ -543,7 +575,10 @@ async function apply(d) {
       pos_description: p.pos_description,
       short_name: p.short_name || p.pos_description,
       brand: p.brand || (p.pos_description || '').split(/\s+/)[0] || null,
-      active: true
+      active: true,
+      // A product added on the lubes sheet is a lube. Without this it would
+      // default to CIGARETTES and start being zero-filled by the wrong report.
+      category: ctx.category
     });
   }
   for (const p of d.plu) upserts.push({ product_id: p.product_id, plu: p.to });

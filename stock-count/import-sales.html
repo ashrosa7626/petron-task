@@ -169,12 +169,23 @@
 
   <div id="stage1">
     <div class="card">
+      <label class="lbl d" for="fCat">Which report is this</label>
+      <select class="inp" id="fCat"></select>
+      <div class="hint">Cigarettes, heated tobacco and lubes print as <b>separate</b> POS reports.
+        This says which one you are loading, and it matters: every product in the chosen category
+        that does not appear in the report is written as having sold <b>0</b>. Choose the wrong one
+        and a whole shelf is recorded as having sold nothing that day.</div>
+    </div>
+
+    <div class="card">
       <label class="lbl d" for="fStaff">Who is importing this</label>
       <input class="inp" id="fStaff" type="text" placeholder="Your name" autocomplete="name">
       <div class="hint">Kept with the day you load, so whoever looks at these numbers later knows
         who to ask. It is a name on the work, not a login &mdash; reading a printed report does not
         need an account.</div>
     </div>
+
+    <div class="hint" id="catNote" style="margin-bottom:12px"></div>
 
     <div class="drop" id="drop">
       <div class="drop-t">Choose the sales PDF</div>
@@ -286,6 +297,9 @@ import {
   parseLines, mergeDuplicates, findBusinessDate, findGrandTotal, identifyReport,
   reconcileTotals, explainShortfall, buildPayload, pluAgrees, CENT
 } from './sales-parse.js';
+import { currentModule, CATEGORIES, categoryLabel } from './modules.js';
+
+const MOD = currentModule();
 
 const SUPABASE_URL = 'https://vwffiuciogthfzekkkkz.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ3ZmZpdWNpb2d0aGZ6ZWtra2t6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4NzcwMTAsImV4cCI6MjA5MTQ1MzAxMH0.OTEyOMn1fmUNV7pR51KMOLsMTNAfytt62uGS_AkQXyw';
@@ -331,6 +345,29 @@ const TESS_LANG = 'https://tessdata.projectnaptha.com/4.0.0';
 // any: it is a note saying who was at the keyboard, which is what is actually
 // wanted when a number looks wrong weeks later.
 const STAFF_KEY = 'pos_import_staff';
+/* The category picker. Changing it after a file is read would leave the
+   preview scoped to the old category, so it reloads the product list and
+   clears anything already parsed rather than quietly disagreeing with itself. */
+const CAT_KEY = 'pos_import_category';
+el('fCat').innerHTML = Object.keys(CATEGORIES)
+  .map(c => `<option value="${c}">${esc(CATEGORIES[c].label)}</option>`).join('');
+try {
+  const saved = localStorage.getItem(CAT_KEY);
+  if (saved && CATEGORIES[saved] && !new URLSearchParams(location.search).has('m')) {
+    ctx.category = saved;
+  }
+} catch (e) { /* storage may be unreachable */ }
+el('fCat').value = ctx.category;
+el('fCat').addEventListener('change', () => {
+  ctx.category = el('fCat').value;
+  try { localStorage.setItem(CAT_KEY, ctx.category); } catch (e) {}
+  ctx.rows = []; ctx.fix = {}; ctx.added = []; ctx.date = null; ctx.grand = null;
+  el('stage2').hidden = true;
+  el('stage1').hidden = false;
+  el('parseNotes').innerHTML = '';
+  init();
+});
+
 el('fStaff').value = localStorage.getItem(STAFF_KEY) || sessionStorage.getItem('staff_name') || '';
 el('fStaff').addEventListener('input', () => {
   localStorage.setItem(STAFF_KEY, el('fStaff').value.trim());
@@ -343,6 +380,10 @@ el('who').textContent = el('fStaff').value;
 
 const ctx = {
   branchId: null, branchName: '', products: new Map(), hasImportedBy: false,
+  // Which shelf's report this is. Defaults to the first category of the module
+  // the page was opened from, so arriving from Cigarette Results preselects
+  // cigarettes rather than making someone choose every time.
+  category: MOD.categories[0],
   rows: [], fix: {}, added: [], date: null, grand: null, fileName: '', source: '',
   dpi: 0, turn: 0
 };
@@ -653,10 +694,21 @@ async function init() {
   ctx.branchId = match.branch_id;
   ctx.branchName = match.name;
 
+  /* Only the chosen category's products.
+
+     buildPayload writes "sold nothing today" for every product it is handed,
+     which is only true within the scope of the report being read. Handing it
+     everything would make a cigarette import write a zero-sales row for all 31
+     lubes and 21 Iluma products too — every day, silently — and their
+     reconciliation would read as total shrinkage. */
   const { data: prods, error } = await db.from('product')
-    .select('product_id,short_name,plu,active').eq('active', true).order('short_name');
+    .select('product_id,short_name,plu,active,category')
+    .eq('active', true).eq('category', ctx.category).order('short_name');
   if (error) return note('parseNotes', 'err', 'Could not read the product list: ' + esc(error.message));
   ctx.products = new Map((prods || []).map(p => [p.product_id, p]));
+  el('catNote').innerHTML = `Reading a <b>${esc(categoryLabel(ctx.category))}</b> report. ` +
+    `<b>${ctx.products.size}</b> products are in that category; any not in the report will be ` +
+    `written as having sold 0. Nothing in another category is touched.`;
 
   // pos_sales_daily grew imported_by in migration 09 and unit_price in 10, both
   // optional and possibly not run. Ask the database rather than assume: sending

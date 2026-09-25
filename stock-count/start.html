@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Start Cigarette Count – Petron Tasks</title>
+  <title>Start a Stock Count – Petron Tasks</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -56,14 +56,15 @@
 
 <div class="topbar">
   <div class="sb-gap"></div>
-  <div class="topbar-title"><span class="br" id="brLabel">Safari</span> Cigarette Count</div>
+  <div class="topbar-title"><span class="br" id="brLabel">Safari</span> <span id="modLabel">Cigarette Count</span></div>
   <div class="spacer"><a href="history.html">Results</a></div>
 </div>
 
 <div class="content">
   <div class="section-hd">Start a count</div>
-  <div class="section-sub">One count per branch per trading day. Packs put onto the shelf
+  <div class="section-sub">One count per shelf per trading day. Packs put onto the shelf
     between counts are recorded separately &mdash; see <b>Restock</b> below.</div>
+  <div class="section-sub" id="modSub" hidden></div>
 
   <div id="notes"></div>
 
@@ -94,7 +95,10 @@
   </div>
 </div>
 
-<script>
+<script type="module">
+import { currentModule, href, categoryLabel, sessionKey, staffKey } from './modules.js';
+
+const MOD = currentModule();
 const SUPABASE_URL = 'https://vwffiuciogthfzekkkkz.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ3ZmZpdWNpb2d0aGZ6ZWtra2t6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4NzcwMTAsImV4cCI6MjA5MTQ1MzAxMH0.OTEyOMn1fmUNV7pR51KMOLsMTNAfytt62uGS_AkQXyw';
 /* Pinned to the anon key, deliberately.
@@ -127,14 +131,18 @@ const ddmmyyyy = iso => {
   const [y, m, d] = iso.split('-');
   return `${d}/${m}/${y}`;
 };
-const defaultTitle = iso => 'Cig Count of ' + ddmmyyyy(iso);
+const defaultTitle = iso => MOD.countTitle(ddmmyyyy(iso));
 
 function note(kind, html) {
   el('notes').insertAdjacentHTML('beforeend', `<div class="note ${kind}">${html}</div>`);
 }
 const clearNotes = () => { el('notes').innerHTML = ''; };
 
-let ctx = { branchId: null, branchName: '', versionId: null };
+/* One entry per category in this module. Tobacco has two — the cigarette
+   gondola and the Iluma cabinet are counted in one sitting — and each gets its
+   own planogram version and its own stock_count row, because each reconciles
+   against its own POS report. */
+let ctx = { branchId: null, branchName: '', cats: [] };
 let titleDirty = false;
 
 el('fTitle').addEventListener('input', () => { titleDirty = true; });
@@ -172,33 +180,54 @@ async function init() {
   let selected = 'Safari';
   try { selected = localStorage.getItem('selectedBranch') || 'Safari'; } catch (e) { /* storage may be unreachable */ }
   el('brLabel').textContent = selected;
+  el('modLabel').textContent = MOD.short + ' Count';
+  document.title = 'Start ' + MOD.short + ' Count – Petron Tasks';
+  // Two shelves counted in one sitting deserves saying so up front.
+  if (MOD.categories.length > 1) {
+    el('modSub').innerHTML = `One sitting covers <b>` +
+      MOD.categories.map(categoryLabel).join('</b> and <b>') + `</b>, counted together. ` +
+      `A button on the count screen switches between them.`;
+    el('modSub').hidden = false;
+  }
 
   const iso = tradingDay();
   el('fDate').value = iso;
   el('fTitle').value = defaultTitle(iso);
-  try { el('fStaff').value = localStorage.getItem('cig_last_staff') || ''; } catch (e) { /* leave it blank */ }
+  try { el('fStaff').value = localStorage.getItem(staffKey(MOD)) || ''; } catch (e) { /* leave it blank */ }
   updateDateHint();
 
   const [verRes, brRes] = await Promise.all([
-    db.from('planogram_version').select('version_id,branch_id').eq('status', 'active'),
+    db.from('planogram_version').select('version_id,branch_id,category').eq('status', 'active'),
     db.from('branch').select('branch_id,name')
   ]);
-  if (verRes.error) return fail('Could not read planogram_version: ' + verRes.error.message);
+  if (verRes.error) return fail('Could not read planogram_version: ' + escapeHtml(verRes.error.message));
 
   const versions = verRes.data || [];
   const branches = brRes.data || [];
   const norm = s => String(s || '').toLowerCase().replace(/[^a-z]/g, '');
   const match = branches.find(b => norm(b.branch_id) === norm(selected) || norm(b.name).includes(norm(selected)));
-  const version = match && versions.find(v => v.branch_id === match.branch_id);
-  if (!version) {
-    return fail(`<b>${escapeHtml(selected)}</b> has no cigarette planogram yet, so there is ` +
-      `nothing to count here. Counts, restocks and history all belong to a branch and will ` +
-      `not be shown from another one. Switch branch in the menu, or set this branch's shelf ` +
-      `up on the Edit the Shelf page.`);
+  if (!match) {
+    return fail(`No branch called <b>${escapeHtml(selected)}</b> is configured. ` +
+      `Switch branch in the menu.`);
   }
-  ctx.branchId = version.branch_id;
-  ctx.versionId = version.version_id;
-  ctx.branchName = (branches.find(b => b.branch_id === version.branch_id) || {}).name || version.branch_id;
+  ctx.branchId = match.branch_id;
+  ctx.branchName = match.name;
+
+  // A version per category. A module whose shelves are not all set up cannot be
+  // counted as one sitting — the toggle would show an empty grid on one side
+  // and there would be no record to submit it against.
+  ctx.cats = MOD.categories.map(cat => ({
+    category: cat,
+    version: versions.find(v => v.branch_id === match.branch_id && v.category === cat) || null
+  }));
+  const missing = ctx.cats.filter(c => !c.version);
+  if (missing.length) {
+    return fail(`<b>${escapeHtml(ctx.branchName)}</b> has no ` +
+      missing.map(m => `<b>${escapeHtml(categoryLabel(m.category).toLowerCase())}</b>`).join(' or ') +
+      ` planogram yet, so there is nothing to count here. Counts, restocks and history all ` +
+      `belong to a branch and a shelf, and will not be shown from another one. Switch branch ` +
+      `in the menu, or set the shelf up on the Edit the Shelf page.`);
+  }
 
   el('btnGo').disabled = false;
   el('btnGo').textContent = 'Start count';
@@ -214,53 +243,80 @@ function fail(msg) {
 
 /* One count per branch per trading day. Show what already exists for the
    chosen date so a second tap resumes rather than surprises. */
-let existing = null;
+/* What already exists for this day, per category.
+
+   A module with two shelves can be half-done: someone submits the cigarettes
+   and the tab dies before Iluma. So each category is checked separately and
+   the page says which. Only when EVERY category is already submitted is there
+   nothing left to do. */
 async function checkExisting() {
   if (!ctx.branchId || !el('fDate').value) return;
   clearNotes();
-  existing = null;
-  const { data, error } = await db.from('stock_count')
-    .select('count_id,status,staff_name,title,started_at,submitted_at')
-    .eq('branch_id', ctx.branchId).eq('count_date', el('fDate').value).limit(1);
-  if (error) { note('warn', 'Could not check for an existing count: ' + error.message); return; }
+  const date = el('fDate').value;
 
-  existing = (data || [])[0] || null;
-  el('btnOpen').hidden = true;
-  if (!existing) {
-    el('btnGo').textContent = 'Start count';
-    el('btnGo').disabled = false;
+  const { data, error } = await db.from('stock_count')
+    .select('count_id,category,status,staff_name,title,started_at,submitted_at')
+    .eq('branch_id', ctx.branchId).eq('count_date', date);
+  if (error) {
+    note('warn', 'Could not check for an existing count: ' + escapeHtml(error.message));
     return;
   }
-  if (existing.status === 'submitted') {
-    note('ok', `A count for <b>${ddmmyyyy(el('fDate').value)}</b> was already submitted by ` +
-      `<b>${escapeHtml(existing.staff_name)}</b>. Submitted counts are frozen and cannot be reopened.`);
+  const byCat = new Map((data || []).map(r => [r.category, r]));
+  ctx.cats.forEach(c => { c.existing = byCat.get(c.category) || null; });
+
+  const submitted = ctx.cats.filter(c => c.existing && c.existing.status === 'submitted');
+  const drafts = ctx.cats.filter(c => c.existing && c.existing.status === 'draft');
+  const fresh = ctx.cats.filter(c => !c.existing);
+  const names = cs => cs.map(c => categoryLabel(c.category)).join(' and ');
+
+  el('btnOpen').hidden = true;
+
+  if (submitted.length === ctx.cats.length) {
+    note('ok', `A count for <b>${ddmmyyyy(date)}</b> was already submitted by ` +
+      `<b>${escapeHtml(submitted[0].existing.staff_name)}</b>. Submitted counts are frozen ` +
+      `and cannot be reopened.`);
     el('btnGo').textContent = 'Already submitted';
     el('btnGo').disabled = true;
     el('btnOpen').hidden = false;
-  } else {
-    note('info', `A draft for <b>${ddmmyyyy(el('fDate').value)}</b> is already open ` +
-      `(started by <b>${escapeHtml(existing.staff_name)}</b>). You will pick up where it left off.`);
-    el('btnGo').textContent = 'Resume draft';
-    el('btnGo').disabled = false;
+    return;
   }
+
+  if (submitted.length) {
+    // Half a sitting. Say exactly which half, because the other half is what
+    // the button is about to open and the numbers are different shelves.
+    note('warn', `<b>${escapeHtml(names(submitted))}</b> for ${ddmmyyyy(date)} ` +
+      `${submitted.length === 1 ? 'has' : 'have'} already been submitted and cannot be ` +
+      `reopened. Carrying on counts <b>${escapeHtml(names(ctx.cats.filter(c => !submitted.includes(c))))}</b> only.`);
+  }
+  if (drafts.length) {
+    note('info', `A draft for <b>${ddmmyyyy(date)}</b> is already open ` +
+      `(started by <b>${escapeHtml(drafts[0].existing.staff_name)}</b>). ` +
+      `You will pick up where it left off.`);
+  }
+
+  el('btnGo').textContent = drafts.length && !fresh.length ? 'Resume draft' : 'Start count';
+  el('btnGo').disabled = false;
 }
 
 const escapeHtml = s => String(s == null ? '' : s)
   .replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-el('btnOpen').addEventListener('click', () => { location.href = 'index.html?readonly=1'; });
+const go = page => { location.href = href(page, MOD); };
+el('btnOpen').addEventListener('click', () => {
+  location.href = href('index.html', MOD) + (MOD.id === 'tobacco' ? '?' : '&') + 'readonly=1';
+});
 /* A restock is not a count and needs none of the state above — no title, no
    trading day chosen here, no draft. It is its own record, taken whenever packs
    go onto the shelf, and it reaches reconciliation as add_in. It lives on the
    hub rather than on the count grid for the same reason the results page does:
    nothing beside the count inputs may hint at a quantity. */
-el('btnRestock').addEventListener('click', () => { location.href = 'restock.html'; });
-el('btnHistory').addEventListener('click', () => { location.href = 'history.html'; });
-el('btnImport').addEventListener('click', () => { location.href = 'import-sales.html'; });
+el('btnRestock').addEventListener('click', () => go('restock.html'));
+el('btnHistory').addEventListener('click', () => go('history.html'));
+el('btnImport').addEventListener('click', () => go('import-sales.html'));
 /* The only page here that needs an account. Everything else about counting is
    deliberately sign-in free; the shelf decides what every count MEANS, so
    changing it is the one thing that is not. */
-el('btnShelf').addEventListener('click', () => { location.href = 'planogram.html'; });
+el('btnShelf').addEventListener('click', () => go('planogram.html'));
 
 el('btnGo').addEventListener('click', async () => {
   const date = el('fDate').value;
@@ -274,24 +330,37 @@ el('btnGo').addEventListener('click', async () => {
   // Remembering the name is a convenience. localStorage on the shop device fills
   // up — the briefing system keeps base64 photos in it — and setItem then raises
   // QuotaExceededError even for a short string. That must never stop a count.
-  try { localStorage.setItem('cig_last_staff', staff); } catch (e) { /* not worth blocking on */ }
+  try { localStorage.setItem(staffKey(MOD), staff); } catch (e) { /* not worth blocking on */ }
 
   try {
-    const count = await openOrCreate(date, staff, title);
-    // This one is NOT optional: index.html reads cig_count to know which count is
-    // open, so if it cannot be written the count genuinely cannot start. Say that
+    // One count per category, opened or resumed. A category already submitted
+    // is skipped rather than reopened — submitted counts are frozen, and
+    // trying would fail at the very end of a ten minute sitting.
+    const open = [];
+    for (const c of ctx.cats) {
+      if (c.existing && c.existing.status === 'submitted') continue;
+      const count = await openOrCreate(c, date, staff, title);
+      open.push({
+        category: c.category, count_id: count.count_id, version_id: c.version.version_id
+      });
+    }
+    if (!open.length) throw new Error('Every shelf in this count is already submitted.');
+
+    // NOT optional: the count screen reads this to know which counts are open,
+    // so if it cannot be written the count genuinely cannot start. Say that
     // plainly rather than throwing a QuotaExceededError at the user.
     try {
-      localStorage.setItem('cig_count', JSON.stringify({
-        count_id: count.count_id, branch_id: ctx.branchId, branch_name: ctx.branchName,
-        version_id: ctx.versionId, count_date: date, title: count.title, staff_name: count.staff_name
+      localStorage.setItem(sessionKey(MOD), JSON.stringify({
+        module: MOD.id, counts: open,
+        branch_id: ctx.branchId, branch_name: ctx.branchName,
+        count_date: date, title, staff_name: staff
       }));
     } catch (e) {
       throw new Error('This device has no storage space left, so the count screen cannot be ' +
         'told which count to open. The count itself is saved — free some space and press ' +
         'Resume draft. (The shift briefings keep photos in the same storage.)');
     }
-    location.href = 'index.html';
+    location.href = href('index.html', MOD);
   } catch (e) {
     el('btnGo').disabled = false;
     el('btnGo').textContent = 'Start count';
@@ -302,27 +371,32 @@ el('btnGo').addEventListener('click', async () => {
 /* Resume beats create. The database enforces one count per branch per day,
    so a duplicate tap is a normal outcome, not an error — if the insert trips
    the unique constraint we simply read back the row that won. */
-async function openOrCreate(date, staff, title) {
-  if (existing && existing.status === 'draft') return existing;
+async function openOrCreate(c, date, staff, title) {
+  if (c.existing && c.existing.status === 'draft') return c.existing;
 
   const ins = await db.from('stock_count').insert({
-    branch_id: ctx.branchId, version_id: ctx.versionId, count_date: date,
-    title, staff_name: staff, status: 'draft'
+    branch_id: ctx.branchId, category: c.category, version_id: c.version.version_id,
+    count_date: date, title, staff_name: staff, status: 'draft'
   }).select().single();
 
   if (!ins.error) return ins.data;
 
-  // 23505 = unique violation: someone else created it between our check and insert.
+  // 23505 = unique violation: someone else created it between our check and
+  // insert. The constraint is (branch, category, date), so read back the row
+  // that won for THIS category.
   const dup = ins.error.code === '23505' || /duplicate key|already exists/i.test(ins.error.message || '');
   if (!dup) throw new Error(ins.error.message);
 
   const { data, error } = await db.from('stock_count')
     .select('count_id,status,staff_name,title')
-    .eq('branch_id', ctx.branchId).eq('count_date', date).limit(1);
+    .eq('branch_id', ctx.branchId).eq('category', c.category)
+    .eq('count_date', date).limit(1);
   if (error) throw new Error(error.message);
   const row = (data || [])[0];
   if (!row) throw new Error('The count exists but could not be read back.');
-  if (row.status === 'submitted') throw new Error('That day has already been submitted.');
+  if (row.status === 'submitted') {
+    throw new Error(`${categoryLabel(c.category)} has already been submitted for that day.`);
+  }
   return row;
 }
 

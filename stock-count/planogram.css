@@ -41,6 +41,19 @@ body{background:var(--p-bg);color:var(--p-text);font-family:var(--font);font-siz
    the cigarette module there was no route to the rest of the app at all. */
 .sb-gap{width:44px;flex-shrink:0}
 
+/* Switching between the shelves of one sitting. Deliberately a segmented
+   control and not a link: it changes what you are looking at, not where you
+   are, and the count is not saved or reloaded by pressing it. */
+.catsw{display:flex;gap:4px;background:var(--p-bg);border:1px solid var(--p-border);
+       border-radius:9px;padding:3px;flex-shrink:0}
+.catsw button{background:none;border:none;color:var(--p-text2);font-family:var(--font);
+              font-size:0.78rem;font-weight:700;padding:6px 12px;border-radius:6px;
+              cursor:pointer;white-space:nowrap;transition:background 0.12s,color 0.12s}
+.catsw button:hover{color:var(--p-text)}
+.catsw button.on{background:var(--p-btn-sec);color:var(--p-orange)}
+.catsw button .n{font-family:var(--mono);font-size:0.7rem;opacity:0.8;margin-left:5px}
+.catsw button.done .n{color:var(--p-green)}
+
 .zoomctl{display:flex;gap:5px;align-items:center}
 .zbtn{background:var(--p-btn-sec);border:1px solid var(--p-border);color:var(--p-text);border-radius:8px;
       width:34px;height:34px;font-size:1rem;font-weight:700;cursor:pointer;font-family:var(--font);

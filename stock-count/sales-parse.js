@@ -508,6 +508,14 @@ export function explainShortfall(shortfall, lines, products) {
 // be written as an explicit zero. Leaving them out drops them from
 // vw_daily_reconciliation entirely — on 09/09 that would have been 24 of 54
 // products with no variance at all.
+//
+// `products` MUST already be narrowed to the category this report covers.
+// "Everything else sold nothing" is only true within the scope of the report
+// being read, and lubes and Iluma sales come from their own POS reports. Pass
+// every product and a cigarette report writes a zero-sales row for all 31
+// lubes and 21 Iluma products too — every day, silently — and their
+// reconciliation reads as total shrinkage. The caller narrows it; this
+// function trusts what it is given, which is why the test pins it.
 // ---------------------------------------------------------------------------
 export function buildPayload(parsedLines, products, branchId, saleDate) {
   const sold = new Map(parsedLines.map(l => [l.product_id, l.qty]));

@@ -89,7 +89,7 @@ DATA_COLS = [
     'product_id', 'plu', 'short_name', 'pos_description',
     'opening_packs', 'add_in', 'closing_packs',
     'sold_physical', 'sold_pos', 'variance_packs',
-    'opening_date', 'unit_price_used', 'variance_rm',
+    'opening_date', 'unit_price_used', 'variance_rm', 'category',
     'abs_variance', 'rank', 'day_no', 'prod_no', 'row_key',
 ]
 COL = {name: get_column_letter(i) for i, name in enumerate(DATA_COLS, start=1)}
@@ -171,6 +171,10 @@ def prepare(raw):
             'opening_date': as_date(r.get('opening_date')),
             'unit_price_used': num(r.get('unit_price_used')),
             'variance_rm': num(r.get('variance_rm')),
+            # Carried so the hidden Data sheet matches counts_query.m column for
+            # column. The report itself is cigarettes only — the query filters —
+            # so nothing on Daily or Trends reads it.
+            'category': r.get('category') or 'CIGARETTES',
             'abs_variance': abs(v) if v is not None else -1,
         })
 

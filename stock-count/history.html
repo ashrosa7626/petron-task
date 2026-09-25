@@ -117,8 +117,8 @@
 
 <div class="topbar">
   <div class="sb-gap"></div>
-  <div class="topbar-title"><span class="br" id="brLabel">Safari</span> Count Results</div>
-  <div class="spacer"><a href="import-sales.html" id="lnkImport">Import sales</a><button class="lnk" id="btnBack" hidden>All counts</button></div>
+  <div class="topbar-title"><span class="br" id="brLabel">Safari</span> <span id="modLabel">Count Results</span></div>
+  <div class="spacer"><a href="#" id="lnkImport">Import sales</a><button class="lnk" id="btnBack" hidden>All counts</button></div>
 </div>
 
 <div class="wrap">
@@ -176,7 +176,10 @@
   </div>
 </div>
 
-<script>
+<script type="module">
+import { currentModule, href, categoryLabel } from './modules.js';
+
+const MOD = currentModule();
 const SUPABASE_URL = 'https://vwffiuciogthfzekkkkz.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ3ZmZpdWNpb2d0aGZ6ZWtra2t6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4NzcwMTAsImV4cCI6MjA5MTQ1MzAxMH0.OTEyOMn1fmUNV7pR51KMOLsMTNAfytt62uGS_AkQXyw';
 /* Pinned to the anon key, deliberately.
@@ -209,10 +212,13 @@ let tab = 'counts';
 async function init() {
   const selected = localStorage.getItem('selectedBranch') || 'Safari';
   el('brLabel').textContent = selected;
+  el('modLabel').textContent = MOD.short + ' Results';
+  document.title = MOD.short + ' Results – Petron Tasks';
+  el('lnkImport').href = href('import-sales.html', MOD);
 
   const [brRes, verRes, prodRes] = await Promise.all([
     db.from('branch').select('branch_id,name'),
-    db.from('planogram_version').select('version_id,branch_id').eq('status', 'active'),
+    db.from('planogram_version').select('version_id,branch_id,category').eq('status', 'active'),
     db.from('product').select('product_id,short_name,plu,brand')
   ]);
   if (brRes.error) return setStatus('Could not read branch: ' + brRes.error.message, true);
@@ -233,10 +239,11 @@ async function init() {
   ctx.products = new Map((prodRes.data || []).map(p => [p.product_id, p]));
 
   // Shelf order, so results read in the same sequence the shelf was counted.
-  const version = (verRes.data || []).find(v => v.branch_id === ctx.branchId);
-  if (version) {
+  const versions = (verRes.data || []).filter(v =>
+    v.branch_id === ctx.branchId && MOD.categories.includes(v.category));
+  if (versions.length) {
     const { data } = await db.from('planogram_facing')
-      .select('shelf,position,product_id').eq('version_id', version.version_id);
+      .select('shelf,position,product_id').in('version_id', versions.map(v => v.version_id));
     for (const f of (data || [])) {
       const prev = ctx.order.get(f.product_id);
       const key = f.shelf + String(f.position).padStart(3, '0');
@@ -244,9 +251,13 @@ async function init() {
     }
   }
 
+  /* This module's shelves only. Lubes counts must not appear under Cigarette
+     Results and the reverse: they are different shelves counted by different
+     people, and mixing them makes the list unreadable and the totals wrong. */
   const { data, error } = await db.from('stock_count')
-    .select('count_id,count_date,title,staff_name,status,started_at,submitted_at')
-    .eq('branch_id', ctx.branchId).order('count_date', { ascending: false });
+    .select('count_id,count_date,title,staff_name,status,category,started_at,submitted_at')
+    .eq('branch_id', ctx.branchId).in('category', MOD.categories)
+    .order('count_date', { ascending: false });
   if (error) return setStatus('Could not read stock_count: ' + error.message, true);
   ctx.counts = data || [];
 
@@ -288,8 +299,8 @@ async function init() {
    thrown. */
 async function loadRestocks() {
   const { data, error } = await db.from('stock_restock')
-    .select('restock_id,restock_date,staff_name,note,status,void_reason,created_at,submitted_at,voided_at')
-    .eq('branch_id', ctx.branchId)
+    .select('restock_id,restock_date,staff_name,note,status,category,void_reason,created_at,submitted_at,voided_at')
+    .eq('branch_id', ctx.branchId).in('category', MOD.categories)
     .order('restock_date', { ascending: false })
     .order('created_at', { ascending: false });
   if (error) {
@@ -341,7 +352,7 @@ function renderList() {
   if (!ctx.counts.length) {
     el('listRows').innerHTML =
       `<div class="status">No counts yet for ${esc(ctx.branchName)}. ` +
-      `<a href="start.html" style="color:var(--p-orange)">Start one</a>.</div>`;
+      `<a href="${href('start.html', MOD)}" style="color:var(--p-orange)">Start one</a>.</div>`;
     return;
   }
 
@@ -350,7 +361,8 @@ function renderList() {
     return `<div class="row ${submitted ? '' : 'draft'}" data-id="${c.count_id}">
       <div class="row-main">
         <div class="row-t">${esc(c.title)}</div>
-        <div class="row-m">${ddmmyyyy(c.count_date)} &middot; ${esc(c.staff_name)}</div>
+        <div class="row-m">${ddmmyyyy(c.count_date)} &middot; ${esc(c.staff_name)}${
+          MOD.categories.length > 1 ? ' &middot; ' + esc(categoryLabel(c.category)) : ''}</div>
       </div>
       <div class="row-r">
         <span class="tag ${submitted ? 'sub' : 'drf'}">${submitted ? 'Submitted' : 'Draft'}</span>
@@ -382,7 +394,7 @@ function renderRestockList() {
   if (!ctx.restocks.length) {
     el('listRows').innerHTML =
       `<div class="status">No restocks recorded for ${esc(ctx.branchName)}. ` +
-      `<a href="restock.html" style="color:var(--p-orange)">Record one</a>.</div>`;
+      `<a href="${href('restock.html', MOD)}" style="color:var(--p-orange)">Record one</a>.</div>`;
     return;
   }
 
@@ -393,7 +405,8 @@ function renderRestockList() {
     return `<div class="row ${r.status === 'void' ? 'voided' : ''}" data-id="${r.restock_id}">
       <div class="row-main">
         <div class="row-t">+${r.packs || 0} pack${(r.packs || 0) === 1 ? '' : 's'}${r.note ? ' &middot; ' + esc(r.note) : ''}</div>
-        <div class="row-m">${ddmmyyyy(r.restock_date)} &middot; ${esc(r.staff_name)}</div>
+        <div class="row-m">${ddmmyyyy(r.restock_date)} &middot; ${esc(r.staff_name)}${
+          MOD.categories.length > 1 ? ' &middot; ' + esc(categoryLabel(r.category)) : ''}</div>
       </div>
       <div class="row-r">
         <span class="tag ${cls}">${label}</span>
@@ -567,6 +580,7 @@ function renderDetail(c, rows, hasRec) {
   el('dTitle').textContent = c.title;
   el('dSub').innerHTML = `Trading day <b>${ddmmyyyy(c.count_date)}</b> &middot; ` +
     `${esc(c.staff_name)} &middot; ${esc(ctx.branchName)}` +
+    (MOD.categories.length > 1 ? ` &middot; ${esc(categoryLabel(c.category))}` : '') +
     (c.submitted_at ? ` &middot; submitted ${esc(stamp(c.submitted_at))}` : ' &middot; draft');
 
   const counted = rows.length;

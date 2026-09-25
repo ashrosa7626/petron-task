@@ -29,6 +29,7 @@ The cases pinned are the ones that would be wrong in a plausible way:
 
 import argparse
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -108,8 +109,33 @@ check(r10['day_no'] == 2, 'day_no 1 is the most recent day, so 10/09 of three is
       r10['day_no'])
 check(sorted({r['prod_no'] for r in rows}) == [1, 2, 3, 4, 5],
       'prod_no indexes the product list with no gaps')
-check(bw.DATA_COLS[13] == 'variance_packs' and bw.DATA_COLS[21] == 'row_key',
-      'Data column order is the one the formulas address by position')
+# The real invariant, not two magic indices: the view's own columns come first
+# in the order the database returns them, then what the query computes. Daily
+# and Trends address Data by POSITION, so a reorder here silently makes every
+# figure read the wrong column rather than failing.
+VIEW_COLS = [
+    'branch_id', 'count_date', 'shift', 'staff_name', 'product_id', 'plu',
+    'short_name', 'pos_description', 'opening_packs', 'add_in', 'closing_packs',
+    'sold_physical', 'sold_pos', 'variance_packs', 'opening_date',
+    'unit_price_used', 'variance_rm', 'category',
+]
+COMPUTED = ['abs_variance', 'rank', 'day_no', 'prod_no', 'row_key']
+check(bw.DATA_COLS == VIEW_COLS + COMPUTED,
+      'Data is the view\'s columns in order, then the query\'s computed ones',
+      bw.DATA_COLS)
+check(bw.DATA_COLS[:17] == VIEW_COLS[:17],
+      'and the first seventeen are untouched by the category column being added')
+
+# counts_query.m has to agree, or the sheet reads one column off. Both lists
+# are documented as having to change together; this is what enforces it.
+m_src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          'counts_query.m'), encoding='utf-8').read()
+expected_block = re.search(r'Expected\s*=\s*\{(.*?)\}', m_src, re.S).group(1)
+m_cols = re.findall(r'"([a-z_]+)"', expected_block)
+check(m_cols == VIEW_COLS,
+      'counts_query.m asks for exactly those columns, in that order', m_cols)
+check('category  = "eq." & Category' in m_src,
+      'and filters to one category, so lubes rows cannot land in this workbook')
 
 print('\nthe generated file\n')
 tmp = tempfile.mkdtemp()

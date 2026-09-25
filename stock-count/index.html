@@ -14,6 +14,9 @@
 <div class="topbar">
   <div class="sb-gap"></div>
   <div class="topbar-title"><span class="br" id="brLabel">Safari</span> <span id="pgLabel">Planogram</span></div>
+  <!-- One sitting, two shelves. Not navigation: nothing is saved or reloaded,
+       both grids belong to the same count and Submit closes both. -->
+  <div class="catsw" id="catSw" hidden></div>
   <div class="zoomctl">
     <button class="zbtn" id="zOut" title="Zoom out">&minus;</button>
     <button class="zbtn" id="zIn" title="Zoom in">+</button>
@@ -24,9 +27,10 @@
 <div class="metabar" id="meta"></div>
 <div id="status" class="status">Loading planogram&hellip;</div>
 
-<div class="scroller" id="scroller" hidden>
-  <div class="grid" id="grid"></div>
-</div>
+<!-- A scroller per category, built at load. Separate elements rather than one
+     repainted element so each shelf keeps its own zoom and scroll position:
+     flipping to Iluma and back should put you where you were, mid-count. -->
+<div id="gridWrap" hidden></div>
 
 <div class="footer" id="footer" hidden>
   <div class="prog">
@@ -56,26 +60,13 @@
     <div class="sheet-sub" id="doneSub"></div>
     <div class="sheet-ft">
       <button class="btn pri" id="doneClose" style="flex:1">Done</button>
-    </div>
-  </div>
-</div>
-
 <script type="module">
 import { createGrid, esc } from './planogram.js';
+import { currentModule, href, categoryLabel, sessionKey, draftKey } from './modules.js';
 
+const MOD = currentModule();
 const SUPABASE_URL = 'https://vwffiuciogthfzekkkkz.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ3ZmZpdWNpb2d0aGZ6ZWtra2t6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4NzcwMTAsImV4cCI6MjA5MTQ1MzAxMH0.OTEyOMn1fmUNV7pR51KMOLsMTNAfytt62uGS_AkQXyw';
-/* Pinned to the anon key, deliberately.
-   supabase-js otherwise picks up whatever session is sitting in
-   localStorage under sb-<ref>-auth-token and sends THAT as the bearer
-   token. Every RLS policy in this module is written `to anon`, so an
-   authenticated request matches no policy at all and PostgREST returns
-   an empty array with NO ERROR — the page then says "No active planogram
-   version found" and there is nothing anywhere to explain why. Verified
-   14 Sep 2026: same URL, anon bearer returns the row, session bearer
-   returns []. It comes and goes as the token expires and refreshes,
-   which is the worst possible way for this to behave.
-   These pages have no sign-in by design, so there is no session to want. */
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
 });
@@ -89,12 +80,27 @@ const setStatus = (msg, isErr) => {
 /* ============================ session ============================ */
 const params = new URLSearchParams(location.search);
 let session = null;
-try { session = JSON.parse(localStorage.getItem('cig_count') || 'null'); } catch (e) { session = null; }
+try { session = JSON.parse(localStorage.getItem(sessionKey(MOD)) || 'null'); } catch (e) { session = null; }
+
+/* A session written before this page learned about categories holds a single
+   count_id. Wrap it rather than discarding it: there may be a count open on
+   the shop device right now, and its numbers live only in a local draft until
+   Submit, so dropping the session would lose them outright. */
+if (session && session.count_id && !session.counts) {
+  session = {
+    module: MOD.id,
+    counts: [{ category: 'CIGARETTES', count_id: session.count_id, version_id: session.version_id }],
+    branch_id: session.branch_id, branch_name: session.branch_name,
+    count_date: session.count_date, title: session.title, staff_name: session.staff_name
+  };
+}
 let readonly = params.has('readonly') || !session;
 
-const draftKey = () => 'cig_draft_' + (session && session.count_id);
+/* lines: product_id -> { packs:number|null }, flat across every category.
+   product_id is unique system-wide, so one map cannot confuse two shelves —
+   and the split-block rule (one input per product, however many blocks) falls
+   out of it for free.
 
-/* lines: product_id -> { packs:number|null }
    One input per block, nothing else. A product with nothing on the shelf is
    counted as 0, so the schema's not_on_shelf flag is always written false.
 
@@ -103,43 +109,52 @@ const draftKey = () => 'cig_draft_' + (session && session.count_id);
    and reaches reconciliation through vw_daily_reconciliation. Nothing on this
    screen should ever try to capture stock going onto the shelf. */
 let lines = {};
+
+/* Drafts are per COUNT, not per session: each category has its own count_id in
+   the database, so its numbers belong under its own key. A half-finished
+   sitting therefore resumes correctly even if only one shelf was reached. */
 function loadDraft() {
   if (!session) return;
-  try {
-    const raw = JSON.parse(localStorage.getItem(draftKey()) || 'null');
-    if (raw && raw.lines) {
-      lines = raw.lines;
-      // Drafts written while the not-on-shelf tick existed stored packs = null
-      // alongside nos = true. That always meant zero on the shelf, so read it
-      // as 0 rather than losing the entry.
-      for (const l of Object.values(lines)) {
-        if (l && l.nos && (l.packs === null || l.packs === undefined)) l.packs = 0;
-        if (l) { delete l.nos; delete l.add_in; }
+  for (const c of session.counts) {
+    try {
+      const raw = JSON.parse(localStorage.getItem(draftKey(c.count_id)) || 'null');
+      if (!raw || !raw.lines) continue;
+      for (const [pid, l] of Object.entries(raw.lines)) {
+        if (!l) continue;
+        // Drafts written while the not-on-shelf tick existed stored packs = null
+        // alongside nos = true. That always meant zero on the shelf, so read it
+        // as 0 rather than losing the entry.
+        if (l.nos && (l.packs === null || l.packs === undefined)) l.packs = 0;
+        delete l.nos; delete l.add_in;
+        lines[pid] = l;
       }
-    }
-  } catch (e) { /* a corrupt draft must not block the count */ }
+    } catch (e) { /* a corrupt draft must not block the count */ }
+  }
 }
+
 // Every keystroke is written locally. A count takes ten minutes inside a shop
 // with thick walls; one dropped connection must not lose it.
 //
-// Except when it cannot be written. localStorage on the shop device is at its
-// 10MB cap — briefing photos, which pruneOldLocal() is not clearing — and a
-// draft is only 2.6KB, so it is not the count that is too big. This used to
-// console.warn and carry on, which meant the safety net could be gone for a
-// whole ten minute count with nothing on screen to say so: reload the tab, or
-// let the phone sleep and Chrome evict it, and every number typed is lost.
-// There is no server-side fallback mid-count either — lines are not written
-// until Submit. So a failure is now SAID OUT LOUD, once, in the metabar.
+// Except when it cannot be written. localStorage on the shop device hit its
+// 10MB cap once — briefing photos — and a draft is only a few KB, so it is not
+// the count that is too big. This used to console.warn and carry on, which
+// meant the safety net could be gone for a whole count with nothing on screen
+// to say so: reload the tab, or let the phone sleep and Chrome evict it, and
+// every number typed is lost. There is no server-side fallback mid-count
+// either — lines are not written until Submit. So a failure is SAID OUT LOUD.
 let draftBroken = false;
 function saveDraft() {
   if (!session) return;
-  try {
-    localStorage.setItem(draftKey(), JSON.stringify({ lines, updated: new Date().toISOString() }));
-    if (draftBroken) { draftBroken = false; paintStorageChip(); }
-  } catch (e) {
-    console.warn('local draft save failed', e);
-    if (!draftBroken) { draftBroken = true; paintStorageChip(); }
+  let failed = false;
+  for (const c of CATS) {
+    const mine = {};
+    for (const pid of c.order) if (lines[pid]) mine[pid] = lines[pid];
+    try {
+      localStorage.setItem(draftKey(c.count_id),
+        JSON.stringify({ lines: mine, updated: new Date().toISOString() }));
+    } catch (e) { failed = true; }
   }
+  if (failed !== draftBroken) { draftBroken = failed; paintStorageChip(); }
 }
 
 /* Nothing on this screen can fix a full device, so the chip says what it means
@@ -152,7 +167,7 @@ function paintStorageChip() {
   if (existing) return;
   bar.insertAdjacentHTML('beforeend',
     '<div class="chip warn" id="chipStore" title="localStorage is full. A count draft is only ' +
-    '2.6KB, so it is the briefing photos using the space, not this count.">' +
+    'a few KB, so it is the briefing photos using the space, not this count.">' +
     'not saving on this device &mdash; do not reload before submitting</div>');
 }
 function lineOf(pid) {
@@ -164,92 +179,150 @@ const isDone = pid => {
   return !!l && l.packs !== null && l.packs !== undefined;
 };
 
-/* ============================ the grid ============================ */
-/* Layout, zoom, panning and split-block highlighting live in planogram.js and
-   are shared with restock.html. Everything below is count-specific: what a
-   number means, when a block is done, and what submitting does. */
-let grid = null;
+/* ============================ categories ============================ */
+/* One entry per shelf in this sitting: its own planogram, its own grid element,
+   its own zoom, and its own stock_count row. */
+let CATS = [];
+let active = 0;
+const cur = () => CATS[active];
+const allProducts = () => CATS.flatMap(c => c.order);
 
-/* ============================ render ============================ */
-function render(facings, products, version, branches) {
-  grid = createGrid({
-    scroller: el('scroller'),
-    grid: el('grid'),
-    zoomIn: el('zIn'),
-    zoomOut: el('zOut'),
-    overview: el('zOv'),
-    cellHtml: (pid, name) => readonly ? '' :
-      `<input class="pk" type="number" inputmode="numeric" min="0" step="1"
-              data-pid="${esc(pid)}" aria-label="Packs for ${esc(name)}">`,
-    onEnter: (pid, input) => {
-      const nxt = nextEmpty(pid);
-      if (nxt) grid.goTo(nxt); else input.blur();
-    }
+function renderCats() {
+  const wrap = el('gridWrap');
+  wrap.innerHTML = CATS.map((c, i) => `
+    <div class="scroller" id="sc${i}" ${i === active ? '' : 'hidden'}>
+      <div class="grid" id="gr${i}"></div>
+    </div>`).join('');
+
+  CATS.forEach((c, i) => {
+    c.grid = createGrid({
+      scroller: el('sc' + i),
+      grid: el('gr' + i),
+      // No zoom buttons passed: there is one set in the topbar for all shelves,
+      // wired below to whichever is showing. Passing them per grid would have
+      // every hidden grid react to a click too.
+      cellHtml: (pid, name) => readonly ? '' :
+        `<input class="pk" type="number" inputmode="numeric" min="0" step="1"
+                data-pid="${esc(pid)}" aria-label="Packs for ${esc(name)}">`,
+      onEnter: (pid, input) => {
+        const nxt = nextEmpty(pid);
+        if (nxt) goTo(nxt); else input.blur();
+      }
+    });
+    c.derived = c.grid.render(c.facings, c.products);
+    c.order = c.grid.order;
+
+    el('gr' + i).addEventListener('input', e => {
+      const t = e.target;
+      if (!t.dataset || !t.dataset.pid || !t.classList.contains('pk')) return;
+      const pid = t.dataset.pid, l = lineOf(pid);
+      const v = t.value.trim();
+      l.packs = v === '' ? null : Math.max(0, Math.floor(Number(v) || 0));
+      saveDraft();
+      syncProduct(pid, t);
+      updateProgress();
+    });
   });
 
-  const derived = grid.render(facings, products);
-
-  el('status').hidden = true;
-  el('scroller').hidden = false;
-  if (!readonly) el('footer').hidden = false;
-
-  wireInput();
-  syncAll();
-  paintMeta(version, branches, derived, facings);
-  grid.log();
-  window.lines = lines;
+  paintSwitcher();
 }
 
-function paintMeta(version, branches, derived, facings) {
-  const branchName = (branches.find(b => b.branch_id === version.branch_id) || {}).name || version.branch_id;
-  const splitCount = new Set(grid.blocks.filter(b => b.regionTotal > 1).map(b => b.productId)).size;
+/* One set of zoom controls, acting on the shelf in front of you. Overview
+   toggles, so it needs the current zoom to decide which way. */
+const Z_OVERVIEW = 0.3, OV_THRESHOLD = 0.45;
+let lastFull = 1;
+el('zIn').addEventListener('click', () => cur().grid.applyZoom(cur().grid.zoom * 1.25));
+el('zOut').addEventListener('click', () => cur().grid.applyZoom(cur().grid.zoom / 1.25));
+el('zOv').addEventListener('click', () => {
+  const g = cur().grid;
+  if (g.zoom < OV_THRESHOLD) g.applyZoom(lastFull || 1);
+  else { lastFull = g.zoom; g.applyZoom(Z_OVERVIEW); }
+  el('zOv').classList.toggle('on', cur().grid.zoom < OV_THRESHOLD);
+});
+
+/* The switcher carries each shelf's progress, so you can see Iluma still needs
+   doing without flipping to it. */
+function paintSwitcher() {
+  const sw = el('catSw');
+  if (CATS.length < 2) { sw.hidden = true; return; }
+  sw.hidden = false;
+  sw.innerHTML = CATS.map((c, i) => {
+    const done = c.order.filter(isDone).length;
+    return `<button data-i="${i}" class="${i === active ? 'on' : ''} ${done === c.order.length ? 'done' : ''}">` +
+      `${esc(categoryLabel(c.category))}` +
+      (readonly ? '' : `<span class="n">${done}/${c.order.length}</span>`) + `</button>`;
+  }).join('');
+  sw.querySelectorAll('button').forEach(b =>
+    b.addEventListener('click', () => showCat(Number(b.dataset.i))));
+}
+
+function showCat(i) {
+  if (i === active || !CATS[i]) return;
+  CATS.forEach((c, n) => { el('sc' + n).hidden = n !== i; });
+  active = i;
+  el('zOv').classList.toggle('on', CATS[i].grid.zoom < OV_THRESHOLD);
+  paintSwitcher();
+  paintMeta();
+}
+
+/* ============================ navigation ============================ */
+/* Walks the whole sitting, not just the shelf on screen: after the last
+   uncounted cigarette it moves to Iluma and switches the grid to show it.
+   Otherwise "Next empty" would go quiet with 21 products still blank. */
+function nextEmpty(fromPid) {
+  const all = allProducts();
+  const start = fromPid ? all.indexOf(fromPid) + 1 : 0;
+  for (let i = 0; i < all.length; i++) {
+    const pid = all[(start + i) % all.length];
+    if (!isDone(pid)) return pid;
+  }
+  return null;
+}
+const catOf = pid => CATS.findIndex(c => c.order.includes(pid));
+function goTo(pid) {
+  if (!pid) return;
+  const i = catOf(pid);
+  if (i < 0) return;
+  if (i !== active) showCat(i);
+  CATS[i].grid.goTo(pid);
+}
+
+/* ============================ chrome ============================ */
+function paintMeta() {
+  const c = cur();
   const chips = [];
   if (session) {
     chips.push(`<div class="chip"><b>${esc(session.title)}</b></div>`);
     chips.push(`<div class="chip">closing <b>${esc(session.count_date)}</b></div>`);
     chips.push(`<div class="chip">${esc(session.staff_name)}</div>`);
-    el('pgLabel').textContent = 'Cigarette Count';
+    el('pgLabel').textContent = MOD.short + ' Count';
   } else {
     chips.push(`<div class="chip go" id="chipStart">Start a count &rarr;</div>`);
     chips.push(`<div class="chip">read only</div>`);
     if (frozenNote) chips.push(`<div class="chip warn">${esc(frozenNote)}</div>`);
-    el('pgLabel').textContent = 'Cigarette Planogram';
+    el('pgLabel').textContent = MOD.short + ' Planogram';
   }
-  chips.push(`<div class="chip"><b>${derived.productCount}</b> products</div>`);
-  chips.push(`<div class="chip"><b>${facings.length}</b> facings</div>`);
-  chips.push(`<div class="chip"><b>${grid.blocks.length}</b> blocks</div>`);
+  const splitCount = new Set(c.grid.blocks.filter(b => b.regionTotal > 1).map(b => b.productId)).size;
+  chips.push(`<div class="chip"><b>${c.derived.productCount}</b> products</div>`);
+  chips.push(`<div class="chip"><b>${c.facings.length}</b> facings</div>`);
+  chips.push(`<div class="chip"><b>${c.grid.blocks.length}</b> blocks</div>`);
   if (splitCount) chips.push(`<div class="chip warn"><b>${splitCount}</b> split</div>`);
-  if (grid.missingProducts.length) {
-    chips.push(`<div class="chip warn">${grid.missingProducts.length} with no product row</div>`);
+  if (c.grid.missingProducts.length) {
+    chips.push(`<div class="chip warn">${c.grid.missingProducts.length} with no product row</div>`);
   }
   el('meta').innerHTML = chips.join('');
-  paintStorageChip();      // paintMeta rewrites the bar; the warning outranks it
-  el('brLabel').textContent = session ? (session.branch_name || branchName) : branchName;
+  paintStorageChip();
+  el('brLabel').textContent = (session && session.branch_name) || ctx.branchName || 'Safari';
   const cs = el('chipStart');
-  if (cs) cs.addEventListener('click', () => { location.href = 'start.html'; });
-}
-
-/* ========================= input wiring ========================= */
-// One number per product, shared across every block that product owns.
-function wireInput() {
-  el('grid').addEventListener('input', e => {
-    const t = e.target;
-    if (!t.dataset || !t.dataset.pid) return;
-    const pid = t.dataset.pid, l = lineOf(pid);
-    if (t.classList.contains('pk')) {
-      const v = t.value.trim();
-      l.packs = v === '' ? null : Math.max(0, Math.floor(Number(v) || 0));
-    }
-    saveDraft();
-    syncProduct(pid, t);
-    updateProgress();
-  });
+  if (cs) cs.addEventListener('click', () => { location.href = href('start.html', MOD); });
 }
 
 /* Push state into every block of one product, and repaint its colour. */
 function syncProduct(pid, exclude) {
   const l = lineOf(pid);
-  for (const b of grid.blockEls(pid)) {
+  const i = catOf(pid);
+  if (i < 0) return;
+  for (const b of CATS[i].grid.blockEls(pid)) {
     b.classList.toggle('done', l.packs !== null && l.packs !== undefined);
     b.classList.remove('miss');
     const pk = b.querySelector('.pk');
@@ -257,32 +330,34 @@ function syncProduct(pid, exclude) {
   }
 }
 function syncAll() {
-  for (const pid of grid.order) syncProduct(pid);
+  for (const pid of allProducts()) syncProduct(pid);
   updateProgress();
 }
 
-/* Progress counts products, not blocks. LD Red is one of 54, not three. */
+/* Progress counts products across the WHOLE sitting — 54 cigarettes plus 21
+   Iluma — because Submit closes both. A footer that only counted the shelf on
+   screen would read 54 of 54 with a cabinet still untouched. */
 function updateProgress() {
   if (readonly) return;
-  const total = grid.order.length;
-  const done = grid.order.filter(isDone).length;
-  el('progN').innerHTML = `<b>${done}</b> of ${total}`;
-  el('progFill').style.width = (total ? (done / total * 100) : 0) + '%';
+  const all = allProducts();
+  const done = all.filter(isDone).length;
+  el('progN').innerHTML = `<b>${done}</b> of ${all.length}`;
+  el('progFill').style.width = (all.length ? (done / all.length * 100) : 0) + '%';
   el('btnSubmit').disabled = false;
+  paintSwitcher();
 }
-
-const nextEmpty = fromPid => grid.next(fromPid, pid => !isDone(pid));
 
 el('btnNext').addEventListener('click', () => {
   const pid = nextEmpty(null);
-  if (pid) grid.goTo(pid);
-  else el('progN').innerHTML = `<b>${grid.order.length}</b> of ${grid.order.length} &mdash; all counted`;
+  if (pid) goTo(pid);
+  else {
+    const n = allProducts().length;
+    el('progN').innerHTML = `<b>${n}</b> of ${n} &mdash; all counted`;
+  }
 });
 
 /* ============================ submit ============================ */
-function missingProducts() {
-  return grid.order.filter(pid => !isDone(pid));
-}
+const missingProducts = () => allProducts().filter(pid => !isDone(pid));
 
 el('btnSubmit').addEventListener('click', async () => {
   const missing = missingProducts();
@@ -293,65 +368,76 @@ el('btnSubmit').addEventListener('click', async () => {
 function showMissing(missing) {
   el('missHd').textContent = `${missing.length} product${missing.length === 1 ? '' : 's'} still to count`;
   el('missBd').innerHTML = missing.map(pid => {
-    const p = grid.products.get(pid) || {};
-    const where = grid.blocks.filter(b => b.productId === pid).map(b => b.label).join(' | ');
+    const i = catOf(pid);
+    const c = CATS[i] || {};
+    const p = (c.products && c.products.get(pid)) || {};
+    const where = (c.grid ? c.grid.blocks.filter(b => b.productId === pid) : [])
+      .map(b => b.label).join(' | ');
     return `<div class="missrow" data-pid="${esc(pid)}">
         <div class="missnm">${esc(p.short_name || pid)}</div>
-        <div class="misspos">${esc(where)}</div>
+        <div class="misspos">${CATS.length > 1 ? esc(categoryLabel(c.category)) + ' &middot; ' : ''}${esc(where)}</div>
       </div>`;
   }).join('');
   el('missBd').querySelectorAll('.missrow').forEach(r => {
-    r.addEventListener('click', () => { el('missOvl').hidden = true; grid.goTo(r.dataset.pid); });
+    r.addEventListener('click', () => { el('missOvl').hidden = true; goTo(r.dataset.pid); });
   });
-  // Mark them on the grid too, so closing the sheet still shows what is left.
-  el('grid').querySelectorAll('.blk.miss').forEach(b => b.classList.remove('miss'));
-  missing.forEach(pid => grid.blockEls(pid).forEach(b => b.classList.add('miss')));
+  // Mark them on the grid too, so closing the sheet still shows what is left —
+  // on every shelf, not just the one in front of you.
+  CATS.forEach((c, i) =>
+    el('gr' + i).querySelectorAll('.blk.miss').forEach(b => b.classList.remove('miss')));
+  missing.forEach(pid => {
+    const i = catOf(pid);
+    if (i >= 0) CATS[i].grid.blockEls(pid).forEach(b => b.classList.add('miss'));
+  });
   el('missOvl').hidden = false;
-  el('missJump').onclick = () => { el('missOvl').hidden = true; grid.goTo(missing[0]); };
+  el('missJump').onclick = () => { el('missOvl').hidden = true; goTo(missing[0]); };
 }
 el('missClose').addEventListener('click', () => { el('missOvl').hidden = true; });
-el('doneClose').addEventListener('click', () => { location.href = 'start.html'; });
+el('doneClose').addEventListener('click', () => { location.href = href('start.html', MOD); });
 
 async function doSubmit() {
   const btn = el('btnSubmit');
   btn.disabled = true;
   btn.textContent = 'Submitting…';
   try {
-    const rows = grid.order.map(pid => {
-      const l = lineOf(pid);
-      return {
-        count_id: session.count_id,
+    // Lines first for every shelf, then flip each count. Lines must land while
+    // the count is still a draft — the insert policy checks the parent's
+    // status, and submitting freezes it.
+    for (const c of CATS) {
+      const rows = c.order.map(pid => ({
+        count_id: c.count_id,
         product_id: pid,
-        packs: l.packs,
+        packs: lineOf(pid).packs,
         // The count screen collects one number per product. Deliveries are not
         // captured here — they come from restock.html, which reconciliation
-        // adds on top of this figure — so add_in is always 0. Nothing on the
-        // shelf is counted as 0, so not_on_shelf is never set and
-        // counted_or_absent is satisfied by packs always being present.
+        // adds on top — so add_in is always 0. Nothing on the shelf is counted
+        // as 0, so not_on_shelf is never set and counted_or_absent is satisfied
+        // by packs always being present.
         add_in: 0,
         not_on_shelf: false
-      };
-    });
-
-    // Lines must land while the count is still a draft — the insert policy
-    // checks the parent's status, and submitting freezes it.
-    const up = await db.from('stock_count_line')
-      .upsert(rows, { onConflict: 'count_id,product_id' });
-    if (up.error) throw describe(up.error, 'writing the count lines');
-
-    const fin = await db.from('stock_count')
-      .update({ status: 'submitted', submitted_at: new Date().toISOString() })
-      .eq('count_id', session.count_id).select();
-    if (fin.error) throw describe(fin.error, 'marking the count submitted');
-    if (!fin.data || !fin.data.length) {
-      throw new Error('The count was not updated. It may already have been submitted.');
+      }));
+      const up = await db.from('stock_count_line')
+        .upsert(rows, { onConflict: 'count_id,product_id' });
+      if (up.error) throw describe(up.error, `writing the ${categoryLabel(c.category)} lines`);
     }
 
-    localStorage.removeItem(draftKey());
-    localStorage.removeItem('cig_count');
+    for (const c of CATS) {
+      const fin = await db.from('stock_count')
+        .update({ status: 'submitted', submitted_at: new Date().toISOString() })
+        .eq('count_id', c.count_id).select();
+      if (fin.error) throw describe(fin.error, `marking ${categoryLabel(c.category)} submitted`);
+      if (!fin.data || !fin.data.length) {
+        throw new Error(`${categoryLabel(c.category)} was not updated. It may already have been submitted.`);
+      }
+    }
+
+    for (const c of CATS) localStorage.removeItem(draftKey(c.count_id));
+    localStorage.removeItem(sessionKey(MOD));
+    const n = allProducts().length;
     el('doneSub').innerHTML =
       `<b>${esc(session.title)}</b> is submitted and frozen. ` +
-      `${rows.length} products recorded for the trading day ending ${esc(session.count_date)}.`;
+      `${n} products across ${CATS.length === 1 ? 'one shelf' : CATS.length + ' shelves'} ` +
+      `recorded for the trading day ending ${esc(session.count_date)}.`;
     el('doneOvl').hidden = false;
     el('footer').hidden = true;
   } catch (e) {
@@ -375,87 +461,130 @@ function describe(error, what) {
 
 /* ============================= load ============================= */
 let frozenNote = '';
+const ctx = { branchName: '' };
 
 async function load() {
-  loadDraft();
-
-  // A stale session can point at a count that has since been submitted and
-  // frozen. Writing to it would fail at the very end of a ten minute count,
-  // so check first and fall back to read-only.
+  // A stale session can point at counts that have since been submitted and
+  // frozen. Writing to them would fail at the very end of a long sitting, so
+  // check first and fall back to read-only.
   if (session) {
+    const ids = session.counts.map(c => c.count_id);
     const { data, error } = await db.from('stock_count')
-      .select('count_id,status,title,count_date,staff_name')
-      .eq('count_id', session.count_id).limit(1);
-    const row = (data || [])[0];
-    if (!error && !row) {
-      frozenNote = 'That count no longer exists — showing the planogram read-only.';
-      readonly = true; session = null;
-    } else if (row && row.status !== 'draft') {
-      frozenNote = 'That count is already submitted and frozen.';
-      readonly = true;
-      localStorage.removeItem(draftKey());
-      localStorage.removeItem('cig_count');
-      session = null;
+      .select('count_id,status').in('count_id', ids);
+    if (!error) {
+      const byId = new Map((data || []).map(r => [r.count_id, r]));
+      const live = session.counts.filter(c => (byId.get(c.count_id) || {}).status === 'draft');
+      if (!live.length) {
+        frozenNote = (data || []).length
+          ? 'That count is already submitted and frozen.'
+          : 'That count no longer exists — showing the planogram read-only.';
+        readonly = true;
+        session.counts.forEach(c => localStorage.removeItem(draftKey(c.count_id)));
+        localStorage.removeItem(sessionKey(MOD));
+        session = null;
+      } else if (live.length < session.counts.length) {
+        // Half the sitting is already in. Carry on with the rest rather than
+        // dropping the whole session, which would strand the unsubmitted half.
+        frozenNote = 'Part of this count was already submitted.';
+        session.counts = live;
+      }
     }
   }
 
-  const selected = (session && session.branch_name) ||
-    localStorage.getItem('selectedBranch') || 'Safari';
+  loadDraft();
+
+  let selected = 'Safari';
+  try {
+    selected = (session && session.branch_name) || localStorage.getItem('selectedBranch') || 'Safari';
+  } catch (e) { /* storage may be unreachable */ }
 
   const [verRes, brRes] = await Promise.all([
-    db.from('planogram_version').select('version_id,branch_id').eq('status', 'active'),
+    db.from('planogram_version').select('version_id,branch_id,category').eq('status', 'active'),
     db.from('branch').select('branch_id,name')
   ]);
   if (verRes.error) return setStatus('Could not read planogram_version: ' + verRes.error.message, true);
 
   const versions = verRes.data || [], branches = brRes.data || [];
-  if (!versions.length) return setStatus('No active planogram version found.', true);
+  const norm = s => String(s || '').toLowerCase().replace(/[^a-z]/g, '');
+  const match = branches.find(b => norm(b.branch_id) === norm(selected) || norm(b.name).includes(norm(selected)));
+  ctx.branchName = (match && match.name) || selected;
 
-  /* A session pins the version it was started against. Without one, the branch
+  /* A session pins the versions it was started against. Without one, the branch
      decides — and only the branch that was actually asked for. There is no
      falling back to another branch's shelf: the count is blind, so somebody
      counting Safari's layout under a Nilai Desa Jati heading could not tell. */
-  let version = null;
-  if (session) version = versions.find(v => v.version_id === session.version_id) || null;
-  if (!version) {
-    const norm = s => String(s || '').toLowerCase().replace(/[^a-z]/g, '');
-    const match = branches.find(b => norm(b.branch_id) === norm(selected) || norm(b.name).includes(norm(selected)));
-    version = (match && versions.find(v => v.branch_id === match.branch_id)) || null;
+  let wanted;
+  if (session) {
+    wanted = session.counts.map(c => ({
+      category: c.category, count_id: c.count_id,
+      version_id: c.version_id ||
+        (versions.find(v => v.category === c.category && match && v.branch_id === match.branch_id) || {}).version_id
+    }));
+  } else {
+    if (!match) return setStatus(`No branch called ${selected} is configured.`, true);
+    wanted = MOD.categories.map(cat => {
+      const v = versions.find(x => x.branch_id === match.branch_id && x.category === cat);
+      return { category: cat, count_id: null, version_id: v && v.version_id };
+    });
   }
-  if (!version) {
-    return setStatus(`${selected} has no cigarette planogram, so there is no shelf to show. ` +
-      `Switch branch in the menu.`, true);
+  const noShelf = wanted.filter(w => !w.version_id);
+  if (noShelf.length) {
+    return setStatus(`${ctx.branchName} has no ` +
+      noShelf.map(w => categoryLabel(w.category).toLowerCase()).join(' or ') +
+      ` planogram, so there is no shelf to show. Switch branch in the menu.`, true);
   }
 
   const [facRes, prodRes] = await Promise.all([
-    db.from('planogram_facing').select('shelf,position,product_id').eq('version_id', version.version_id),
-    db.from('product').select('product_id,short_name,plu,brand')
+    db.from('planogram_facing').select('shelf,position,product_id,version_id')
+      .in('version_id', wanted.map(w => w.version_id)),
+    db.from('product').select('product_id,short_name,plu,brand,category')
   ]);
   if (facRes.error) return setStatus('Could not read planogram_facing: ' + facRes.error.message, true);
   if (prodRes.error) return setStatus('Could not read product: ' + prodRes.error.message, true);
 
-  const facings = facRes.data || [];
-  if (!facings.length) return setStatus('Active version ' + version.version_id + ' has no facings.', true);
-
-  // If this device has no local draft, fall back to whatever this count already
-  // has in the database. Never read another day's count — the count is blind.
-  if (session && !Object.keys(lines).length) {
-    const { data } = await db.from('stock_count_line')
-      .select('product_id,packs,not_on_shelf').eq('count_id', session.count_id);
-    for (const r of (data || [])) {
-      // A line saved before the not-on-shelf tick was removed reads as 0 packs,
-      // which is what it always meant.
-      lines[r.product_id] = { packs: r.not_on_shelf && r.packs === null ? 0 : r.packs };
-    }
-    if (data && data.length) saveDraft();
+  const products = new Map((prodRes.data || []).map(p => [p.product_id, p]));
+  CATS = wanted.map(w => ({
+    category: w.category,
+    count_id: w.count_id,
+    version_id: w.version_id,
+    facings: (facRes.data || []).filter(f => f.version_id === w.version_id),
+    products
+  }));
+  const empty = CATS.filter(c => !c.facings.length);
+  if (empty.length) {
+    return setStatus(`The ${empty.map(c => categoryLabel(c.category).toLowerCase()).join(' and ')} ` +
+      `planogram has no facings.`, true);
   }
 
-  render(facings, new Map((prodRes.data || []).map(p => [p.product_id, p])),
-    version, branches);
+  el('status').hidden = true;
+  el('gridWrap').hidden = false;
+  if (!readonly) el('footer').hidden = false;
+
+  renderCats();
+
+  // Where this device has no local draft, fall back to whatever each count
+  // already has in the database. Never read another day's count — blind means
+  // blind.
+  if (session && !Object.keys(lines).length) {
+    for (const c of CATS) {
+      const { data } = await db.from('stock_count_line')
+        .select('product_id,packs,not_on_shelf').eq('count_id', c.count_id);
+      for (const r of (data || [])) {
+        lines[r.product_id] = { packs: r.not_on_shelf && r.packs === null ? 0 : r.packs };
+      }
+    }
+    if (Object.keys(lines).length) saveDraft();
+  }
+
+  syncAll();
+  paintMeta();
+  CATS.forEach(c => c.grid.log());
+  window.lines = lines;
 }
 
 load().catch(e => { console.error(e); setStatus('Failed to load: ' + e.message, true); });
 </script>
+
 <script src="../sidebar.js"></script>
 </body>
 </html>

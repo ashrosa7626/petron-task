@@ -41,6 +41,7 @@
 <div class="topbar">
   <div class="sb-gap"></div>
   <div class="topbar-title"><span class="br" id="brLabel">Safari</span> <span id="pgLabel">Restock</span></div>
+  <div class="catsw" id="catSw" hidden></div>
   <div class="zoomctl">
     <button class="zbtn" id="zOut" title="Zoom out">&minus;</button>
     <button class="zbtn" id="zIn" title="Zoom in">+</button>
@@ -51,9 +52,7 @@
 <div class="metabar" id="meta"></div>
 <div id="status" class="status">Loading planogram&hellip;</div>
 
-<div class="scroller" id="scroller" hidden>
-  <div class="grid" id="grid"></div>
-</div>
+<div id="gridWrap" hidden></div>
 
 <div class="footer" id="footer" hidden>
   <div class="prog">
@@ -121,6 +120,10 @@
 
 <script type="module">
 import { createGrid, esc } from './planogram.js';
+import { currentModule, href, categoryLabel, restockDraftKey, restockPendingKey,
+         restockStaffKey } from './modules.js';
+
+const MOD = currentModule();
 
 const SUPABASE_URL = 'https://vwffiuciogthfzekkkkz.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ3ZmZpdWNpb2d0aGZ6ZWtra2t6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4NzcwMTAsImV4cCI6MjA5MTQ1MzAxMH0.OTEyOMn1fmUNV7pR51KMOLsMTNAfytt62uGS_AkQXyw';
@@ -161,12 +164,18 @@ const ddmmyyyy = iso => { const [y, m, d] = iso.split('-'); return `${d}/${m}/${
    restocked has NO entry — blank is not zero here, which is the whole
    difference between this screen and the count. */
 let adds = {};
-let grid = null;
-let ctx = { branchId: null, branchName: '', versionId: null, lastCount: null };
+/* One entry per shelf in this module, same as the count screen. A restock is
+   per category because it feeds that category's add_in — packs of TEREA are not
+   packs of Marlboro, and filing them together would move a number nobody could
+   trace back. */
+let ctx = { branchId: null, branchName: '', lastCount: null };
+let CATS = [];
+let active = 0;
+const cur = () => CATS[active];
 let entry = { staff: '', date: '', note: '' };
 
-const DRAFT = 'cig_restock_draft';
-const PENDING = 'cig_restock_pending';   // a restock_id that reached the database
+const DRAFT = restockDraftKey(MOD);
+const PENDING = restockPendingKey(MOD);   // restock_ids that reached the database
 
 /* EVERY local write goes through here, and none of them may throw.
    localStorage on the shop device is genuinely full — the briefing system keeps
@@ -257,71 +266,131 @@ el('setupGo').addEventListener('click', () => {
     note: el('fNote').value.trim()
   };
   el('setupOvl').hidden = true;
-  store.set('cig_restock_staff', entry.staff);
+  store.set(restockStaffKey(MOD), entry.staff);
   saveDraft();
   paintMeta();
   const t = totals();
-  if (!t.products) grid.goTo(grid.order[0]);
+  if (!t.products) goTo(allProducts()[0]);
 });
 
 /* ========================== step 2: the grid ========================== */
-function render(facings, products) {
-  grid = createGrid({
-    scroller: el('scroller'),
-    grid: el('grid'),
-    zoomIn: el('zIn'),
-    zoomOut: el('zOut'),
-    overview: el('zOv'),
-    cellHtml: (pid, name) =>
-      `<input class="pk" type="number" inputmode="numeric" min="0" step="1"
-              data-pid="${esc(pid)}" aria-label="Packs added for ${esc(name)}"
-              placeholder="+">`,
-    // Enter moves to the next product that has nothing on it yet. On a restock
-    // that is just a way to walk the shelf; there is no requirement to reach
-    // the end, unlike the count.
-    onEnter: (pid, input) => {
-      const nxt = grid.next(pid, p => !(adds[p] > 0));
-      if (nxt) grid.goTo(nxt); else input.blur();
-    }
-  });
+function render() {
+  el('gridWrap').innerHTML = CATS.map((c, i) => `
+    <div class="scroller" id="sc${i}" ${i === active ? '' : 'hidden'}>
+      <div class="grid" id="gr${i}"></div>
+    </div>`).join('');
 
-  grid.render(facings, products);
+  CATS.forEach((c, i) => {
+    c.grid = createGrid({
+      scroller: el('sc' + i),
+      grid: el('gr' + i),
+      cellHtml: (pid, name) =>
+        `<input class="pk" type="number" inputmode="numeric" min="0" step="1"
+                data-pid="${esc(pid)}" aria-label="Packs added for ${esc(name)}"
+                placeholder="+">`,
+      // Enter moves to the next product that has nothing on it yet. On a restock
+      // that is just a way to walk the shelf; there is no requirement to reach
+      // the end, unlike the count.
+      onEnter: (pid, input) => {
+        const nxt = nextBlank(pid);
+        if (nxt) goTo(nxt); else input.blur();
+      }
+    });
+    c.grid.render(c.facings, c.products);
+    c.order = c.grid.order;
+
+    el('gr' + i).addEventListener('input', e => {
+      const t = e.target;
+      if (!t.dataset || !t.dataset.pid || !t.classList.contains('pk')) return;
+      const pid = t.dataset.pid;
+      const v = t.value.trim();
+      const n = v === '' ? 0 : Math.max(0, Math.floor(Number(v) || 0));
+      // Zero and blank are the same thing here: not restocked. Only positive
+      // numbers are ever written, which is what stock_restock_line checks.
+      if (n > 0) adds[pid] = n; else delete adds[pid];
+      saveDraft();
+      syncProduct(pid, t);
+      updateProgress();
+    });
+  });
 
   el('status').hidden = true;
-  el('scroller').hidden = false;
+  el('gridWrap').hidden = false;
   el('footer').hidden = false;
 
-  el('grid').addEventListener('input', e => {
-    const t = e.target;
-    if (!t.dataset || !t.dataset.pid || !t.classList.contains('pk')) return;
-    const pid = t.dataset.pid;
-    const v = t.value.trim();
-    const n = v === '' ? 0 : Math.max(0, Math.floor(Number(v) || 0));
-    // Zero and blank are the same thing here: not restocked. Only positive
-    // numbers are ever written, which is what stock_restock_line checks.
-    if (n > 0) adds[pid] = n; else delete adds[pid];
-    saveDraft();
-    syncProduct(pid, t);
-    updateProgress();
-  });
-
+  paintSwitcher();
   syncAll();
-  grid.log();
+  CATS.forEach(c => c.grid.log());
   window.adds = adds;
+}
+
+/* One set of zoom controls for whichever shelf is showing. */
+const Z_OVERVIEW = 0.3, OV_THRESHOLD = 0.45;
+let lastFull = 1;
+el('zIn').addEventListener('click', () => cur().grid.applyZoom(cur().grid.zoom * 1.25));
+el('zOut').addEventListener('click', () => cur().grid.applyZoom(cur().grid.zoom / 1.25));
+el('zOv').addEventListener('click', () => {
+  const g = cur().grid;
+  if (g.zoom < OV_THRESHOLD) g.applyZoom(lastFull || 1);
+  else { lastFull = g.zoom; g.applyZoom(Z_OVERVIEW); }
+  el('zOv').classList.toggle('on', cur().grid.zoom < OV_THRESHOLD);
+});
+
+function paintSwitcher() {
+  const sw = el('catSw');
+  if (CATS.length < 2) { sw.hidden = true; return; }
+  sw.hidden = false;
+  sw.innerHTML = CATS.map((c, i) => {
+    const n = c.order.filter(p => adds[p] > 0).length;
+    return `<button data-i="${i}" class="${i === active ? 'on' : ''} ${n ? 'done' : ''}">` +
+      `${esc(categoryLabel(c.category))}` +
+      (n ? `<span class="n">+${n}</span>` : '') + `</button>`;
+  }).join('');
+  sw.querySelectorAll('button').forEach(b =>
+    b.addEventListener('click', () => showCat(Number(b.dataset.i))));
+}
+
+function showCat(i) {
+  if (i === active || !CATS[i]) return;
+  CATS.forEach((c, n) => { el('sc' + n).hidden = n !== i; });
+  active = i;
+  el('zOv').classList.toggle('on', CATS[i].grid.zoom < OV_THRESHOLD);
+  paintSwitcher();
+  paintMeta();
+}
+
+const allProducts = () => CATS.flatMap(c => c.order);
+const catOf = pid => CATS.findIndex(c => c.order.includes(pid));
+function nextBlank(fromPid) {
+  const all = allProducts();
+  const start = fromPid ? all.indexOf(fromPid) + 1 : 0;
+  for (let i = 0; i < all.length; i++) {
+    const pid = all[(start + i) % all.length];
+    if (!(adds[pid] > 0)) return pid;
+  }
+  return null;
+}
+function goTo(pid) {
+  const i = catOf(pid);
+  if (i < 0) return;
+  if (i !== active) showCat(i);
+  CATS[i].grid.goTo(pid);
 }
 
 /* One number per product, shared across every block that product owns — the
    same rule as the count. LD Red is one entry, not three. */
 function syncProduct(pid, exclude) {
   const n = adds[pid] || 0;
-  for (const b of grid.blockEls(pid)) {
+  const ci = catOf(pid);
+  if (ci < 0) return;
+  for (const b of CATS[ci].grid.blockEls(pid)) {
     b.classList.toggle('done', n > 0);
     const pk = b.querySelector('.pk');
     if (pk && pk !== exclude) pk.value = n > 0 ? n : '';
   }
 }
 function syncAll() {
-  for (const pid of grid.order) syncProduct(pid);
+  for (const pid of allProducts()) syncProduct(pid);
   updateProgress();
 }
 
@@ -332,7 +401,8 @@ function updateProgress() {
     : 'nothing added yet';
   // The bar has no "complete" to fill towards — most restocks touch a handful
   // of products — so it shows the share of the gondola touched, nothing more.
-  el('progFill').style.width = (grid.order.length ? (t.products / grid.order.length * 100) : 0) + '%';
+  const total = allProducts().length;
+  el('progFill').style.width = (total ? (t.products / total * 100) : 0) + '%';
   el('btnSubmit').disabled = t.products === 0;
   el('btnDetails').disabled = t.products === 0;
 }
@@ -345,8 +415,11 @@ function showConfirm(reviewOnly) {
   const t = totals();
   if (!t.products) return;
   const rows = t.ids.map(pid => {
-    const p = grid.products.get(pid) || {};
-    const where = grid.blocks.filter(b => b.productId === pid).map(b => b.label).join(' | ');
+    const ci = catOf(pid);
+    const c = CATS[ci] || {};
+    const p = (c.products && c.products.get(pid)) || {};
+    const where = (c.grid ? c.grid.blocks.filter(b => b.productId === pid) : [])
+      .map(b => b.label).join(' | ');
     return { pid, name: p.short_name || pid, where, n: adds[pid] };
   }).sort((a, b) => a.where.localeCompare(b.where));
 
@@ -390,52 +463,74 @@ el('confirmGo').addEventListener('click', async () => {
    The three writes are not a transaction, so a restock_id that reached the
    database is remembered: a retry after a failed step reuses it instead of
    creating a second delivery. */
+/* One restock record per SHELF that actually got packs.
+
+   Not one record covering both: stock_restock carries a category because
+   vw_daily_reconciliation adds its packs into that category's add_in, and a
+   record spanning two shelves could not say which. A sitting that only
+   restocked cigarettes writes one record and no empty Iluma one.
+
+   The writes are not a transaction, so the restock_ids that reached the
+   database are remembered PER CATEGORY: a retry after a failed step finishes
+   them rather than creating a second delivery. */
 async function submitRestock() {
-  const t = totals();
-  let restockId = null;
-  try { restockId = JSON.parse(store.get(PENDING) || 'null'); } catch (e) { restockId = null; }
+  let pending = {};
+  try { pending = JSON.parse(store.get(PENDING) || '{}') || {}; } catch (e) { pending = {}; }
+  // A pending id written before categories existed was a bare number.
+  if (typeof pending === 'number') pending = { CIGARETTES: pending };
 
-  if (restockId) {
-    // Only reuse it if it is still a draft and still ours to finish.
-    const { data } = await db.from('stock_restock')
-      .select('restock_id,status').eq('restock_id', restockId).limit(1);
-    const row = (data || [])[0];
-    if (!row || row.status !== 'draft') restockId = null;
-  }
+  const done = [];
+  for (const c of CATS) {
+    const ids = c.order.filter(pid => adds[pid] > 0);
+    if (!ids.length) continue;                     // nothing added on this shelf
 
-  if (!restockId) {
-    const ins = await db.from('stock_restock').insert({
-      branch_id: ctx.branchId,
-      restock_date: entry.date,
-      staff_name: entry.staff,
-      note: entry.note || null,
-      status: 'draft'
-    }).select('restock_id').single();
-    if (ins.error) throw describe(ins.error, 'creating the restock');
-    restockId = ins.data.restock_id;
-    store.set(PENDING, JSON.stringify(restockId));
-  }
+    let restockId = pending[c.category] || null;
+    if (restockId) {
+      // Only reuse it if it is still a draft and still ours to finish.
+      const { data } = await db.from('stock_restock')
+        .select('restock_id,status').eq('restock_id', restockId).limit(1);
+      const row = (data || [])[0];
+      if (!row || row.status !== 'draft') restockId = null;
+    }
 
-  const lines = t.ids.map(pid => ({ restock_id: restockId, product_id: pid, packs: adds[pid] }));
-  const up = await db.from('stock_restock_line')
-    .upsert(lines, { onConflict: 'restock_id,product_id' });
-  if (up.error) throw describe(up.error, 'writing the restock lines');
+    if (!restockId) {
+      const ins = await db.from('stock_restock').insert({
+        branch_id: ctx.branchId,
+        category: c.category,
+        restock_date: entry.date,
+        staff_name: entry.staff,
+        note: entry.note || null,
+        status: 'draft'
+      }).select('restock_id').single();
+      if (ins.error) throw describe(ins.error, `creating the ${categoryLabel(c.category)} restock`);
+      restockId = ins.data.restock_id;
+      pending[c.category] = restockId;
+      store.set(PENDING, JSON.stringify(pending));
+    }
 
-  // An upsert cannot remove a row. On a retry after a failed attempt the draft
-  // may still carry a product the user has since cleared, so anything not in
-  // this submission goes. Only ever reaches a draft — the trigger refuses once
-  // the restock is submitted.
-  const del = await db.from('stock_restock_line')
-    .delete().eq('restock_id', restockId)
-    .not('product_id', 'in', `(${t.ids.map(id => '"' + id + '"').join(',')})`);
-  if (del.error) throw describe(del.error, 'clearing products removed since the last attempt');
+    const lines = ids.map(pid => ({ restock_id: restockId, product_id: pid, packs: adds[pid] }));
+    const up = await db.from('stock_restock_line')
+      .upsert(lines, { onConflict: 'restock_id,product_id' });
+    if (up.error) throw describe(up.error, 'writing the restock lines');
 
-  const fin = await db.from('stock_restock')
-    .update({ status: 'submitted', submitted_at: new Date().toISOString() })
-    .eq('restock_id', restockId).select('restock_id');
-  if (fin.error) throw describe(fin.error, 'marking the restock submitted');
-  if (!fin.data || !fin.data.length) {
-    throw new Error('The restock was not updated. It may already have been submitted.');
+    // An upsert cannot remove a row. On a retry after a failed attempt the
+    // draft may still carry a product the user has since cleared, so anything
+    // not in this submission goes. Only ever reaches a draft — the trigger
+    // refuses once the restock is submitted.
+    const del = await db.from('stock_restock_line')
+      .delete().eq('restock_id', restockId)
+      .not('product_id', 'in', `(${ids.map(id => '"' + id + '"').join(',')})`);
+    if (del.error) throw describe(del.error, 'clearing products removed since the last attempt');
+
+    const fin = await db.from('stock_restock')
+      .update({ status: 'submitted', submitted_at: new Date().toISOString() })
+      .eq('restock_id', restockId).select('restock_id');
+    if (fin.error) throw describe(fin.error, `marking the ${categoryLabel(c.category)} restock submitted`);
+    if (!fin.data || !fin.data.length) {
+      throw new Error('The restock was not updated. It may already have been submitted.');
+    }
+    delete pending[c.category];
+    done.push({ category: c.category, packs: ids.reduce((n, p) => n + adds[p], 0) });
   }
 
   store.del(PENDING);
@@ -443,10 +538,14 @@ async function submitRestock() {
   const rn = el('resumeNote');
   if (rn && rn.parentElement) rn.parentElement.remove();
   el('confirmOvl').hidden = true;
+  const t = totals();
   el('doneSub').innerHTML =
     `<b>${t.packs}</b> pack${t.packs === 1 ? '' : 's'} across <b>${t.products}</b> ` +
-    `product${t.products === 1 ? '' : 's'} added on <b>${ddmmyyyy(entry.date)}</b>. ` +
-    `Reconciliation for that trading day now expects them to have sold down.`;
+    `product${t.products === 1 ? '' : 's'} added on <b>${ddmmyyyy(entry.date)}</b>` +
+    (done.length > 1
+      ? ' (' + done.map(d => `${esc(categoryLabel(d.category))} ${d.packs}`).join(', ') + ')'
+      : '') +
+    `. Reconciliation for that trading day now expects them to have sold down.`;
   el('doneOvl').hidden = false;
   el('footer').hidden = true;
 }
@@ -486,7 +585,8 @@ function paintMeta() {
     chips.push(`<div class="chip">${esc(entry.staff)}</div>`);
     if (entry.note) chips.push(`<div class="chip">${esc(entry.note)}</div>`);
   }
-  chips.push(`<div class="chip"><b>${grid ? grid.order.length : 0}</b> products on the shelf</div>`);
+  const c = cur();
+  chips.push(`<div class="chip"><b>${c ? c.order.length : 0}</b> products on the shelf</div>`);
   chips.push(`<div class="chip warn">not a count &mdash; leave untouched products blank</div>`);
   // The restock still submits — only the local draft is lost — but a device that
   // cannot save anything should not look like one that can.
@@ -500,44 +600,49 @@ async function load() {
   loadDraft();
 
   const selected = store.get('selectedBranch') || 'Safari';
-  el('fStaff').value = entry.staff || store.get('cig_restock_staff') || '';
+  el('fStaff').value = entry.staff || store.get(restockStaffKey(MOD)) || '';
   el('fDate').value = entry.date || tradingDay();
   el('fNote').value = entry.note || '';
 
   const [verRes, brRes] = await Promise.all([
-    db.from('planogram_version').select('version_id,branch_id').eq('status', 'active'),
+    db.from('planogram_version').select('version_id,branch_id,category').eq('status', 'active'),
     db.from('branch').select('branch_id,name')
   ]);
   if (verRes.error) return setStatus('Could not read planogram_version: ' + verRes.error.message, true);
 
   const versions = verRes.data || [], branches = brRes.data || [];
-  if (!versions.length) return setStatus('No active planogram version found.', true);
-
-  // Same branch resolution as start.html: the selected branch if it has an
-  // active planogram, otherwise whatever does, said out loud.
   const norm = s => String(s || '').toLowerCase().replace(/[^a-z]/g, '');
   const match = branches.find(b => norm(b.branch_id) === norm(selected) || norm(b.name).includes(norm(selected)));
-  /* The asked-for branch or nothing. Restocks feed add_in for a branch's own
-     reconciliation, so one filed against the wrong branch would move a number
-     nobody could trace back. */
-  const version = match && versions.find(v => v.branch_id === match.branch_id);
-  if (!version) {
-    return setStatus(`${selected} has no cigarette planogram, so there is no shelf to restock. ` +
-      `Switch branch in the menu.`, true);
+  if (!match) {
+    return setStatus(`No branch called ${selected} is configured. Switch branch in the menu.`, true);
+  }
+  /* The asked-for branch and shelf, or nothing. Restocks feed add_in for one
+     branch and one category's reconciliation, so one filed against the wrong
+     either would move a number nobody could trace back. */
+  const wanted = MOD.categories.map(cat => ({
+    category: cat,
+    version: versions.find(v => v.branch_id === match.branch_id && v.category === cat) || null
+  }));
+  const noShelf = wanted.filter(w => !w.version);
+  if (noShelf.length) {
+    return setStatus(`${match.name} has no ` +
+      noShelf.map(w => categoryLabel(w.category).toLowerCase()).join(' or ') +
+      ` planogram, so there is no shelf to restock. Switch branch in the menu.`, true);
   }
 
-  ctx.branchId = version.branch_id;
-  ctx.versionId = version.version_id;
-  ctx.branchName = (branches.find(b => b.branch_id === version.branch_id) || {}).name || version.branch_id;
+  ctx.branchId = match.branch_id;
+  ctx.branchName = match.name;
 
   const [facRes, prodRes, lastRes] = await Promise.all([
-    db.from('planogram_facing').select('shelf,position,product_id').eq('version_id', version.version_id),
+    db.from('planogram_facing').select('shelf,position,product_id,version_id')
+      .in('version_id', wanted.map(w => w.version.version_id)),
     db.from('product').select('product_id,short_name,plu,brand'),
-    // The latest submitted count, purely so the date field can warn about
-    // back-dating into a period that has already been reconciled. No quantity
-    // is read: the count is blind and this screen must not leak one.
+    // The latest submitted count for this module's shelves, purely so the date
+    // field can warn about back-dating into a period already reconciled. No
+    // quantity is read: the count is blind and this screen must not leak one.
     db.from('stock_count').select('count_date')
-      .eq('branch_id', version.branch_id).eq('status', 'submitted')
+      .eq('branch_id', match.branch_id).eq('status', 'submitted')
+      .in('category', MOD.categories)
       .order('count_date', { ascending: false }).limit(1)
   ]);
   if (facRes.error) return setStatus('Could not read planogram_facing: ' + facRes.error.message, true);
@@ -545,10 +650,20 @@ async function load() {
 
   ctx.lastCount = ((lastRes.data || [])[0] || {}).count_date || null;
 
-  const facings = facRes.data || [];
-  if (!facings.length) return setStatus('Active version ' + version.version_id + ' has no facings.', true);
+  const products = new Map((prodRes.data || []).map(p => [p.product_id, p]));
+  CATS = wanted.map(w => ({
+    category: w.category,
+    versionId: w.version.version_id,
+    facings: (facRes.data || []).filter(f => f.version_id === w.version.version_id),
+    products
+  }));
+  const empty = CATS.filter(c => !c.facings.length);
+  if (empty.length) {
+    return setStatus(`The ${empty.map(c => categoryLabel(c.category).toLowerCase()).join(' and ')} ` +
+      `planogram has no facings.`, true);
+  }
 
-  render(facings, new Map((prodRes.data || []).map(p => [p.product_id, p])));
+  render();
   paintMeta();
   updateDateHint();
   validateSetup();

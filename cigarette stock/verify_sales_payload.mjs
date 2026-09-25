@@ -27,10 +27,25 @@ for (const m of sql.matchAll(/\('SAFARI',\s*'([\d-]+)',\s*'(\d+)',\s*(\d+)\)/g))
 }
 
 const KEY = readFileSync(new URL('../app.js', import.meta.url), 'utf8').match(/eyJ[A-Za-z0-9_.-]+/)[0];
-const res = await fetch(
-  'https://vwffiuciogthfzekkkkz.supabase.co/rest/v1/product?select=product_id,short_name&active=eq.true',
-  { headers: { apikey: KEY } });
-const products = new Map((await res.json()).map(p => [p.product_id, p]));
+const get = async q => (await fetch(
+  'https://vwffiuciogthfzekkkkz.supabase.co/rest/v1/' + q, { headers: { apikey: KEY } })).json();
+
+// SCOPED to cigarettes, exactly as the import page scopes it. This is the
+// whole point of the last section of this file.
+//
+// The category column arrives with 15_categories.sql. Until that is run
+// PostgREST answers with an error object rather than rows, so fall back to the
+// unscoped list — which is correct while cigarettes are the only products
+// there are — and say so rather than failing for the wrong reason.
+let all = await get('product?select=product_id,short_name,category&active=eq.true');
+let categorised = Array.isArray(all);
+if (!categorised) {
+  console.log('NOTE  product.category does not exist yet — run 15_categories.sql. ' +
+    'The scoping checks at the end of this file are skipped.');
+  all = await get('product?select=product_id,short_name&active=eq.true');
+  all.forEach(p => { p.category = 'CIGARETTES'; });
+}
+const products = new Map(all.filter(p => p.category === 'CIGARETTES').map(p => [p.product_id, p]));
 
 // What the parser would have found: only the products that actually sold,
 // plus the one Item ID that is not on the planogram.
@@ -79,3 +94,54 @@ check(rows.every(r => Number.isInteger(r.qty_sold) && r.qty_sold >= 0),
 // The failure this exists to prevent.
 const dropped = [...target].filter(([, q]) => q === 0).length;
 console.log(`\nIf absent products were left out, ${dropped} of 54 would have no variance for 09/09.`);
+
+
+// ---------------------------------------------------------------------------
+// Scoping. buildPayload writes "sold nothing today" for every product it is
+// handed, which is only true inside the report being read — and cigarettes,
+// heated tobacco and lubes print as SEPARATE POS reports.
+//
+// Hand it everything and a cigarette import writes a zero-sales row for every
+// lube and every TEREA as well, every day, with no error anywhere. Those rows
+// land in vw_daily_reconciliation and read as if the whole shelf sold nothing,
+// so the variance becomes the entire stock holding. It would look like a
+// catastrophic shrinkage event and be a scoping bug.
+// ---------------------------------------------------------------------------
+console.log('\nthe zero-fill must not reach across shelves\n');
+
+const byCat = {};
+for (const p of all) (byCat[p.category] = byCat[p.category] || []).push(p);
+const cats = Object.keys(byCat).sort();
+console.log(`  active products by category: ${cats.map(c => `${c} ${byCat[c].length}`).join(', ')}`);
+
+if (!categorised || cats.length < 2) {
+  console.log('  SKIP  more than one category is needed — run 15_categories.sql then ' +
+    '16_seed_lubes_iluma.sql, then re-run this.');
+} else {
+  const cig = new Map(byCat.CIGARETTES.map(p => [p.product_id, p]));
+  const scoped = buildPayload(parsed, cig, 'SAFARI', '2026-09-09');
+  check(scoped.rows.length === cig.size,
+    `a cigarette report writes ${cig.size} rows — one per cigarette, and no more`,
+    scoped.rows.length);
+
+  const otherIds = new Set(all.filter(p => p.category !== 'CIGARETTES').map(p => p.product_id));
+  const leaked = scoped.rows.filter(r => otherIds.has(r.product_id));
+  check(leaked.length === 0,
+    'and NOT ONE row for a lube or a TEREA, which would read as a whole shelf ' +
+    'selling nothing that day',
+    leaked.slice(0, 3).map(r => r.product_id).join(','));
+
+  // The other direction: a lubes report must not zero-fill cigarettes.
+  if (byCat.LUBES) {
+    const lub = new Map(byCat.LUBES.map(p => [p.product_id, p]));
+    const one = [...lub.keys()][0];
+    const lubPayload = buildPayload([{ product_id: one, description: '', qty: 3 }],
+      lub, 'SAFARI', '2026-09-09');
+    check(lubPayload.rows.length === lub.size,
+      `a lubes report writes ${lub.size} rows`, lubPayload.rows.length);
+    check(!lubPayload.rows.some(r => cig.has(r.product_id)),
+      'and touches no cigarette');
+    check(lubPayload.rows.filter(r => r.qty_sold === 0).length === lub.size - 1,
+      'with every lube that did not sell written as an explicit 0');
+  }
+}

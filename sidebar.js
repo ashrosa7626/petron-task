@@ -22,11 +22,17 @@
     { label:'Shift Briefing',   href:'briefing.html' },
     { label:'Lead Panel',       href:'lead.html' },
     { label:'Sign-Off Review',  href:'supervisor.html' },
-    { label:'Cigarette Count',  href:'stock-count/start.html', section:'Cigarettes' },
-    { label:'Count Results',    href:'stock-count/history.html' },
-    { label:'Restock the Shelf',href:'stock-count/restock.html' },
+    // Cigarettes and Iluma are one sitting — the count screen has a button to
+    // flip between the two shelves — so they are one entry, not two.
+    { label:'Count',            href:'stock-count/start.html', section:'Cigarettes & Iluma' },
+    { label:'Results',          href:'stock-count/history.html' },
+    { label:'Restock',          href:'stock-count/restock.html' },
     { label:'Import POS Sales', href:'stock-count/import-sales.html' },
     { label:'Edit the Shelf',   href:'stock-count/planogram.html' },
+
+    { label:'Count',            href:'stock-count/start.html?m=lubes', section:'Lubes' },
+    { label:'Results',          href:'stock-count/history.html?m=lubes' },
+    { label:'Restock',          href:'stock-count/restock.html?m=lubes' },
   ];
 
   // Branch is app-wide and lives in one key. The cigarette pages read the same
@@ -221,9 +227,12 @@
   // ── Build nav items ─────────────────────────────────────
   // Active is decided on the RESOLVED path, so stock-count/index.html and the
   // root index.html cannot be mistaken for each other.
+  // Two entries can share a path and differ only by ?m=, so the query counts.
+  const hereMod = new URLSearchParams(location.search).get('m') || '';
   const navItems = PAGES.map(p => {
     const url = new URL(p.href, ROOT);
-    const isActive = url.pathname === here;
+    const itsMod = url.searchParams.get('m') || '';
+    const isActive = url.pathname === here && itsMod === hereMod;
     return (p.section ? `<div class="sb-sect">${p.section}</div>` : '') +
       `<a href="${url.href}" class="sb-link ${isActive ? 'active' : ''}">
         <span>${p.label}</span>
