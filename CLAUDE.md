@@ -16,13 +16,23 @@ Hosted on GitHub Pages: https://ashrosa7626.github.io/petron-task/
 - briefing.html — Shift briefing system (Day/Night)
 - lead.html — Team lead login and task assignment
 - supervisor.html — Sign-off review page
-- sidebar.js — Shared navigation sidebar (included in all pages)
+- sidebar.js — Shared navigation sidebar (included in all pages, including
+  `stock-count/`). It is the ONE menu: the cigarette pages are listed in it under a
+  Cigarettes heading, and the branch is chosen there.
+- `stock-count/` — the cigarette module, six pages. See its own section below.
 
 ## Supabase
 - Project ID: vwffiuciogthfzekkkkz
 - URL: https://vwffiuciogthfzekkkkz.supabase.co
 - Key is in app.js
-- Tables: daily_assignments, completions, users, task_templates, categories, subcategories, subgroups, shift_briefings, shift_staff
+- Task tables: daily_assignments, completions, users, task_templates, categories,
+  subcategories, subgroups, shift_briefings, shift_staff
+- Cigarette tables: branch, product, product_alias, planogram_version, planogram_facing,
+  stock_count, stock_count_line, pos_sales_daily, stock_restock, stock_restock_line,
+  plus the views vw_count_submitted, vw_restock_daily and vw_daily_reconciliation
+- `users` carries `auth_id` and `role` (staff / lead / supervisor). It is what
+  `lead.html`, `supervisor.html` and `stock-count/planogram.html` gate on — 13 leads
+  and 47 staff as of 25 Sep 2026
 - shift_staff table is RLS-blocked for anon key — do NOT rely on it for reads/writes; use shift_briefings instead
 
 ## Branch System
@@ -37,7 +47,9 @@ Hosted on GitHub Pages: https://ashrosa7626.github.io/petron-task/
   never `|| branches[0]`, never `|| versions[0]`.
 - The `branch` table held only `SAFARI` until `14_add_branch.sql`. A branch with no
   planogram version is **real but empty** — the pages say the shelf is not set up.
-- All pages have a branch toggle dropdown in the header
+- The **task** pages (briefing, dashboard, lead, supervisor) also keep their own branch
+  dropdown in the header; the `stock-count/` pages do not — their header only *shows*
+  the branch, and the sidebar is where it is changed. Both write the same key.
 - Data must always be filtered by branch
 
 ## Header Pattern (all pages)
@@ -187,7 +199,7 @@ must name both roles.**
 
 Daily physical count of the cigarette gondola (Safari: 6 shelves A–F × 27 positions,
 162 facings, 54 products, **58 blocks**). Spec, workbook and SQL live in
-`cigarette stock/` — `BRIEF.md`, `01_schema.sql` … `10_prices_and_opening_date.sql`,
+`cigarette stock/` — `BRIEF.md`, `01_schema.sql` … `14_add_branch.sql`,
 `CIGARETTES PLANOGRAM.xlsx`, `products_reference.csv`.
 Run the SQL in numbered order. Counts are in **packs**; cartons are out of scope.
 
@@ -214,8 +226,8 @@ Pages, all under `stock-count/`:
 
 Excel reporting lives in `excel/` — see the export section below. The published
 setup guide is at https://claude.ai/code/artifact/f2489e09-bf24-4782-978b-4ed5cef39172
-(republish `excel/guide.html` to that same URL to update it). **Republished 14 Sep
-2026** and current. Note the publish guard: republishing refuses until the live version
+(republish `excel/guide.html` to that same URL to update it). **Last republished 17 Sep
+2026**, when the `Added` column came back. Note the publish guard: republishing refuses until the live version
 has been read back, which is what caught the guide embedding `counts_query.m` verbatim
 with a Copy button — content a local rewrite had silently dropped. Read the live copy
 and merge onto it; never assume the repo file is a superset.
@@ -342,8 +354,10 @@ Supporting notes:
   Consequences, all UI-only — the schema is untouched:
   - nothing on the shelf is entered as **0**, so `not_on_shelf` is always written
     `false`; block state is two-valued, uncounted or counted
-  - `add_in` is always written **0** — the count screen no longer collects
-    deliveries
+  - `stock_count_line.add_in` is always written **0** — the count screen no longer
+    collects deliveries. Note this is the COLUMN, not the view: since `11_restocks.sql`
+    `vw_daily_reconciliation.add_in` is that zero **plus** every submitted restock in
+    the period, and as of 25 Sep it carries real numbers (19 products on 17/09)
   - `counted_or_absent` is satisfied because `packs` is always present
   - loading a line or local draft carrying `not_on_shelf` reads it back as 0
 - **The gap that left, and how:** `sold_physical = opening + add_in − closing`, and
@@ -596,12 +610,34 @@ write, so migrations are run by hand in the Supabase SQL editor):
 - `diff_xlsx_vs_db.py` — diffs the workbook against live Supabase, cross-checks the
   grid against the `Positions` column, regenerates `04_sync_to_spreadsheet.sql` and
   writes `expected_facings.json`.
+- `verify_xlsx.mjs` — offline. Pins that the browser's .xlsx reader agrees with
+  `read_xlsx.py` cell for cell, and that read → write → read is a **no-op**, which is
+  the property the editor page rests on. Uses `xlsx_dom_shim.mjs` so `xlsx.js` runs
+  unmodified under Node rather than being reimplemented.
+- `verify_planogram_diff.mjs` — live. Generates the baseline workbook **from the
+  database** with the same `buildWorkbookRows()` the download button uses, then applies
+  one invented edit at a time: a PLU change, adding a product, removing one, and every
+  edit that must be refused. Reports how far the repo's workbook has drifted rather
+  than asserting it has not.
 - `verify_blocks.mjs` / `verify_expected.mjs` — `import { deriveBlocks } from
   '../stock-count/planogram.js'`, so the tests exercise the shipped module rather
   than a copy, then assert facings reconcile, no block overlaps another, every
   drawn cell matches its facing row, and every split block carries a correct
   "n of m" marker. They used to slice the functions out of `index.html` with
   `indexOf`; the extraction removed the need.
+
+## Recent Fixes (Sep 2026)
+- **Navigation is one app.** `sidebar.js` hrefs resolve against its own URL, so Home
+  from `stock-count/` no longer lands on the count grid; the cigarette pages are in the
+  menu; the per-page back links are gone; branch is chosen in the sidebar.
+- **No branch falls back to another** — see the Branch System section. This was
+  showing Safari's counts under a Nilai Desa Jati heading.
+- **briefing.html cache**: three bugs in a row, each caused by the previous fix. See
+  Briefing Storage Architecture — the device was at 10,240 KB of a 10 MB cap, which is
+  what made `setItem` throw everywhere else.
+- **Restock module** and **planogram editor** shipped; `add_in` carries real numbers.
+- **import-sales.html**: a line lost whole to OCR can be typed back, and the report's
+  own Grand Total re-checks what was typed.
 
 ## Recent Fixes (Apr–May 2026)
 - **lead.html**: dead `leadBranchLabel` reference caused tasks stuck on "Loading..."
@@ -615,79 +651,89 @@ write, so migrations are run by hand in the Supabase SQL editor):
 - **dashboard.html**: Tasks of the Day flat list above staff completion journey; font sizes bumped across all pages
 - **style.css**: base font bumped 16px → 17px; small labels bumped proportionally in briefing.html and dashboard.html
 
-## Cigarette Module — State as of 14 Sep 2026
-Verified against the live database, not from memory. Re-check before trusting — this
-section has been wrong twice by assuming a migration's state rather than probing it.
+## Cigarette Module — State as of 25 Sep 2026
+Probed against the live database, not remembered. **Re-probe before trusting**: this
+section has now been wrong three times by assuming a migration's state, and between
+14 and 25 Sep five migrations were run and the module went into daily use without a
+line of it being updated.
 
-**Migrations applied:** 01–08 and **10** are in. **`09` is NOT**, and **`11` (restocks)
-has not been run yet** — it was written 14 Sep 2026 and is the one thing standing
-between `restock.html` and working. Probed 14 Sep 2026:
-`pos_sales_daily.imported_by` errors `42703`, while `product.unit_price`,
-`pos_sales_daily.unit_price` and the view's `opening_date` / `unit_price_used` /
-`variance_rm` all exist. So the import page stores no `imported_by` (the name gates the
-button but goes nowhere) and does store `unit_price` from the next report loaded.
-`opening_date` populates correctly: null on a product's first count, the previous
-count's date thereafter.
+**Migrations: 01–14 are ALL applied.** Probed 25 Sep — `pos_sales_daily.imported_by`
+returns values, `stock_restock` answers `200`, `is_planogram_editor()` exists and
+returns `false` for anon, and `branch` holds two rows. Nothing is outstanding.
 
-**`product.unit_price` is still null for every product**, so `unit_price_used` and
-`variance_rm` are null too. Variance RM stays blank until someone sets list prices —
-that is a data task, not a code one.
+**Branches:** `SAFARI` (Petron MRR2 Safari) and `NILAI` (Petron Nilai Desa Jati).
+NILAI is real but **has no planogram version**, so every cigarette page tells you the
+shelf is not set up and stops — it does not borrow Safari's. Giving it a shelf needs
+somebody in front of that gondola.
 
-**Data in the system:**
+**Planogram: version 3 is active** for SAFARI, effective 17 Sep, note
+`1 facing · Team Lead` — so `planogram.html` has been used for real, and versions 1
+and 2 are archived. Anon cannot see archived versions (the read policy is
+`using (status = 'active')`), which is why a query for all versions returns only one.
+Still 54 products, 162 facings, 58 blocks.
 
-Re-verified 14 Sep 2026 against the live view:
+**THE PIPELINE IS PROVEN END TO END.** This was the open question for weeks and it is
+closed. Five days — **14, 15, 16, 17 and 18 Sep** — have a count, an opening, a POS
+import and real variance on all 54 products:
 
-| count_date | status | staff | opening | sold_physical | sold_pos | variance |
-|---|---|---|---|---|---|---|
-| 2026-08-26 | draft | — | — | — | — | — |
-| 2026-09-09 | submitted | Luqman | 0/54 | 0/54 | **54/54** | 0/54 |
-| 2026-09-10 | submitted | Luqman | **54/54** | **54/54** | 0/54 | 0/54 |
-| 2026-09-11 | submitted | Aktar | **54/54** | **54/54** | 0/54 | 0/54 |
-| 2026-09-12 | submitted | Aktar | **54/54** | **54/54** | 0/54 | 0/54 |
-| 2026-09-13 | submitted | Aktarul | **54/54** | **54/54** | 0/54 | 0/54 |
+| date | products off | add_in > 0 | variance RM |
+|---|---|---|---|
+| 14/09 | 13 | 2 | 28 |
+| 15/09 | 10 | 0 | 29 |
+| 16/09 | 6 | 0 | 27 |
+| 17/09 | 16 | **19** | 33 |
+| 18/09 | 23 | 0 | 33 |
 
-`pos_sales_daily` still holds **only 09/09**. Counting is now a daily habit; importing
-the sales report is not.
+A real row, 18/09 Rothmans Blue: opening 21, add_in 0, closing 12, so the shelf lost 9
+while the till sold 4 — variance **+5**. That is the number the whole module exists to
+produce, and it is now arriving daily.
 
-**Variance is still 0 rows everywhere, and this is the thing to understand.** Each half
-works; they have never overlapped on the same day. `variance_packs` needs *both* a
-previous submitted count (for `opening_packs`) *and* a `pos_sales_daily` row for that
-same day. 09/09 has POS but is the first count so has no opening; 10/09 onward have
-openings but no POS. **Importing any sales report from 10/09 onward completes the
-chain** and is still the single next action that proves the pipeline end to end — it is
-also what makes the Excel workbook show anything but em dashes. Four days are now
-waiting, not one.
+**Counting is a firm habit; importing is not yet.** 15 counts, 09/09 through 24/09,
+by Luqman, Aktar, Aktarul, Suzy, Asyraf and Ratna. **Gaps on 19 and 23 Sep** — and a
+gap is not neutral: opening comes from the previous *submitted* count, so 20/09 opens
+from 18/09 and folds two days of selling into one. `opening_date` on the view is how
+you spot it. POS sales exist for only 6 days (09/09, 14–18/09), so **20–24 Sep are
+counted but have no POS side** and show em dashes.
 
-**Two known distortions in the current numbers**, both expected, neither a bug:
-- 09/09 was a **test count** — one product at 7 packs, the other 53 at 0. So 10/09's
-  openings are nearly all 0 and its `sold_physical` comes out negative.
-- `add_in` is always 0 (the count screen has one input), so any day stock went onto the
-  shelf reads as negative variance. See the known-gap note in the module section.
+**Variance RM works, partially, and not from where the docs assumed.**
+`product.unit_price` is **still null for all 54** — nobody set list prices. But the
+import page stores `pos_sales_daily.unit_price` from each report, so 27–33 products a
+day are valued anyway. The gap is exactly the products that did not sell that day,
+which is the shrinkage case: setting `product.unit_price` is what closes it, and it is
+a data task, not a code one.
 
-**The real PDFs have now been read.** `~/Downloads/20260910155519.pdf` is the 09/09
-report and `~/Downloads/20260910161828.pdf` is 10/09 — both CCITT G4 scans, no text
-layer. Read end to end in a real browser through the shipped page: 09/09 gives 31
-lines balancing to RM2,435.80 (144 packs clean + 8 across 2 flagged lines = the 152
-counted off the paper); 10/09 gives 27 lines balancing to RM1,376.70. Captured as
-`cigarette stock/fixtures/sales_ocr_2026*.json` so the tests keep running without them.
-`~/Downloads/20260826112033.pdf` is an **Inventory Balance** report, not a sales report
-— it is the fixture case for uploading the wrong one.
+**Restocks are in real use.** 7 records: submitted ones by Luqman (14/09 ×2, 17/09)
+and Ratna (23/09); 3 voided, two of which were my own end-to-end tests and are
+labelled as such. 17/09 shows 19 products with `add_in > 0` — a genuine delivery
+flowing into reconciliation, which is the thing the module could not do at all before.
 
-**Not done:**
-- **`11_restocks.sql` has not been run.** Until it is, `restock.html` fails on submit
-  (`42P01`, which it names) and the Restocks tab on `history.html` says so in place.
-  Nothing else is affected — the view change is in the same file.
-- **No sales report has been imported since 09/09** — 10/09 through 13/09 are all
-  counted and all missing their POS side. Loading any one of them completes the
-  variance chain, and it is the single next action.
-- **`09_pos_sales_imported_by.sql` has not been run**, so the name typed on the import
-  page is not stored anywhere. Optional; the page probes for the column and omits it.
-- **`product.unit_price` is not set**, so Variance RM is blank throughout the workbook.
-- No `pos_sales_daily` loader for Nilai Desa Jati; only Safari has a planogram.
+**`imported_by` is stored** — Luqman on all five of the 14–18 Sep imports. Only the
+09/09 import predates migration 09 and has it null.
+
+**The 08/26 count is still an open draft** and has been for a month. It holds no lines
+and nothing depends on it, but it is the row that makes "one count per branch per day"
+resume rather than start if anyone picks that date.
+
+**The sample PDFs**, still in `~/Downloads`: `20260910155519.pdf` is the 09/09 report
+(31 lines, RM2,435.80), `20260910161828.pdf` is 10/09 (27 lines, RM1,376.70), and
+`20260826112033.pdf` is an **Inventory Balance** report — the fixture case for
+uploading the wrong one. All three are captured in
+`cigarette stock/fixtures/sales_ocr_2026*.json`, so the tests do not need them.
+
+**Still open:**
+- **Nilai Desa Jati has no planogram**, so no counting, restocking or importing there.
+- **`product.unit_price` is unset**, so a product that did not sell has no RM figure.
+- **20–24 Sep have no POS import** — five days of counts waiting for their other half.
+- **The repo's `CIGARETTES PLANOGRAM.xlsx` is behind the database** (two PLUs as of
+  17 Sep). It is a parser fixture now; download a fresh sheet from `planogram.html`.
+- **Whether the Excel workbook's Power Query is attached is unknown from here.** It was
+  rebuilt in `--mode query` on 14 Sep, which deliberately ships an empty `Data` sheet;
+  if nobody re-attached the `Counts` query the workbook still shows em dashes while the
+  database has five days of variance. Check before assuming the workbook is broken.
 - `short_name` values are still drafts.
-- OCR accuracy is measured on two reports only: 1–2 lines a report need a human, and
-  2 more are repaired automatically. Worth re-checking that rate after a few weeks of
-  real use — if it climbs, the print quality or the scanner setting has moved.
+- OCR accuracy is still measured on two reports only. Six have now been imported for
+  real, so the true rate is knowable — worth asking whoever imports them how often a
+  line needs typing.
 
 ## Deployment
 - git add . → git commit -m "message" → git push
