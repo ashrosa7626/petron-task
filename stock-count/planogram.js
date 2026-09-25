@@ -63,7 +63,22 @@ export function deriveBlocks(facings, shelves) {
       regions.push(region);
     }
 
-    regions.forEach((region, i) => {
+    /* Collect the rectangles this product will actually be DRAWN as, then
+       number them. Numbering by region instead was wrong for an L-shape:
+
+       Lubes Blaze Multi 20W50 4L holds C7, C8 and D8. Those are all connected,
+       so it is ONE region — but it is not a rectangle, so it is drawn as two
+       pieces, C7-8 and D8. Numbering by region gave both pieces "1 of 1" and
+       therefore no marker at all, so the grid showed one product as two
+       unrelated blocks. Someone counts C7-8, sees a number in the box and
+       moves on, and the packs on D8 are never counted — the exact failure the
+       markers exist to prevent, and the reason LD Red is called out in
+       CLAUDE.md.
+
+       Cigarettes has no non-rectangular region, so every product there is
+       drawn as one piece per region and this numbers identically. */
+    const pieces = [];
+    regions.forEach(region => {
       const rows = region.map(c => c[0]);
       const cols = region.map(c => c[1]);
       const h = Math.max(...rows) - Math.min(...rows) + 1;
@@ -73,12 +88,20 @@ export function deriveBlocks(facings, shelves) {
       // rectangle per contiguous run within each row.
       if (h * w !== region.length) {
         nonRect.push({ productId, cells: region.length, box: h + 'x' + w });
-        for (const rect of rowRuns(region)) {
-          blocks.push(makeBlock(productId, rect, i, regions.length, shelves, true));
-        }
+        for (const rect of rowRuns(region)) pieces.push({ cells: rect, fragment: true });
       } else {
-        blocks.push(makeBlock(productId, region, i, regions.length, shelves, false));
+        pieces.push({ cells: region, fragment: false });
       }
+    });
+
+    // Reading order, so "1 of 2" is the one you meet first.
+    pieces.sort((a, b) => {
+      const top = cs => Math.min(...cs.map(c => c[0]));
+      const left = cs => Math.min(...cs.map(c => c[1]));
+      return top(a.cells) - top(b.cells) || left(a.cells) - left(b.cells);
+    });
+    pieces.forEach((piece, i) => {
+      blocks.push(makeBlock(productId, piece.cells, i, pieces.length, shelves, piece.fragment));
     });
   }
   return { blocks, nonRect, productCount: byProduct.size };
