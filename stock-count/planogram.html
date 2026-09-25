@@ -166,7 +166,7 @@
 <script type="module">
 import { readXlsx, writeXlsx } from './xlsx.js';
 import { diffPlanogram, buildWorkbookRows } from './planogram-diff.js';
-import { currentModule, CATEGORIES, categoryLabel } from './modules.js';
+import { currentModule, CATEGORIES, categoryLabel, catOf } from './modules.js';
 
 const MOD = currentModule();
 import { deriveBlocks } from './planogram.js';
@@ -285,7 +285,7 @@ async function init() {
      "any active version" would have let someone edit Safari's shelf while the
      page said Nilai Desa Jati. */
   const active = match && versions.find(v => v.status === 'active' &&
-    v.branch_id === match.branch_id && v.category === ctx.category);
+    v.branch_id === match.branch_id && catOf(v) === ctx.category);
 
   if (!active) {
     // Nilai Desa Jati has never had one. Say so rather than failing blankly.
@@ -302,8 +302,7 @@ async function init() {
   el('brLabel').textContent = ctx.branchName;
 
   const [prodRes, aliasRes, facRes, lineRes] = await Promise.all([
-    db.from('product').select('product_id,plu,pos_description,short_name,brand,active,category')
-      .eq('category', ctx.category),
+    db.from('product').select('*'),
     db.from('product_alias').select('alias,product_id'),
     db.from('planogram_facing').select('shelf,position,product_id').eq('version_id', active.version_id),
     db.from('stock_count_line').select('product_id')
@@ -319,7 +318,12 @@ async function init() {
       `at all rather than an error.`, 'err');
   }
 
-  ctx.products = new Map((prodRes.data || []).map(p => [p.product_id, p]));
+  // Only this shelf's products. Before 15_categories.sql there is no column,
+  // and everything in the table is a cigarette — so that IS this shelf when
+  // cigarettes are selected, and correctly empty otherwise.
+  ctx.products = new Map((prodRes.data || [])
+    .filter(p => catOf(p) === ctx.category)
+    .map(p => [p.product_id, p]));
   ctx.aliases = new Map((aliasRes.data || []).map(a => [a.alias, a.product_id]));
   ctx.facings = new Map((facRes.data || []).map(f => [f.shelf + ':' + f.position, f.product_id]));
   ctx.counts = new Map();
@@ -331,7 +335,7 @@ async function init() {
   el('work').hidden = false;
   el('dlWhat').textContent =
     `version ${active.version_id} · ${new Set(ctx.facings.values()).size} products · ${ctx.facings.size} facings`;
-  renderVersions(versions.filter(v => v.branch_id === ctx.branchId && v.category === ctx.category));
+  renderVersions(versions.filter(v => v.branch_id === ctx.branchId && catOf(v) === ctx.category));
 }
 
 function renderVersions(versions) {

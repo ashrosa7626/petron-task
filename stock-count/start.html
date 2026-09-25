@@ -276,7 +276,7 @@ async function checkExisting() {
   const date = el('fDate').value;
 
   const { data, error } = await db.from('stock_count')
-    .select('count_id,category,status,staff_name,title,started_at,submitted_at')
+    .select('*')
     .eq('branch_id', ctx.branchId).eq('count_date', date);
   if (error) {
     note('warn', 'Could not check for an existing count: ' + escapeHtml(error.message));

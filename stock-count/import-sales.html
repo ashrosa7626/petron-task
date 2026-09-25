@@ -703,7 +703,7 @@ async function init() {
      reconciliation would read as total shrinkage. */
   let { data: prods, error } = await db.from('product')
     .select('product_id,short_name,plu,active,category')
-    .eq('active', true).eq('category', ctx.category).order('short_name');
+    .eq('active', true).eq('category', ctx.category).order('short_name');   // errors pre-migration, handled below
   // Before 15_categories.sql there is no column to filter on. Everything in
   // the table is a cigarette then, so the unscoped list IS the scoped one.
   let scoped = !error;
