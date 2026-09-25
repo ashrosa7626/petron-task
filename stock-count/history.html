@@ -177,7 +177,7 @@
 </div>
 
 <script type="module">
-import { currentModule, href, categoryLabel } from './modules.js';
+import { currentModule, href, categoryLabel, catOf } from './modules.js';
 
 const MOD = currentModule();
 const SUPABASE_URL = 'https://vwffiuciogthfzekkkkz.supabase.co';
@@ -218,7 +218,7 @@ async function init() {
 
   const [brRes, verRes, prodRes] = await Promise.all([
     db.from('branch').select('branch_id,name'),
-    db.from('planogram_version').select('version_id,branch_id,category').eq('status', 'active'),
+    db.from('planogram_version').select('*').eq('status', 'active'),
     db.from('product').select('product_id,short_name,plu,brand')
   ]);
   if (brRes.error) return setStatus('Could not read branch: ' + brRes.error.message, true);
@@ -240,7 +240,7 @@ async function init() {
 
   // Shelf order, so results read in the same sequence the shelf was counted.
   const versions = (verRes.data || []).filter(v =>
-    v.branch_id === ctx.branchId && MOD.categories.includes(v.category));
+    v.branch_id === ctx.branchId && MOD.categories.includes(catOf(v)));
   if (versions.length) {
     const { data } = await db.from('planogram_facing')
       .select('shelf,position,product_id').in('version_id', versions.map(v => v.version_id));
@@ -255,11 +255,14 @@ async function init() {
      Results and the reverse: they are different shelves counted by different
      people, and mixing them makes the list unreadable and the totals wrong. */
   const { data, error } = await db.from('stock_count')
-    .select('count_id,count_date,title,staff_name,status,category,started_at,submitted_at')
-    .eq('branch_id', ctx.branchId).in('category', MOD.categories)
+    .select('*')
+    .eq('branch_id', ctx.branchId)
     .order('count_date', { ascending: false });
   if (error) return setStatus('Could not read stock_count: ' + error.message, true);
-  ctx.counts = data || [];
+  // Filtered here rather than in the query: before 15_categories.sql there is
+  // no column to filter on, and catOf reads every existing row as cigarettes —
+  // which is what they are.
+  ctx.counts = (data || []).filter(c => MOD.categories.includes(catOf(c)));
 
   // How many lines each count actually holds — a draft has none until submit.
   const ids = ctx.counts.map(c => c.count_id);
@@ -299,8 +302,8 @@ async function init() {
    thrown. */
 async function loadRestocks() {
   const { data, error } = await db.from('stock_restock')
-    .select('restock_id,restock_date,staff_name,note,status,category,void_reason,created_at,submitted_at,voided_at')
-    .eq('branch_id', ctx.branchId).in('category', MOD.categories)
+    .select('*')
+    .eq('branch_id', ctx.branchId)
     .order('restock_date', { ascending: false })
     .order('created_at', { ascending: false });
   if (error) {
@@ -310,7 +313,7 @@ async function loadRestocks() {
     ctx.restocks = [];
     return;
   }
-  ctx.restocks = data || [];
+  ctx.restocks = (data || []).filter(r => MOD.categories.includes(catOf(r)));
 
   const ids = ctx.restocks.map(r => r.restock_id);
   if (!ids.length) return;
@@ -362,7 +365,7 @@ function renderList() {
       <div class="row-main">
         <div class="row-t">${esc(c.title)}</div>
         <div class="row-m">${ddmmyyyy(c.count_date)} &middot; ${esc(c.staff_name)}${
-          MOD.categories.length > 1 ? ' &middot; ' + esc(categoryLabel(c.category)) : ''}</div>
+          MOD.categories.length > 1 ? ' &middot; ' + esc(categoryLabel(catOf(c))) : ''}</div>
       </div>
       <div class="row-r">
         <span class="tag ${submitted ? 'sub' : 'drf'}">${submitted ? 'Submitted' : 'Draft'}</span>
@@ -406,7 +409,7 @@ function renderRestockList() {
       <div class="row-main">
         <div class="row-t">+${r.packs || 0} pack${(r.packs || 0) === 1 ? '' : 's'}${r.note ? ' &middot; ' + esc(r.note) : ''}</div>
         <div class="row-m">${ddmmyyyy(r.restock_date)} &middot; ${esc(r.staff_name)}${
-          MOD.categories.length > 1 ? ' &middot; ' + esc(categoryLabel(r.category)) : ''}</div>
+          MOD.categories.length > 1 ? ' &middot; ' + esc(categoryLabel(catOf(r))) : ''}</div>
       </div>
       <div class="row-r">
         <span class="tag ${cls}">${label}</span>
@@ -580,7 +583,7 @@ function renderDetail(c, rows, hasRec) {
   el('dTitle').textContent = c.title;
   el('dSub').innerHTML = `Trading day <b>${ddmmyyyy(c.count_date)}</b> &middot; ` +
     `${esc(c.staff_name)} &middot; ${esc(ctx.branchName)}` +
-    (MOD.categories.length > 1 ? ` &middot; ${esc(categoryLabel(c.category))}` : '') +
+    (MOD.categories.length > 1 ? ` &middot; ${esc(categoryLabel(catOf(c)))}` : '') +
     (c.submitted_at ? ` &middot; submitted ${esc(stamp(c.submitted_at))}` : ' &middot; draft');
 
   const counted = rows.length;

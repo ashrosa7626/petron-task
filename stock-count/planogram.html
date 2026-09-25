@@ -271,7 +271,7 @@ async function init() {
 
   const selected = localStorage.getItem('selectedBranch') || 'Safari';
   const [verRes, brRes] = await Promise.all([
-    db.from('planogram_version').select('version_id,branch_id,status,category,effective_from,note')
+    db.from('planogram_version').select('*')
       .order('version_id', { ascending: false }),
     db.from('branch').select('branch_id,name')
   ]);

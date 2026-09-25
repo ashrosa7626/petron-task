@@ -76,3 +76,33 @@ export const draftKey = countId => `cig_draft_${countId}`;   // keyed on the id,
 export const restockDraftKey = mod => `${mod.prefix}_restock_draft`;
 export const restockPendingKey = mod => `${mod.prefix}_restock_pending`;
 export const restockStaffKey = mod => `${mod.prefix}_restock_staff`;
+
+
+/* ------------------------------------------------------------------------
+   Working before AND after 15_categories.sql.
+
+   The code deploys the moment it is pushed; the migration is run by hand,
+   minutes or hours later. In between, asking PostgREST for a column that does
+   not exist fails the whole query — which would take the daily cigarette count
+   down until someone opened the SQL editor.
+
+   So nothing SELECTs `category` by name (use `*`, and read it with catOf), and
+   nothing INSERTs it until the column is known to be there. Once the migration
+   is in, both paths behave identically and these two helpers can go.
+   ------------------------------------------------------------------------ */
+
+/* A row's category, defaulting to cigarettes — which is what every row was
+   before the migration, and what 15 backfills them to. */
+export const catOf = row => (row && row.category) || 'CIGARETTES';
+
+/* Whether the schema knows about categories, judged from rows already
+   fetched rather than by a probe round-trip. */
+export function hasCategories(rows) {
+  return (rows || []).some(r => r && Object.prototype.hasOwnProperty.call(r, 'category'));
+}
+
+/* Drop the category from a row to be written when the column is not there
+   yet. Sending it would fail the whole insert. */
+export function withCategory(row, category, supported) {
+  return supported ? { ...row, category } : { ...row };
+}

@@ -96,7 +96,8 @@
 </div>
 
 <script type="module">
-import { currentModule, href, categoryLabel, sessionKey, staffKey } from './modules.js';
+import { currentModule, href, categoryLabel, sessionKey, staffKey, catOf, hasCategories }
+  from './modules.js';
 
 const MOD = currentModule();
 const SUPABASE_URL = 'https://vwffiuciogthfzekkkkz.supabase.co';
@@ -197,7 +198,7 @@ async function init() {
   updateDateHint();
 
   const [verRes, brRes] = await Promise.all([
-    db.from('planogram_version').select('version_id,branch_id,category').eq('status', 'active'),
+    db.from('planogram_version').select('*').eq('status', 'active'),
     db.from('branch').select('branch_id,name')
   ]);
   if (verRes.error) return fail('Could not read planogram_version: ' + escapeHtml(verRes.error.message));
@@ -216,17 +217,36 @@ async function init() {
   // A version per category. A module whose shelves are not all set up cannot be
   // counted as one sitting — the toggle would show an empty grid on one side
   // and there would be no record to submit it against.
+  // Before 15_categories.sql every version is a cigarette one, so catOf reads
+  // it as CIGARETTES and tobacco still resolves. Lubes correctly finds nothing
+  // and says the shelf is not set up, which is true.
+  ctx.hasCats = hasCategories(versions);
   ctx.cats = MOD.categories.map(cat => ({
     category: cat,
-    version: versions.find(v => v.branch_id === match.branch_id && v.category === cat) || null
+    version: versions.find(v => v.branch_id === match.branch_id && catOf(v) === cat) || null
   }));
+  /* Count the shelves that EXIST, and say which do not.
+
+     Refusing the whole sitting when one shelf is missing was wrong twice over:
+     it would block the nightly cigarette count on any database where the Iluma
+     cabinet has not been set up — including every database before
+     15_categories.sql is run — and it would block a branch that genuinely only
+     has one shelf. A missing shelf is information, not a failure. */
   const missing = ctx.cats.filter(c => !c.version);
-  if (missing.length) {
+  ctx.cats = ctx.cats.filter(c => c.version);
+  if (!ctx.cats.length) {
     return fail(`<b>${escapeHtml(ctx.branchName)}</b> has no ` +
       missing.map(m => `<b>${escapeHtml(categoryLabel(m.category).toLowerCase())}</b>`).join(' or ') +
       ` planogram yet, so there is nothing to count here. Counts, restocks and history all ` +
       `belong to a branch and a shelf, and will not be shown from another one. Switch branch ` +
       `in the menu, or set the shelf up on the Edit the Shelf page.`);
+  }
+  if (missing.length) {
+      ctx.missingNote = `No <b>${escapeHtml(missing.map(m => categoryLabel(m.category).toLowerCase()).join(' or '))}</b> ` +
+      `planogram for ${escapeHtml(ctx.branchName)} yet, so this count covers ` +
+      `<b>${escapeHtml(ctx.cats.map(c => categoryLabel(c.category).toLowerCase()).join(' and '))}</b> only. ` +
+      `Set the shelf up on the Edit the Shelf page to include it.`;
+    note('warn', ctx.missingNote);
   }
 
   el('btnGo').disabled = false;
@@ -252,6 +272,7 @@ function fail(msg) {
 async function checkExisting() {
   if (!ctx.branchId || !el('fDate').value) return;
   clearNotes();
+  if (ctx.missingNote) note('warn', ctx.missingNote);
   const date = el('fDate').value;
 
   const { data, error } = await db.from('stock_count')
@@ -261,7 +282,7 @@ async function checkExisting() {
     note('warn', 'Could not check for an existing count: ' + escapeHtml(error.message));
     return;
   }
-  const byCat = new Map((data || []).map(r => [r.category, r]));
+  const byCat = new Map((data || []).map(r => [catOf(r), r]));
   ctx.cats.forEach(c => { c.existing = byCat.get(c.category) || null; });
 
   const submitted = ctx.cats.filter(c => c.existing && c.existing.status === 'submitted');
@@ -374,10 +395,13 @@ el('btnGo').addEventListener('click', async () => {
 async function openOrCreate(c, date, staff, title) {
   if (c.existing && c.existing.status === 'draft') return c.existing;
 
-  const ins = await db.from('stock_count').insert({
-    branch_id: ctx.branchId, category: c.category, version_id: c.version.version_id,
+  const fresh = {
+    branch_id: ctx.branchId, version_id: c.version.version_id,
     count_date: date, title, staff_name: staff, status: 'draft'
-  }).select().single();
+  };
+  // Sending a column that is not there fails the whole insert.
+  if (ctx.hasCats) fresh.category = c.category;
+  const ins = await db.from('stock_count').insert(fresh).select().single();
 
   if (!ins.error) return ins.data;
 
@@ -387,10 +411,10 @@ async function openOrCreate(c, date, staff, title) {
   const dup = ins.error.code === '23505' || /duplicate key|already exists/i.test(ins.error.message || '');
   if (!dup) throw new Error(ins.error.message);
 
-  const { data, error } = await db.from('stock_count')
-    .select('count_id,status,staff_name,title')
-    .eq('branch_id', ctx.branchId).eq('category', c.category)
-    .eq('count_date', date).limit(1);
+  let q = db.from('stock_count').select('*')
+    .eq('branch_id', ctx.branchId).eq('count_date', date);
+  if (ctx.hasCats) q = q.eq('category', c.category);
+  const { data, error } = await q.limit(1);
   if (error) throw new Error(error.message);
   const row = (data || [])[0];
   if (!row) throw new Error('The count exists but could not be read back.');

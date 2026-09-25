@@ -62,7 +62,7 @@
       <button class="btn pri" id="doneClose" style="flex:1">Done</button>
 <script type="module">
 import { createGrid, esc } from './planogram.js';
-import { currentModule, href, categoryLabel, sessionKey, draftKey } from './modules.js';
+import { currentModule, href, categoryLabel, sessionKey, draftKey, catOf } from './modules.js';
 
 const MOD = currentModule();
 const SUPABASE_URL = 'https://vwffiuciogthfzekkkkz.supabase.co';
@@ -278,10 +278,10 @@ function nextEmpty(fromPid) {
   }
   return null;
 }
-const catOf = pid => CATS.findIndex(c => c.order.includes(pid));
+const shelfOf = pid => CATS.findIndex(c => c.order.includes(pid));
 function goTo(pid) {
   if (!pid) return;
-  const i = catOf(pid);
+  const i = shelfOf(pid);
   if (i < 0) return;
   if (i !== active) showCat(i);
   CATS[i].grid.goTo(pid);
@@ -320,7 +320,7 @@ function paintMeta() {
 /* Push state into every block of one product, and repaint its colour. */
 function syncProduct(pid, exclude) {
   const l = lineOf(pid);
-  const i = catOf(pid);
+  const i = shelfOf(pid);
   if (i < 0) return;
   for (const b of CATS[i].grid.blockEls(pid)) {
     b.classList.toggle('done', l.packs !== null && l.packs !== undefined);
@@ -368,7 +368,7 @@ el('btnSubmit').addEventListener('click', async () => {
 function showMissing(missing) {
   el('missHd').textContent = `${missing.length} product${missing.length === 1 ? '' : 's'} still to count`;
   el('missBd').innerHTML = missing.map(pid => {
-    const i = catOf(pid);
+    const i = shelfOf(pid);
     const c = CATS[i] || {};
     const p = (c.products && c.products.get(pid)) || {};
     const where = (c.grid ? c.grid.blocks.filter(b => b.productId === pid) : [])
@@ -386,7 +386,7 @@ function showMissing(missing) {
   CATS.forEach((c, i) =>
     el('gr' + i).querySelectorAll('.blk.miss').forEach(b => b.classList.remove('miss')));
   missing.forEach(pid => {
-    const i = catOf(pid);
+    const i = shelfOf(pid);
     if (i >= 0) CATS[i].grid.blockEls(pid).forEach(b => b.classList.add('miss'));
   });
   el('missOvl').hidden = false;
@@ -499,7 +499,7 @@ async function load() {
   } catch (e) { /* storage may be unreachable */ }
 
   const [verRes, brRes] = await Promise.all([
-    db.from('planogram_version').select('version_id,branch_id,category').eq('status', 'active'),
+    db.from('planogram_version').select('*').eq('status', 'active'),
     db.from('branch').select('branch_id,name')
   ]);
   if (verRes.error) return setStatus('Could not read planogram_version: ' + verRes.error.message, true);
@@ -518,17 +518,21 @@ async function load() {
     wanted = session.counts.map(c => ({
       category: c.category, count_id: c.count_id,
       version_id: c.version_id ||
-        (versions.find(v => v.category === c.category && match && v.branch_id === match.branch_id) || {}).version_id
+        (versions.find(v => catOf(v) === c.category && match && v.branch_id === match.branch_id) || {}).version_id
     }));
   } else {
     if (!match) return setStatus(`No branch called ${selected} is configured.`, true);
     wanted = MOD.categories.map(cat => {
-      const v = versions.find(x => x.branch_id === match.branch_id && x.category === cat);
+      const v = versions.find(x => x.branch_id === match.branch_id && catOf(x) === cat);
       return { category: cat, count_id: null, version_id: v && v.version_id };
     });
   }
+  // Show the shelves that exist. A missing one must not blank the others —
+  // that would take the nightly cigarette count down on any database where the
+  // Iluma cabinet is not set up.
   const noShelf = wanted.filter(w => !w.version_id);
-  if (noShelf.length) {
+  wanted = wanted.filter(w => w.version_id);
+  if (!wanted.length) {
     return setStatus(`${ctx.branchName} has no ` +
       noShelf.map(w => categoryLabel(w.category).toLowerCase()).join(' or ') +
       ` planogram, so there is no shelf to show. Switch branch in the menu.`, true);
@@ -537,7 +541,7 @@ async function load() {
   const [facRes, prodRes] = await Promise.all([
     db.from('planogram_facing').select('shelf,position,product_id,version_id')
       .in('version_id', wanted.map(w => w.version_id)),
-    db.from('product').select('product_id,short_name,plu,brand,category')
+    db.from('product').select('product_id,short_name,plu,brand')
   ]);
   if (facRes.error) return setStatus('Could not read planogram_facing: ' + facRes.error.message, true);
   if (prodRes.error) return setStatus('Could not read product: ' + prodRes.error.message, true);

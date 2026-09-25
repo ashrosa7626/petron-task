@@ -701,9 +701,23 @@ async function init() {
      everything would make a cigarette import write a zero-sales row for all 31
      lubes and 21 Iluma products too — every day, silently — and their
      reconciliation would read as total shrinkage. */
-  const { data: prods, error } = await db.from('product')
+  let { data: prods, error } = await db.from('product')
     .select('product_id,short_name,plu,active,category')
     .eq('active', true).eq('category', ctx.category).order('short_name');
+  // Before 15_categories.sql there is no column to filter on. Everything in
+  // the table is a cigarette then, so the unscoped list IS the scoped one.
+  let scoped = !error;
+  if (error) {
+    ({ data: prods, error } = await db.from('product')
+      .select('product_id,short_name,plu,active').eq('active', true).order('short_name'));
+    if (!error && ctx.category !== 'CIGARETTES') {
+      return note('parseNotes', 'err',
+        `This database does not have product categories yet, so a ` +
+        `${esc(categoryLabel(ctx.category).toLowerCase())} report cannot be scoped and ` +
+        `would be written against the cigarettes. Run <b>15_categories.sql</b> and ` +
+        `<b>16_seed_lubes_iluma.sql</b> first.`);
+    }
+  }
   if (error) return note('parseNotes', 'err', 'Could not read the product list: ' + esc(error.message));
   ctx.products = new Map((prods || []).map(p => [p.product_id, p]));
   el('catNote').innerHTML = `Reading a <b>${esc(categoryLabel(ctx.category))}</b> report. ` +

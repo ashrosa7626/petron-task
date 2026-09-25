@@ -121,7 +121,7 @@
 <script type="module">
 import { createGrid, esc } from './planogram.js';
 import { currentModule, href, categoryLabel, restockDraftKey, restockPendingKey,
-         restockStaffKey } from './modules.js';
+         restockStaffKey, catOf, hasCategories } from './modules.js';
 
 const MOD = currentModule();
 
@@ -360,7 +360,7 @@ function showCat(i) {
 }
 
 const allProducts = () => CATS.flatMap(c => c.order);
-const catOf = pid => CATS.findIndex(c => c.order.includes(pid));
+const shelfOf = pid => CATS.findIndex(c => c.order.includes(pid));
 function nextBlank(fromPid) {
   const all = allProducts();
   const start = fromPid ? all.indexOf(fromPid) + 1 : 0;
@@ -371,7 +371,7 @@ function nextBlank(fromPid) {
   return null;
 }
 function goTo(pid) {
-  const i = catOf(pid);
+  const i = shelfOf(pid);
   if (i < 0) return;
   if (i !== active) showCat(i);
   CATS[i].grid.goTo(pid);
@@ -381,7 +381,7 @@ function goTo(pid) {
    same rule as the count. LD Red is one entry, not three. */
 function syncProduct(pid, exclude) {
   const n = adds[pid] || 0;
-  const ci = catOf(pid);
+  const ci = shelfOf(pid);
   if (ci < 0) return;
   for (const b of CATS[ci].grid.blockEls(pid)) {
     b.classList.toggle('done', n > 0);
@@ -415,7 +415,7 @@ function showConfirm(reviewOnly) {
   const t = totals();
   if (!t.products) return;
   const rows = t.ids.map(pid => {
-    const ci = catOf(pid);
+    const ci = shelfOf(pid);
     const c = CATS[ci] || {};
     const p = (c.products && c.products.get(pid)) || {};
     const where = (c.grid ? c.grid.blocks.filter(b => b.productId === pid) : [])
@@ -494,14 +494,15 @@ async function submitRestock() {
     }
 
     if (!restockId) {
-      const ins = await db.from('stock_restock').insert({
+      const row = {
         branch_id: ctx.branchId,
-        category: c.category,
         restock_date: entry.date,
         staff_name: entry.staff,
         note: entry.note || null,
         status: 'draft'
-      }).select('restock_id').single();
+      };
+      if (ctx.hasCats) row.category = c.category;
+      const ins = await db.from('stock_restock').insert(row).select('restock_id').single();
       if (ins.error) throw describe(ins.error, `creating the ${categoryLabel(c.category)} restock`);
       restockId = ins.data.restock_id;
       pending[c.category] = restockId;
@@ -605,7 +606,7 @@ async function load() {
   el('fNote').value = entry.note || '';
 
   const [verRes, brRes] = await Promise.all([
-    db.from('planogram_version').select('version_id,branch_id,category').eq('status', 'active'),
+    db.from('planogram_version').select('*').eq('status', 'active'),
     db.from('branch').select('branch_id,name')
   ]);
   if (verRes.error) return setStatus('Could not read planogram_version: ' + verRes.error.message, true);
@@ -619,12 +620,14 @@ async function load() {
   /* The asked-for branch and shelf, or nothing. Restocks feed add_in for one
      branch and one category's reconciliation, so one filed against the wrong
      either would move a number nobody could trace back. */
+  ctx.hasCats = hasCategories(versions);
   const wanted = MOD.categories.map(cat => ({
     category: cat,
-    version: versions.find(v => v.branch_id === match.branch_id && v.category === cat) || null
+    version: versions.find(v => v.branch_id === match.branch_id && catOf(v) === cat) || null
   }));
   const noShelf = wanted.filter(w => !w.version);
-  if (noShelf.length) {
+  const have = wanted.filter(w => w.version);
+  if (!have.length) {
     return setStatus(`${match.name} has no ` +
       noShelf.map(w => categoryLabel(w.category).toLowerCase()).join(' or ') +
       ` planogram, so there is no shelf to restock. Switch branch in the menu.`, true);
@@ -635,14 +638,13 @@ async function load() {
 
   const [facRes, prodRes, lastRes] = await Promise.all([
     db.from('planogram_facing').select('shelf,position,product_id,version_id')
-      .in('version_id', wanted.map(w => w.version.version_id)),
+      .in('version_id', have.map(w => w.version.version_id)),
     db.from('product').select('product_id,short_name,plu,brand'),
     // The latest submitted count for this module's shelves, purely so the date
     // field can warn about back-dating into a period already reconciled. No
     // quantity is read: the count is blind and this screen must not leak one.
     db.from('stock_count').select('count_date')
       .eq('branch_id', match.branch_id).eq('status', 'submitted')
-      .in('category', MOD.categories)
       .order('count_date', { ascending: false }).limit(1)
   ]);
   if (facRes.error) return setStatus('Could not read planogram_facing: ' + facRes.error.message, true);
@@ -651,7 +653,7 @@ async function load() {
   ctx.lastCount = ((lastRes.data || [])[0] || {}).count_date || null;
 
   const products = new Map((prodRes.data || []).map(p => [p.product_id, p]));
-  CATS = wanted.map(w => ({
+  CATS = have.map(w => ({
     category: w.category,
     versionId: w.version.version_id,
     facings: (facRes.data || []).filter(f => f.version_id === w.version.version_id),
