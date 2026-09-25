@@ -180,6 +180,28 @@ Hosted on GitHub Pages: https://ashrosa7626.github.io/petron-task/
 - Restore loop in `loadAssignView()` must store at item-index level (`key + '||' + idx`) — section-level key never matches Step 2 lookup
 - Housekeeping uses template IDs (`taskAssignments[tplId]`) — completely separate code path, works correctly
 
+## Stock Count Modules — cigarettes, heated tobacco, lubes
+**A MODULE is one sitting; a CATEGORY is one shelf** (`stock-count/modules.js`, Sep 2026).
+- `tobacco` = `CIGARETTES` + `ILUMA`. The two stand side by side and are counted
+  together, so the count screen draws both grids behind a **segmented toggle** and one
+  Submit closes both. Progress counts the whole sitting (54 + 21), because a footer
+  counting only the shelf on screen would read 54 of 54 with a cabinet untouched.
+- `lubes` = `LUBES`, its own sitting from the same menu.
+- Each category keeps its **own** `planogram_version`, `stock_count` and `stock_restock`
+  rows — they reconcile against separate POS reports, which is also why
+  `15_categories.sql` put the category into both unique constraints.
+- Pages take **`?m=tobacco`** (default) or **`?m=lubes`**. There is deliberately no
+  second copy of `index.html`: this module has been bitten twice by two copies of one
+  logic disagreeing (`deriveBlocks`, `sales-parse`).
+- **A missing shelf is information, not a failure.** A module counts the categories that
+  have a planogram and names the ones that do not. Refusing the whole sitting would
+  block the nightly cigarette count on any database where Iluma is not set up.
+- **Nothing SELECTs `category` by name** — `*`, read through `catOf()`, which reads a
+  row without one as `CIGARETTES`. Writes only send it when fetched rows prove the
+  column exists. The pages deploy on push and the migration is run by hand later; asking
+  for a column that is not there fails the whole query and would take the count down in
+  between. `verify_pre_migration.mjs` pins it.
+
 ## Cigarette Stock Count Module
 **`to anon` is a Postgres ROLE, not "anyone using the anon key."** PostgREST takes the
 role from the JWT, and supabase-js sends whatever session is in
@@ -299,6 +321,20 @@ share so the round-trip property is testable. Historically, and still true of th
 id, PLU and positions. When they disagree, the workbook wins and the database gets a
 migration.
 
+**Shelf shapes** (measured, not assumed): cigarettes A–F × 27 = **162 facings, 54
+products, 58 blocks**; Iluma A–L × 3 = **34 facings, 21 products** (row L holds 1);
+lubes A–D, **ragged** — A/B are 17 wide, C/D are 8 — = **47 facings, 31 products, 4
+split**. Three lubes positions (B1, B9, B10) are **empty on purpose**: those products
+have no POS Item ID yet, so they cannot be seeded. Add them on the Edit the Shelf page
+when the till gives one up.
+
+**An L-shaped region is drawn as several blocks and must still be marked.** Lubes Blaze
+Multi 20W50 4L holds C7, C8 and D8 — connected, so ONE region, but not a rectangle, so
+two drawn pieces. `deriveBlocks` numbered by region and gave both "1 of 1", i.e. no
+marker: one product shown as two unrelated blocks, so somebody counts C7-8 and D8 never
+gets counted. Blocks are numbered by **drawn piece** in reading order. Cigarettes has no
+non-rectangular region, so it numbers identically.
+
 Three rules that must never be broken:
 
 - **Counts key on `product_id` (the POS Item ID), never on shelf position.**
@@ -377,6 +413,13 @@ Supporting notes:
 - `vw_daily_reconciliation` computes `sold_physical = opening + add_in − closing`
   and the variance against `pos_sales_daily`. Excel/Power Query reads it directly
   — do not rename its columns.
+- **The zero-fill is scoped to ONE category.** `buildPayload` writes "sold nothing
+  today" for every product it is handed, and that is only true inside the report being
+  read — cigarettes, heated tobacco and lubes print as **separate** POS reports. Hand it
+  everything and a cigarette import writes a zero-sales row for all 31 lubes and 21
+  TEREA as well, every day, with no error anywhere, and their reconciliation reads as
+  the entire stock holding walking out. The import page has a category picker and
+  narrows the product list; `verify_sales_payload.mjs` pins it both ways.
 - **POS sales loader** (`stock-count/import-sales.html` + `stock-count/sales-parse.js`,
   Sep 2026). **The report is a CCITT G4 fax scan with no text layer at all** — pdf.js
   finds zero characters — so it is read by **OCR in the browser** (Tesseract.js 7.0.0,
