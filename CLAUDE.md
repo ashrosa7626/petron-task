@@ -685,6 +685,16 @@ write, so migrations are run by hand in the Supabase SQL editor):
   the Positions column.
 
 ## Recent Fixes (Sep 2026)
+- **The count grid could not scroll DOWN** (28 Sep), on all three shelves. The
+  multi-shelf change wrapped the scrollers in `#gridWrap` so each shelf keeps its own
+  zoom and scroll position — but the wrapper was a plain block, so `.scroller{flex:1}`
+  was measured against nothing, the scroller grew to its full content height, and
+  `body{overflow:hidden}` clipped every shelf past the fold. Sideways still worked, which
+  is why it read as "vertical scrolling is broken" rather than "the layout is wrong": the
+  grid is `width:max-content` so horizontal overflow was real and vertical overflow was
+  not. `#gridWrap` now carries `flex:1;min-height:0;display:flex;flex-direction:column`.
+  **Anything wrapped around `.scroller` has to pass the height down** — a flex chain
+  breaks silently at the first link that is not a flex container.
 - **Navigation is one app.** `sidebar.js` hrefs resolve against its own URL, so Home
   from `stock-count/` no longer lands on the count grid; the cigarette pages are in the
   menu; the per-page back links are gone; branch is chosen in the sidebar.

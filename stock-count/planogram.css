@@ -75,9 +75,19 @@ body{background:var(--p-bg);color:var(--p-text);font-family:var(--font);font-siz
         border:1px solid var(--p-border);color:var(--p-text2);font-size:0.9rem}
 .status.err{border-color:rgba(255,77,79,0.35);background:rgba(255,77,79,0.08);color:var(--p-red)}
 
+/* One sitting can hold several shelves, so the scrollers live in a wrapper —
+   and the wrapper is what has to carry the flex sizing. body is the flex column
+   and it is overflow:hidden; a .scroller with flex:1 inside a plain auto-height
+   block gets no height from it, grows to its own content instead, and then has
+   nothing to scroll while body silently clips every shelf past the fold. The
+   grid is width:max-content, so sideways still worked and only the vertical
+   direction went dead. min-height:0 on both, or the flex item refuses to shrink
+   below the grid's height and the clipping comes straight back. */
+#gridWrap{flex:1;min-height:0;display:flex;flex-direction:column}
+
 /* The pannable canvas. Scrolls in both directions; the header row and the
    shelf gutter stay pinned to their edges while it moves. */
-.scroller{flex:1;overflow:auto;position:relative;overscroll-behavior:contain;
+.scroller{flex:1;min-height:0;overflow:auto;position:relative;overscroll-behavior:contain;
           -webkit-overflow-scrolling:touch;touch-action:pan-x pan-y}
 .scroller.grabbing{cursor:grabbing}
 .grid{display:grid;gap:4px;width:max-content;padding:0 14px 14px 0;
