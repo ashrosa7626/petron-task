@@ -200,7 +200,7 @@ Hosted on GitHub Pages: https://ashrosa7626.github.io/petron-task/
   row without one as `CIGARETTES`. Writes only send it when fetched rows prove the
   column exists. The pages deploy on push and the migration is run by hand later; asking
   for a column that is not there fails the whole query and would take the count down in
-  between. `verify_pre_migration.mjs` pins it.
+  between. `verify_resolution.mjs` pins it.
 
 ## Cigarette Stock Count Module
 **`to anon` is a Postgres ROLE, not "anyone using the anon key."** PostgREST takes the
@@ -221,7 +221,7 @@ must name both roles.**
 
 Daily physical count of the cigarette gondola (Safari: 6 shelves A–F × 27 positions,
 162 facings, 54 products, **58 blocks**). Spec, workbook and SQL live in
-`cigarette stock/` — `BRIEF.md`, `01_schema.sql` … `14_add_branch.sql`,
+`cigarette stock/` — `BRIEF.md`, `01_schema.sql` … `16_seed_lubes_iluma.sql`,
 `CIGARETTES PLANOGRAM.xlsx`, `products_reference.csv`.
 Run the SQL in numbered order. Counts are in **packs**; cartons are out of scope.
 
@@ -668,6 +668,21 @@ write, so migrations are run by hand in the Supabase SQL editor):
   drawn cell matches its facing row, and every split block carries a correct
   "n of m" marker. They used to slice the functions out of `index.html` with
   `indexOf`; the extraction removed the need.
+  **`verify_blocks` loops EVERY active planogram** and pins each shelf's shape
+  (54/162/58/3, 21/34/21/0, 31/47/35/4). It used to take the first active version,
+  which silently checked one shelf of three once lubes and Iluma existed.
+- `verify_new_shelves.mjs` — derives blocks straight from `excel/Lubes planogram.xlsx`,
+  offline, so a layout the count screen cannot draw is caught while it is still a
+  spreadsheet. This is what found the L-shaped marker bug.
+- `verify_modules.mjs` — what is counted together, and the localStorage key names. A
+  wrong key strands a count already open on the shop device.
+- `verify_resolution.mjs` — the shipped logic resolving the right planogram whether or
+  not the database has the category column, because the pages deploy before the
+  migration is run. Its hard rule: lubes must never resolve to the cigarette shelf.
+- `gen_seed_from_xlsx.py` — generates `16_seed_lubes_iluma.sql` from the workbook.
+  Re-run it when the three missing POS Item IDs arrive. It refuses a missing or
+  duplicate Item ID, a grid label matching no product, and the grid disagreeing with
+  the Positions column.
 
 ## Recent Fixes (Sep 2026)
 - **Navigation is one app.** `sidebar.js` hrefs resolve against its own URL, so Home
@@ -681,6 +696,20 @@ write, so migrations are run by hand in the Supabase SQL editor):
 - **Restock module** and **planogram editor** shipped; `add_in` carries real numbers.
 - **import-sales.html**: a line lost whole to OCR can be typed back, and the report's
   own Grand Total re-checks what was typed.
+- **Lubes and Iluma shipped** (`15`/`16`). Two more shelves counted by the same system:
+  Iluma alongside cigarettes in one sitting behind a toggle, lubes on its own. Three
+  things it turned up, all now guarded:
+  - **an L-shaped region lost its split marker.** Lubes Blaze Multi 20W50 4L holds C7,
+    C8 and D8 — connected, so one region, but not a rectangle, so two drawn pieces.
+    `deriveBlocks` numbered by region and gave both "1 of 1", so one product looked like
+    two unrelated blocks and half of it would never be counted. Numbered by drawn piece
+    now.
+  - **the sales zero-fill had to be scoped.** Unscoped, a cigarette import would write a
+    zero-sales row for all 31 lubes and 21 TEREA daily, with no error, and their
+    reconciliation would read as the whole shelf walking out.
+  - **the pages must work before their migration runs.** They deploy on push; the SQL is
+    run by hand later; the count happens at midnight. Nothing SELECTs `category` by name
+    and a module counts the shelves that exist. `verify_pre_migration.mjs` pins it.
 
 ## Recent Fixes (Apr–May 2026)
 - **lead.html**: dead `leadBranchLabel` reference caused tasks stuck on "Loading..."
@@ -694,89 +723,70 @@ write, so migrations are run by hand in the Supabase SQL editor):
 - **dashboard.html**: Tasks of the Day flat list above staff completion journey; font sizes bumped across all pages
 - **style.css**: base font bumped 16px → 17px; small labels bumped proportionally in briefing.html and dashboard.html
 
-## Cigarette Module — State as of 25 Sep 2026
+## Stock Count Modules — State as of 28 Sep 2026
 Probed against the live database, not remembered. **Re-probe before trusting**: this
-section has now been wrong three times by assuming a migration's state, and between
-14 and 25 Sep five migrations were run and the module went into daily use without a
-line of it being updated.
+section has gone stale four times now, always by assuming a migration's state rather
+than asking. Anything dated here is a snapshot.
 
-**Migrations: 01–14 are ALL applied.** Probed 25 Sep — `pos_sales_daily.imported_by`
-returns values, `stock_restock` answers `200`, `is_planogram_editor()` exists and
-returns `false` for anon, and `branch` holds two rows. Nothing is outstanding.
+**Migrations: 01–16 are ALL applied.** Probed 28 Sep — `product.category` returns
+`{CIGARETTES: 54, LUBES: 34, ILUMA: 21}`, and three active planogram versions exist.
 
-**Branches:** `SAFARI` (Petron MRR2 Safari) and `NILAI` (Petron Nilai Desa Jati).
-NILAI is real but **has no planogram version**, so every cigarette page tells you the
-shelf is not set up and stops — it does not borrow Safari's. Giving it a shelf needs
-somebody in front of that gondola.
+**Three shelves, all seeded and all counting:**
 
-**Planogram: version 3 is active** for SAFARI, effective 17 Sep, note
-`1 facing · Team Lead` — so `planogram.html` has been used for real, and versions 1
-and 2 are archived. Anon cannot see archived versions (the read policy is
-`using (status = 'active')`), which is why a query for all versions returns only one.
-Still 54 products, 162 facings, 58 blocks.
+| category | version | shelves | facings | products | split |
+|---|---|---|---|---|---|
+| CIGARETTES | v3 | A–F × 27 | 162 | 54 | 3 |
+| LUBES | v4 | A–D (ragged 17/17/8/8) | 47 | 31 | 4 |
+| ILUMA | v5 | A–L × 3 | 34 | 21 | 0 |
 
-**THE PIPELINE IS PROVEN END TO END.** This was the open question for weeks and it is
-closed. Five days — **14, 15, 16, 17 and 18 Sep** — have a count, an opening, a POS
-import and real variance on all 54 products:
+`verify_blocks.mjs` checks **all three** against live data and they reconcile: no
+overlaps, every drawn cell matching its facing, every split product correctly marked.
+Lubes carries 3 **inactive** products (off the shelf) plus the 3 with no POS Item ID
+that were never seeded — B1, B9, B10 render as empty cells.
 
-| date | products off | add_in > 0 | variance RM |
-|---|---|---|---|
-| 14/09 | 13 | 2 | 28 |
-| 15/09 | 10 | 0 | 29 |
-| 16/09 | 6 | 0 | 27 |
-| 17/09 | 16 | **19** | 33 |
-| 18/09 | 23 | 0 | 33 |
+**The toggle works in production.** 25/09 and 27/09 each have a CIGARETTES *and* an
+ILUMA count by the same person — one sitting, both shelves, submitted together, which
+is exactly what the segmented control was for. **The first lubes count is a draft
+dated 28/09.**
 
-A real row, 18/09 Rothmans Blue: opening 21, add_in 0, closing 12, so the shelf lost 9
-while the till sold 4 — variance **+5**. That is the number the whole module exists to
-produce, and it is now arriving daily.
+**Counts:** CIGARETTES 16 submitted / 3 draft, ILUMA 2 submitted / 2 draft, LUBES 1
+draft. **Two sittings were started and never submitted** — 26/09 (Asyraf) and 28/09
+(Luqman, all three categories, presumably still in progress). A draft holds no lines,
+so it reconciles nothing and leaves a gap in the opening chain.
 
-**Counting is a firm habit; importing is not yet.** 15 counts, 09/09 through 24/09,
-by Luqman, Aktar, Aktarul, Suzy, Asyraf and Ratna. **Gaps on 19 and 23 Sep** — and a
-gap is not neutral: opening comes from the previous *submitted* count, so 20/09 opens
-from 18/09 and folds two days of selling into one. `opening_date` on the view is how
-you spot it. POS sales exist for only 6 days (09/09, 14–18/09), so **20–24 Sep are
-counted but have no POS side** and show em dashes.
+**Variance is live for cigarettes only.** 14–18 Sep each have all 54 products with a
+real variance. `pos_sales_daily` still holds only those six days (09/09 and 14–18/09),
+so **19–28 Sep are counted but have no POS side**, and Iluma's two submitted counts
+show no variance at all because no Iluma sales report has been imported. That is
+expected, not a fault: lubes and Iluma print as separate POS reports and neither has
+been loaded yet.
 
-**Variance RM works, partially, and not from where the docs assumed.**
-`product.unit_price` is **still null for all 54** — nobody set list prices. But the
-import page stores `pos_sales_daily.unit_price` from each report, so 27–33 products a
-day are valued anyway. The gap is exactly the products that did not sell that day,
-which is the shrinkage case: setting `product.unit_price` is what closes it, and it is
-a data task, not a code one.
+**Variance RM** works from `pos_sales_daily.unit_price`. `product.unit_price` is still
+null for all 109 products, so a product that did not sell has no RM figure — which is
+exactly the shrinkage case. Setting list prices is a data task.
 
-**Restocks are in real use.** 7 records: submitted ones by Luqman (14/09 ×2, 17/09)
-and Ratna (23/09); 3 voided, two of which were my own end-to-end tests and are
-labelled as such. 17/09 shows 19 products with `add_in > 0` — a genuine delivery
-flowing into reconciliation, which is the thing the module could not do at all before.
+**Restocks:** 8 records, all CIGARETTES — 5 submitted, 3 void (two of which were my own
+end-to-end tests and are labelled as such). None yet for lubes or Iluma.
 
-**`imported_by` is stored** — Luqman on all five of the 14–18 Sep imports. Only the
-09/09 import predates migration 09 and has it null.
-
-**The 08/26 count is still an open draft** and has been for a month. It holds no lines
-and nothing depends on it, but it is the row that makes "one count per branch per day"
-resume rather than start if anyone picks that date.
-
-**The sample PDFs**, still in `~/Downloads`: `20260910155519.pdf` is the 09/09 report
-(31 lines, RM2,435.80), `20260910161828.pdf` is 10/09 (27 lines, RM1,376.70), and
-`20260826112033.pdf` is an **Inventory Balance** report — the fixture case for
-uploading the wrong one. All three are captured in
-`cigarette stock/fixtures/sales_ocr_2026*.json`, so the tests do not need them.
+**The view kept its shape.** 18 columns, the first 17 in their original order with
+`category` appended — verified 28 Sep. `counts_query.m` filters to `CIGARETTES`, so the
+Excel workbook is unaffected by the other two shelves existing.
 
 **Still open:**
-- **Nilai Desa Jati has no planogram**, so no counting, restocking or importing there.
-- **`product.unit_price` is unset**, so a product that did not sell has no RM figure.
-- **20–24 Sep have no POS import** — five days of counts waiting for their other half.
-- **The repo's `CIGARETTES PLANOGRAM.xlsx` is behind the database** (two PLUs as of
-  17 Sep). It is a parser fixture now; download a fresh sheet from `planogram.html`.
-- **Whether the Excel workbook's Power Query is attached is unknown from here.** It was
-  rebuilt in `--mode query` on 14 Sep, which deliberately ships an empty `Data` sheet;
-  if nobody re-attached the `Counts` query the workbook still shows em dashes while the
-  database has five days of variance. Check before assuming the workbook is broken.
+- **Nilai Desa Jati has no planogram** for any category, so nothing can be counted there.
+- **No POS import for lubes or Iluma**, so neither reconciles yet. Their counts are
+  stock levels until a sales report for each is loaded.
+- **19–28 Sep have no cigarette POS import** — ten days of counts waiting.
+- **Two unsubmitted count sittings** (26/09, 28/09).
+- **`product.unit_price` unset** for all 109.
+- **Three lubes positions have no POS Item ID** (B1 Blaze HTP 0W40 1L, B9 Rev-X Turbo
+  HTP 5W40 1L, B10 Rev-X Syn Blend 15W40). Add them on Edit the Shelf when the till
+  gives one up; `gen_seed_from_xlsx.py` can also be re-run.
+- The repo's `CIGARETTES PLANOGRAM.xlsx` is a stale parser fixture — the database is
+  the source of truth. `excel/Lubes planogram.xlsx` is the same for lubes and Iluma.
 - `short_name` values are still drafts.
-- OCR accuracy is still measured on two reports only. Six have now been imported for
-  real, so the true rate is knowable — worth asking whoever imports them how often a
-  line needs typing.
+- **`cigarette stock/` is now a misnomer** — it holds the migrations and tests for all
+  three shelves. Not renamed because every doc, test and script path references it.
 
 ## Deployment
 - git add . → git commit -m "message" → git push

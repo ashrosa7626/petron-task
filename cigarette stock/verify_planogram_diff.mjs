@@ -32,9 +32,22 @@ const get = async p => {
   return r.json();
 };
 
-const version = (await get('planogram_version?select=version_id&status=eq.active'))[0];
+/* ONE shelf, exactly as stock-count/planogram.html scopes itself.
+
+   Both halves have to be scoped or the diff is nonsense: build a cigarette
+   workbook from the cigarette facings, then hand it every product in the
+   database, and the 52 lubes and Iluma products look like 52 removals. The
+   page narrows ctx.products to the category being edited for the same reason.
+   Same class of mistake as the sales zero-fill reaching across shelves. */
+const CATEGORY = process.env.CATEGORY || 'CIGARETTES';
+const versions = await get('planogram_version?select=version_id,category&status=eq.active');
+const version = versions.find(v => (v.category || 'CIGARETTES') === CATEGORY) || versions[0];
+if (!version) throw new Error(`no active planogram for ${CATEGORY}`);
+
+const allProducts = await get('product?select=product_id,plu,pos_description,short_name,brand,active,category');
 const db = {
-  products: new Map((await get('product?select=product_id,plu,pos_description,short_name,brand,active'))
+  products: new Map(allProducts
+    .filter(p => (p.category || 'CIGARETTES') === CATEGORY)
     .map(p => [p.product_id, p])),
   aliases: new Map((await get('product_alias?select=alias,product_id')).map(a => [a.alias, a.product_id])),
   facings: new Map((await get(`planogram_facing?select=shelf,position,product_id&version_id=eq.${version.version_id}`))
@@ -45,8 +58,8 @@ for (const l of await get('stock_count_line?select=product_id')) {
   db.counts.set(l.product_id, (db.counts.get(l.product_id) || 0) + 1);
 }
 
-console.log(`\nactive version ${version.version_id} — ${db.products.size} products, ` +
-  `${db.aliases.size} aliases, ${db.facings.size} facings\n`);
+console.log(`\n${CATEGORY} — active version ${version.version_id} — ${db.products.size} ` +
+  `products, ${db.aliases.size} aliases, ${db.facings.size} facings\n`);
 
 /* The baseline is GENERATED from the database, not read from the repo's
    CIGARETTES PLANOGRAM.xlsx.

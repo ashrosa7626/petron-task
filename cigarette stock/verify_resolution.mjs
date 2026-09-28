@@ -1,5 +1,5 @@
-// Does the shipped code still find the cigarette planogram on a database
-// WITHOUT the category column?
+// Does the shipped code resolve the right planogram, whether or not the
+// database has the category column?
 //
 // This is the deploy-order question, and it is not academic: the pages go live
 // the moment they are pushed, the migration is run by hand minutes or hours
@@ -8,8 +8,10 @@
 // whose every shelf was not set up — which would have taken the nightly
 // cigarette count down until somebody opened the SQL editor.
 //
-// Keep this passing until 15_categories.sql is in everywhere; after that it
-// simply reports that categories are present and checks the same resolution.
+// It keeps passing after the migration too: the same resolution is checked, and
+// the one assertion that differs — whether lubes has a shelf yet — adapts to
+// which state the database is in. What it never allows is lubes resolving to
+// the CIGARETTES planogram.
 import { readFileSync } from 'node:fs';
 import { catOf, hasCategories, MODULES } from '../stock-count/modules.js';
 
@@ -52,9 +54,21 @@ if (cig) {
      'every facing carries its version_id, which is how the page splits them per shelf');
 }
 
-// Lubes must find nothing and say so, rather than borrowing the cigarette shelf.
+/* Lubes resolves to its own shelf or to nothing — never to the cigarette one.
+
+   Which of the two is correct depends on whether 16_seed_lubes_iluma.sql has
+   been run, and both are fine. What must never happen is lubes finding the
+   CIGARETTES version: that is the silent-wrong-shelf failure, and the count is
+   blind, so nobody counting it could tell. */
+const cigId = cig && cig.version_id;
 const lub = versions.find(v => v.branch_id === match.branch_id && catOf(v) === 'LUBES');
-ok(!lub, 'lubes correctly finds NO planogram yet, rather than falling back to cigarettes');
+if (hasCategories(versions)) {
+  ok(!!lub && lub.version_id !== cigId,
+     'lubes resolves to its OWN planogram, not the cigarette one',
+     lub && `v${lub.version_id} vs cigarettes v${cigId}`);
+} else {
+  ok(!lub, 'pre-migration, lubes correctly finds NO planogram rather than borrowing one');
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
