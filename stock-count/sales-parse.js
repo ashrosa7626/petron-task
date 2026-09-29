@@ -517,6 +517,70 @@ export function explainShortfall(shortfall, lines, products) {
 // reconciliation reads as total shrinkage. The caller narrows it; this
 // function trusts what it is given, which is why the test pins it.
 // ---------------------------------------------------------------------------
+/* ---------------------------------------------------------------------------
+   Which shelves a report actually covers.
+
+   buildPayload writes "sold nothing today" for every product it is handed, so
+   the product list must match the scope of the report being read — the zero-
+   fill is the whole reason this matters. One report may legitimately cover
+   several categories, but saying so is a CLAIM, and a claim this can check:
+   if not one matched line belongs to a category, that category is almost
+   certainly not in the file.
+
+   Honouring the claim anyway would write every product on that shelf down to
+   zero for the day, and vw_daily_reconciliation would read it as the entire
+   stock holding walking out — with no error anywhere, which is what makes it
+   dangerous rather than merely wrong.
+
+   So a category with no lines is left OUT by default and named. The legitimate
+   case — a shelf the report does print, which genuinely sold nothing — is
+   allowed through `zeroFill`, because without its zeros that shelf drops out of
+   reconciliation entirely. Both outcomes are fine; doing either silently is
+   not.
+
+   Pure, and shared with cigarette stock/verify_sales_scope.mjs. categoryOf is
+   injected so this file keeps no dependency on modules.js, and defaults the way
+   catOf does: a row with no category column is a cigarette, which is what every
+   row was before 15_categories.sql.
+   --------------------------------------------------------------------------- */
+export function scopeByCoverage(matched, products, categories, opts) {
+  const o = opts || {};
+  const categoryOf = o.categoryOf || (p => (p && p.category) || 'CIGARETTES');
+  const zeroFill = o.zeroFill || new Set();
+
+  // Lines, not packs: a shelf whose every line read zero still appeared in the
+  // report, and "did this report mention you at all" is the question.
+  const lines = new Map();
+  for (const r of matched) {
+    const p = products.get(r.product_id);
+    if (!p) continue;
+    const c = categoryOf(p);
+    lines.set(c, (lines.get(c) || 0) + 1);
+  }
+  const size = new Map();
+  for (const p of products.values()) {
+    const c = categoryOf(p);
+    size.set(c, (size.get(c) || 0) + 1);
+  }
+
+  const coverage = categories.map(c => ({
+    category: c, lines: lines.get(c) || 0, products: size.get(c) || 0
+  }));
+  const skip = new Set(coverage
+    .filter(c => !c.lines && !zeroFill.has(c.category))
+    .map(c => c.category));
+
+  /* The scope is built from `categories`, not by subtracting `skip` from what
+     was handed in. The page fetches products already filtered to the ticked
+     categories, so the two are the same there — and that is exactly why it must
+     not be relied on: a caller that fetched the whole product table would
+     otherwise have every unticked shelf zero-filled straight through this
+     guard, which is the failure it exists to stop. */
+  const want = new Set(categories.filter(c => !skip.has(c)));
+  const scoped = new Map([...products].filter(([, p]) => want.has(categoryOf(p))));
+  return { coverage, skip, scoped };
+}
+
 export function buildPayload(parsedLines, products, branchId, saleDate) {
   const sold = new Map(parsedLines.map(l => [l.product_id, l.qty]));
   const known = [], unknown = [];

@@ -69,6 +69,22 @@
     .inp[type=date]{font-family:var(--mono)}
     .hint{font-size:0.79rem;color:var(--p-text3);margin-top:6px;line-height:1.5}
 
+    /* The category picker. Checkboxes rather than a <select multiple>: this is
+       a shop device, often a phone, and a multi-select list needs a modifier
+       key nobody has. Each one is a big tappable row that says what it is
+       carrying, because picking the wrong set here is the one mistake on this
+       page that writes a whole shelf down to zero. */
+    .catpick{display:flex;flex-direction:column;gap:8px}
+    .catrow{display:flex;align-items:center;gap:11px;background:var(--p-bg);
+            border:1px solid var(--p-border);border-radius:var(--radius-sm);
+            padding:11px 13px;cursor:pointer;transition:border-color 0.12s,background 0.12s}
+    .catrow:hover{border-color:var(--p-text3)}
+    .catrow.on{border-color:var(--p-orange);background:rgba(249,115,22,0.07)}
+    .catrow input{width:19px;height:19px;accent-color:var(--p-orange);flex-shrink:0;cursor:pointer}
+    .catrow .cl{font-weight:600;font-size:0.93rem}
+    .catrow .cn{margin-left:auto;font-family:var(--mono);font-size:0.78rem;color:var(--p-text3)}
+    .catrow.on .cn{color:var(--p-amber)}
+
     .tw{overflow-x:auto;border:1px solid var(--p-border);border-radius:var(--radius);max-height:340px}
     table{border-collapse:collapse;width:100%;font-size:0.85rem}
     th,td{padding:8px 12px;text-align:left;white-space:nowrap}
@@ -169,12 +185,15 @@
 
   <div id="stage1">
     <div class="card">
-      <label class="lbl d" for="fCat">Which report is this</label>
-      <select class="inp" id="fCat"></select>
-      <div class="hint">Cigarettes, heated tobacco and lubes print as <b>separate</b> POS reports.
-        This says which one you are loading, and it matters: every product in the chosen category
-        that does not appear in the report is written as having sold <b>0</b>. Choose the wrong one
-        and a whole shelf is recorded as having sold nothing that day.</div>
+      <div class="lbl d">What does this report cover</div>
+      <div class="catpick" id="fCat"></div>
+      <div class="hint">Tick every shelf this one PDF covers &mdash; usually one, since cigarettes,
+        heated tobacco and lubes normally print as <b>separate</b> reports. It matters because every
+        product in a ticked category that does not appear in the report is written as having sold
+        <b>0</b>. Tick a shelf the report does not mention and that shelf reads as having sold
+        nothing all day; leave one out and its own sales are never loaded. If the report turns out
+        not to mention a ticked shelf at all, this page says so and leaves it alone rather than
+        zeroing it.</div>
     </div>
 
     <div class="card">
@@ -187,11 +206,16 @@
 
     <div class="hint" id="catNote" style="margin-bottom:12px"></div>
 
-    <div class="drop" id="drop">
+    <!-- The input is a SIBLING of the drop zone, not a child. drop's own click
+         handler calls file.click(), and a programmatic click bubbles: nested,
+         the bubble re-entered the handler and only the spec's click-in-progress
+         flag stopped it looping. Outside, there is nothing to rely on. -->
+    <div class="drop" id="drop" role="button" tabindex="0"
+         aria-label="Choose the sales PDF">
       <div class="drop-t">Choose the sales PDF</div>
-      <div class="drop-s">or drag it here &middot; Merchandise Sales Report, site 304602</div>
-      <input type="file" id="file" accept="application/pdf,.pdf" hidden>
+      <div class="drop-s">tap to pick a file, or drag it here &middot; Merchandise Sales Report, site 304602</div>
     </div>
+    <input type="file" id="file" accept="application/pdf,.pdf" hidden>
     <div id="parseNotes" style="margin-top:14px"></div>
 
     <div class="card prog" id="progCard" hidden>
@@ -295,9 +319,9 @@
 <script type="module">
 import {
   parseLines, mergeDuplicates, findBusinessDate, findGrandTotal, identifyReport,
-  reconcileTotals, explainShortfall, buildPayload, pluAgrees, CENT
+  reconcileTotals, explainShortfall, buildPayload, scopeByCoverage, pluAgrees, CENT
 } from './sales-parse.js';
-import { currentModule, CATEGORIES, categoryLabel } from './modules.js';
+import { currentModule, CATEGORIES, categoryLabel, catOf } from './modules.js';
 
 const MOD = currentModule();
 
@@ -345,48 +369,109 @@ const TESS_LANG = 'https://tessdata.projectnaptha.com/4.0.0';
 // any: it is a note saying who was at the keyboard, which is what is actually
 // wanted when a number looks wrong weeks later.
 const STAFF_KEY = 'pos_import_staff';
-/* The category picker. Changing it after a file is read would leave the
-   preview scoped to the old category, so it reloads the product list and
-   clears anything already parsed rather than quietly disagreeing with itself. */
 const CAT_KEY = 'pos_import_category';
-el('fCat').innerHTML = Object.keys(CATEGORIES)
-  .map(c => `<option value="${c}">${esc(CATEGORIES[c].label)}</option>`).join('');
-try {
-  const saved = localStorage.getItem(CAT_KEY);
-  if (saved && CATEGORIES[saved] && !new URLSearchParams(location.search).has('m')) {
-    ctx.category = saved;
+
+/* localStorage on the shop device has been full before, and `setItem` throws
+   there even for a fifteen-character name — including for a key that does not
+   exist yet. Nothing on this page is worth losing to that, so every read and
+   write goes through these and the UI never waits on one. */
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* full, and that is survivable */ } }
+};
+
+/* NOTE ctx is declared HERE, above everything that touches it.
+
+   It used to be declared below this block, and `el('fCat').value = ctx.category`
+   ran before it — a temporal dead zone ReferenceError that aborted the whole
+   module at load. Every listener registered after it, including the one that
+   opens the file picker, therefore never bound: the page drew, and pressing
+   "Choose the sales PDF" did nothing at all, with the only evidence a console
+   error nobody on the shop floor would see. Anything reading ctx stays below
+   this point. */
+const ctx = {
+  branchId: null, branchName: '', products: new Map(), hasImportedBy: false,
+  /* Which shelves this report covers. A LIST: one report usually covers one
+     shelf, but nothing stops the POS printing a combined one, and re-picking
+     the category for each of three files is work for nothing.
+
+     Defaults to the first category of the module the page was opened from, so
+     arriving from Cigarette Results preselects cigarettes — one shelf, not
+     both, because the default must never be wider than the report it is most
+     likely about. */
+  categories: [MOD.categories[0]],
+  /* Ticked categories the report turned out not to mention, which the user has
+     nonetheless confirmed sold nothing. Empty is the safe default — see
+     scopeByCoverage() in sales-parse.js, and renderCoverage() below. */
+  zeroFill: new Set(),
+  // Filled in by every render: what each ticked shelf got out of the report, and
+  // which of them are being left alone because it never mentioned them.
+  cover: [], skipped: new Set(),
+  rows: [], fix: {}, added: [], date: null, grand: null, fileName: '', source: '',
+  dpi: 0, turn: 0
+};
+
+/* ------------------------------ the picker ------------------------------
+   Changing the selection after a file is read would leave the preview scoped
+   to the old set, so it reloads the product list and clears anything already
+   parsed rather than quietly disagreeing with itself. */
+const CAT_ORDER = Object.keys(CATEGORIES);
+
+/* Stored as a comma list. A value saved by the old single-select version is a
+   bare category name, which parses to a one-element list, so nobody's
+   preference is lost by this change. */
+const savedCats = (store.get(CAT_KEY) || '').split(',')
+  .map(c => c.trim()).filter(c => CATEGORIES[c]);
+if (savedCats.length && !new URLSearchParams(location.search).has('m')) {
+  ctx.categories = CAT_ORDER.filter(c => savedCats.includes(c));
+}
+
+function paintPicker() {
+  el('fCat').innerHTML = CAT_ORDER.map(c => {
+    const on = ctx.categories.includes(c);
+    return `<label class="catrow ${on ? 'on' : ''}">
+        <input type="checkbox" value="${c}" ${on ? 'checked' : ''}>
+        <span class="cl">${esc(CATEGORIES[c].label)}</span>
+        <span class="cn" data-count="${c}"></span>
+      </label>`;
+  }).join('');
+  el('fCat').querySelectorAll('input').forEach(b =>
+    b.addEventListener('change', () => pick(b.value, b.checked)));
+}
+
+function pick(category, on) {
+  const next = on ? CAT_ORDER.filter(c => c === category || ctx.categories.includes(c))
+                  : ctx.categories.filter(c => c !== category);
+  /* Something has to be ticked. Nothing ticked is not a narrower import, it is
+     a report with no products to match against — so the last tick refuses to
+     come off rather than leaving the page in a state that cannot do anything. */
+  if (!next.length) {
+    paintPicker();
+    return note('parseNotes', 'warn',
+      'At least one shelf has to be ticked &mdash; otherwise there is nothing for the ' +
+      'report&rsquo;s lines to match against.');
   }
-} catch (e) { /* storage may be unreachable */ }
-el('fCat').value = ctx.category;
-el('fCat').addEventListener('change', () => {
-  ctx.category = el('fCat').value;
-  try { localStorage.setItem(CAT_KEY, ctx.category); } catch (e) {}
+  ctx.categories = next;
+  ctx.zeroFill = new Set();
+  store.set(CAT_KEY, next.join(','));
+  paintPicker();
   ctx.rows = []; ctx.fix = {}; ctx.added = []; ctx.date = null; ctx.grand = null;
   el('stage2').hidden = true;
   el('stage1').hidden = false;
   el('parseNotes').innerHTML = '';
   init();
-});
+}
+paintPicker();
 
-el('fStaff').value = localStorage.getItem(STAFF_KEY) || sessionStorage.getItem('staff_name') || '';
+el('fStaff').value = store.get(STAFF_KEY) || sessionStorage.getItem('staff_name') || '';
 el('fStaff').addEventListener('input', () => {
-  localStorage.setItem(STAFF_KEY, el('fStaff').value.trim());
+  store.set(STAFF_KEY, el('fStaff').value.trim());
   el('who').textContent = el('fStaff').value.trim();
   // The name is one of the things that gates the write, so typing it has to
   // release the button without needing the preview rebuilt by hand.
   if (!el('stage2').hidden && ctx.rec) render();
 });
 el('who').textContent = el('fStaff').value;
-
-const ctx = {
-  branchId: null, branchName: '', products: new Map(), hasImportedBy: false,
-  // Which shelf's report this is. Defaults to the first category of the module
-  // the page was opened from, so arriving from Cigarette Results preselects
-  // cigarettes rather than making someone choose every time.
-  category: MOD.categories[0],
-  rows: [], fix: {}, added: [], date: null, grand: null, fileName: '', source: '',
-  dpi: 0, turn: 0
-};
 
 /* ==================================================================
    Reading the PDF.
@@ -694,35 +779,56 @@ async function init() {
   ctx.branchId = match.branch_id;
   ctx.branchName = match.name;
 
-  /* Only the chosen category's products.
+  /* Only the ticked categories' products.
 
      buildPayload writes "sold nothing today" for every product it is handed,
      which is only true within the scope of the report being read. Handing it
      everything would make a cigarette import write a zero-sales row for all 31
      lubes and 21 Iluma products too — every day, silently — and their
-     reconciliation would read as total shrinkage. */
+     reconciliation would read as total shrinkage.
+
+     Several categories at once is therefore a wider claim, not a looser one:
+     it says this one PDF covers all of them. What the page cannot take on
+     trust it checks — scopeByCoverage() in sales-parse.js — and a ticked shelf
+     the report never mentions is left alone rather than zeroed. */
   let { data: prods, error } = await db.from('product')
     .select('product_id,short_name,plu,active,category')
-    .eq('active', true).eq('category', ctx.category).order('short_name');   // errors pre-migration, handled below
+    .eq('active', true).in('category', ctx.categories).order('short_name');   // errors pre-migration, handled below
   // Before 15_categories.sql there is no column to filter on. Everything in
-  // the table is a cigarette then, so the unscoped list IS the scoped one.
-  let scoped = !error;
+  // the table is a cigarette then, so the unscoped list IS the scoped one —
+  // but only if cigarettes are the only thing ticked.
   if (error) {
     ({ data: prods, error } = await db.from('product')
       .select('product_id,short_name,plu,active').eq('active', true).order('short_name'));
-    if (!error && ctx.category !== 'CIGARETTES') {
+    const notCigs = ctx.categories.filter(c => c !== 'CIGARETTES');
+    if (!error && notCigs.length) {
       return note('parseNotes', 'err',
         `This database does not have product categories yet, so a ` +
-        `${esc(categoryLabel(ctx.category).toLowerCase())} report cannot be scoped and ` +
-        `would be written against the cigarettes. Run <b>15_categories.sql</b> and ` +
+        `${esc(listOf(notCigs.map(c => categoryLabel(c).toLowerCase())))} report cannot be ` +
+        `scoped and would be written against the cigarettes. Run <b>15_categories.sql</b> and ` +
         `<b>16_seed_lubes_iluma.sql</b> first.`);
     }
   }
   if (error) return note('parseNotes', 'err', 'Could not read the product list: ' + esc(error.message));
   ctx.products = new Map((prods || []).map(p => [p.product_id, p]));
-  el('catNote').innerHTML = `Reading a <b>${esc(categoryLabel(ctx.category))}</b> report. ` +
-    `<b>${ctx.products.size}</b> products are in that category; any not in the report will be ` +
-    `written as having sold 0. Nothing in another category is touched.`;
+
+  // Per-category counts on the picker itself, so "all three ticked" reads as
+  // "106 products will get a row" before a file is anywhere near it.
+  const byCat = {};
+  for (const p of ctx.products.values()) byCat[catOf(p)] = (byCat[catOf(p)] || 0) + 1;
+  el('fCat').querySelectorAll('[data-count]').forEach(n => {
+    const c = n.getAttribute('data-count');
+    n.textContent = ctx.categories.includes(c) ? `${byCat[c] || 0} products` : '';
+  });
+
+  const names = ctx.categories.map(c => categoryLabel(c));
+  el('catNote').innerHTML = ctx.categories.length > 1
+    ? `Reading one report covering <b>${esc(listOf(names))}</b> — <b>${ctx.products.size}</b> ` +
+      `products in total. Any of them not in the report will be written as having sold 0, so ` +
+      `only tick a shelf this PDF actually prints. Nothing outside these is touched.`
+    : `Reading a <b>${esc(names[0])}</b> report. <b>${ctx.products.size}</b> products are in ` +
+      `that category; any not in the report will be written as having sold 0. Nothing in ` +
+      `another category is touched.`;
 
   // pos_sales_daily grew imported_by in migration 09 and unit_price in 10, both
   // optional and possibly not run. Ask the database rather than assume: sending
@@ -739,7 +845,16 @@ function note(target, kind, html) {
   el(target).insertAdjacentHTML('beforeend', `<div class="note ${kind}">${html}</div>`);
 }
 
+/* Tapping the box opens the file picker. It is the primary way in — dragging a
+   file is a desktop gesture and this is used on a phone at a counter — so the
+   box is a real button: pointer cursor, focusable, and Enter or Space works. */
 el('drop').addEventListener('click', () => el('file').click());
+el('drop').addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+    e.preventDefault();
+    el('file').click();
+  }
+});
 el('file').addEventListener('change', e => { if (e.target.files[0]) handle(e.target.files[0]); });
 ['dragenter', 'dragover'].forEach(ev => el('drop').addEventListener(ev, e => {
   e.preventDefault(); el('drop').classList.add('over');
@@ -754,6 +869,11 @@ el('drop').addEventListener('drop', e => {
 
 async function handle(file) {
   el('parseNotes').innerHTML = '';
+  /* Clear the input now the File is in hand. A file input does not fire change
+     when the same file is chosen again, so without this a scan that failed to
+     read — or one that was cancelled out of — could not be retried by picking
+     it a second time, which looks exactly like the button being dead. */
+  el('file').value = '';
   if (!/\.pdf$/i.test(file.name) && file.type !== 'application/pdf') {
     return note('parseNotes', 'err',
       'That is not a PDF. Upload the Merchandise Sales Report as it comes from the POS.');
@@ -912,12 +1032,31 @@ function render() {
   ctx.rec = rec;
 
   const writable = good.filter(r => ctx.products.has(r.product_id));
+
+  /* Which ticked shelves the report actually spoke about.
+
+     This is the guard that makes ticking several categories safe. Ticking a
+     shelf is a claim that this PDF prints it; if not one line in the file
+     matched a product on that shelf, the claim is almost certainly a mis-tick,
+     and honouring it would write every product there down to zero for the day
+     — the whole-shelf-walked-out variance this module is built to avoid.
+
+     So a shelf the report never mentions is left OUT of the payload and said
+     out loud, with the legitimate case available as one deliberate tap: a shelf
+     that genuinely sold nothing does need its zeros, or it drops out of
+     reconciliation altogether. What is never allowed is that happening
+     silently. */
+  const { coverage: cover, skip, scoped } = scopeByCoverage(
+    writable, ctx.products, ctx.categories, { categoryOf: catOf, zeroFill: ctx.zeroFill });
+
   const { rows: payload, unknown } =
-    buildPayload(writable, ctx.products, ctx.branchId, saleDate);
+    buildPayload(writable, scoped, ctx.branchId, saleDate);
   const unknownAll = good.filter(r => !ctx.products.has(r.product_id));
   ctx.payload = payload;
   ctx.unknown = unknownAll;
   ctx.merged = merged;
+  ctx.cover = cover;
+  ctx.skipped = skip;
 
   const zeros = payload.filter(r => r.qty_sold === 0).length;
   el('stats').innerHTML = [
@@ -932,6 +1071,7 @@ function render() {
   ].map(([l, v, k]) =>
     `<div class="stat"><div class="stat-l">${l}</div><div class="stat-v ${k}">${v}</div></div>`).join('');
 
+  renderCoverage(cover, skip);
   renderTotals(rec, merged);
   renderFixList(bad);
 
@@ -973,6 +1113,43 @@ function render() {
 
   gateWrite(bad.length, rec, saleDate);
   checkCount(saleDate);
+}
+
+/* What each ticked shelf got out of this report, and what is being done about
+   a shelf that got nothing. Rewritten on every render, so opting a shelf in
+   updates the row count and the zero count in the same pass. */
+function renderCoverage(cover, skip) {
+  [...el('notes').querySelectorAll('[data-k="cover"]')].forEach(n => n.remove());
+  if (cover.length < 2 && !skip.size) return;      // one shelf, and it is in the report
+
+  const part = c => `<b>${esc(categoryLabel(c.category))}</b> ${c.lines} of ${c.products}`;
+  const lines = [`Lines matched per shelf: ${cover.map(part).join(', ')}.`];
+
+  const silent = cover.filter(c => !c.lines);
+  let kind = 'info';
+  for (const c of silent) {
+    const label = esc(categoryLabel(c.category));
+    if (skip.has(c.category)) {
+      kind = 'warn';
+      lines.push(`Not one line in this report matched a <b>${label}</b> product, so it is almost ` +
+        `certainly not in this PDF. Its ${c.products} products are being <b>left out</b> — ` +
+        `writing them would record that shelf as having sold nothing all day. ` +
+        `<button class="btn sec sm" data-zero="${esc(c.category)}" style="margin-top:8px">` +
+        `The report does cover ${label} and it sold nothing — write ${c.products} zeros</button>`);
+    } else {
+      lines.push(`<b>${label}</b> is in the report&rsquo;s scope by your say-so and sold nothing, ` +
+        `so its ${c.products} products are being written as 0. ` +
+        `<button class="btn sec sm" data-unzero="${esc(c.category)}" style="margin-top:8px">` +
+        `Leave ${label} out instead</button>`);
+    }
+  }
+  el('notes').insertAdjacentHTML('beforeend',
+    `<div class="note ${kind}" data-k="cover">${lines.join('<br>')}</div>`);
+
+  el('notes').querySelectorAll('[data-zero]').forEach(b =>
+    b.addEventListener('click', () => { ctx.zeroFill.add(b.dataset.zero); render(); }));
+  el('notes').querySelectorAll('[data-unzero]').forEach(b =>
+    b.addEventListener('click', () => { ctx.zeroFill.delete(b.dataset.unzero); render(); }));
 }
 
 function renderTotals(rec, merged) {
@@ -1173,6 +1350,13 @@ function renderFixList(bad) {
 function gateWrite(badCount, rec, saleDate) {
   const reasons = [];
   if (badCount) reasons.push(`${badCount} quantit${badCount > 1 ? 'ies' : 'y'} still unconfirmed`);
+  /* Nothing to write means every ticked shelf was left out for want of a single
+     matching line — the wrong shelves are ticked, or this is the wrong report.
+     The upsert would succeed on an empty list and look like a successful import
+     of nothing at all, which is the one outcome worse than an error. */
+  if (!(ctx.payload || []).length) {
+    reasons.push('not one line in this report matched a product on the ticked shelves');
+  }
   if (!saleDate) reasons.push('the business date is not set');
   if (ctx.date && ctx.date.span) reasons.push('the report covers more than one day');
   if (!el('fStaff').value.trim()) reasons.push('nobody is named as importing it');
@@ -1286,10 +1470,20 @@ el('btnWrite').addEventListener('click', async () => {
     el('stage2').hidden = true;
     el('stage3').hidden = false;
     const zeros = rows.filter(r => r.qty_sold === 0).length;
+    // Name the shelves that were written, and the ones that were not. With
+    // several ticked, "wrote 85 rows" on its own does not say whether the lubes
+    // went in — and that is the question somebody will have.
+    const wrote = (ctx.cover || []).filter(c => !ctx.skipped.has(c.category))
+      .map(c => categoryLabel(c.category));
+    const left = [...(ctx.skipped || [])].map(categoryLabel);
     el('doneNote').innerHTML =
       `Wrote <b>${rows.length}</b> rows for <b>${esc(saleDate)}</b> &mdash; ` +
       `${rows.length - zeros} with sales, <b>${zeros} as zero</b>` +
+      (wrote.length ? `, covering <b>${esc(listOf(wrote))}</b>` : '') +
       (ctx.hasImportedBy ? `, against <b>${esc(who)}</b>` : '') + '. ' +
+      (left.length
+        ? `<b>${esc(listOf(left))}</b> was left alone &mdash; this report did not mention it. `
+        : '') +
       (ctx.unknown.length
         ? `${ctx.unknown.length} unknown Item ID(s) were not written. `
         : '') +

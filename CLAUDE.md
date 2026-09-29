@@ -132,6 +132,15 @@ Hosted on GitHub Pages: https://ashrosa7626.github.io/petron-task/
   "the fix didn't deploy" on 17 Sep. Either wait ten minutes, hard-reload, or check
   with `await import('./mod.js?probe=' + Date.now())` and compare against the module
   the page actually holds.
+- **A top-level throw in a page's module unbinds the WHOLE PAGE, silently.** Every
+  `addEventListener` below the throw never runs, so the page draws correctly and then does
+  nothing when touched — no error on screen, only a console line nobody on the shop floor
+  will see. `import-sales.html` shipped this: `ctx` was read one line above the
+  `const ctx = {...}` that declares it, a temporal dead zone `ReferenceError`, and the
+  report that came back was "Choose the sales PDF does nothing when I press it". A
+  `try/catch` a few lines earlier had already swallowed the same access, which is how it
+  got out. **Declare state above everything that touches it**, and note that
+  `verify_import_page.mjs` now loads this page for exactly this reason.
 - Never use terminal for JS with !, ?, special chars — write to .py file instead
 - After header redesigns, always check for dead element references in JS
 - Emojis in JS strings can cause syntax errors — use HTML entities instead
@@ -413,13 +422,26 @@ Supporting notes:
 - `vw_daily_reconciliation` computes `sold_physical = opening + add_in − closing`
   and the variance against `pos_sales_daily`. Excel/Power Query reads it directly
   — do not rename its columns.
-- **The zero-fill is scoped to ONE category.** `buildPayload` writes "sold nothing
-  today" for every product it is handed, and that is only true inside the report being
-  read — cigarettes, heated tobacco and lubes print as **separate** POS reports. Hand it
-  everything and a cigarette import writes a zero-sales row for all 31 lubes and 21
-  TEREA as well, every day, with no error anywhere, and their reconciliation reads as
-  the entire stock holding walking out. The import page has a category picker and
+- **The zero-fill is scoped to WHAT THE REPORT COVERS.** `buildPayload` writes "sold
+  nothing today" for every product it is handed, and that is only true inside the report
+  being read — cigarettes, heated tobacco and lubes normally print as **separate** POS
+  reports. Hand it everything and a cigarette import writes a zero-sales row for all 31
+  lubes and 21 TEREA as well, every day, with no error anywhere, and their reconciliation
+  reads as the entire stock holding walking out. The import page has a category picker and
   narrows the product list; `verify_sales_payload.mjs` pins it both ways.
+- **The picker takes SEVERAL categories** (29 Sep 2026, at Rosa's request) — tick rows
+  rather than a dropdown, because one PDF may print more than one shelf. Ticking more is
+  a **wider claim, not a looser filter**, so the claim is checked rather than trusted:
+  `scopeByCoverage()` in `sales-parse.js` counts how many matched lines each ticked
+  category got, and one that got **none** is left out of the payload and named on screen.
+  The legitimate case — a shelf the report does print, which genuinely sold nothing — is
+  one deliberate tap away, because without its zeros that shelf drops out of
+  reconciliation entirely. Either outcome is fine; **neither may happen silently.**
+  `scopeByCoverage` builds the scope from the **ticked list**, not by subtracting from the
+  map handed to it: the page already fetches `.in('category', ticked)`, and resting on
+  that would let a future caller holding the whole product table zero-fill straight
+  through the guard. `verify_sales_scope.mjs` pins all of it, including what the
+  unguarded version would have written.
 - **POS sales loader** (`stock-count/import-sales.html` + `stock-count/sales-parse.js`,
   Sep 2026). **The report is a CCITT G4 fax scan with no text layer at all** — pdf.js
   finds zero characters — so it is read by **OCR in the browser** (Tesseract.js 7.0.0,
@@ -618,7 +640,19 @@ Supporting notes:
     bakes the data in and needs no query. Snapshot exists because it uses the **same
     formulas**, so `verify_workbook.py --excel` can open it, switch the day and read back
     **Excel's own answers** — which is the only way to test the COUNTIFS rules carrying
-    "an unknown variance is not a zero". 43 checks. The snapshot file is gitignored.
+    "an unknown variance is not a zero", and — since Excel is the only thing that can
+  say what it actually PAINTS — the variance colours. 53 checks. The snapshot file is
+  gitignored.
+  - **A conditional fill is a dxf, and Excel paints a dxf solid fill from `bgColor`.**
+    openpyxl writes `fgColor`, so the fill silently never appears. The variance band for
+    ten packs and up was white text carried by a dark red fill, which meant the LARGEST
+    variances rendered white on white and could not be read at all (reported 28 Sep).
+    Fixed twice over: `dxf_fill()` writes both ends, and all three bands are now red
+    text that darkens with the gap, so legibility never rests on a fill. `verify_workbook.py`
+    pins both. **Colours are written as 8-digit ARGB** for the same class of reason —
+    openpyxl fills the alpha byte in for you and versions disagree about which byte
+    (3.1.5 writes `00`, the version the shipped file was built with wrote `FF`), so a
+    rebuild elsewhere rewrote all 36 colours in the file for nothing.
 - **`counts_query.m` is now the workbook's only data source** — it hits the Supabase
   REST endpoint with the anon key and refreshes on open / every 60 min. Name it
   `Counts`, load it to `Data!$A$1`. (`products_query.m` is unused by the workbook;
@@ -676,6 +710,15 @@ write, so migrations are run by hand in the Supabase SQL editor):
   spreadsheet. This is what found the L-shaped marker bug.
 - `verify_modules.mjs` — what is counted together, and the localStorage key names. A
   wrong key strands a count already open on the shop device.
+- `verify_sales_scope.mjs` — offline. `scopeByCoverage`: one shelf, several shelves in one
+  report, the mis-ticked shelf that must not be zero-filled, and the pre-migration case.
+- `verify_import_page.mjs` — offline, and the only test that **loads a page**. It runs
+  `import-sales.html`'s own module under `page_dom_shim.mjs` and asserts it reaches the
+  end, that pressing the drop zone opens the file picker, and that the category ticks
+  behave — including with a `localStorage` that throws. It exists because nothing in the
+  suite loaded a page, so a top-level throw could take every listener with it and still
+  ship green. `page_dom_shim.mjs` is the DOM surface this page touches and throws on
+  anything else, so a widening page cannot quietly go unchecked.
 - `verify_resolution.mjs` — the shipped logic resolving the right planogram whether or
   not the database has the category column, because the pages deploy before the
   migration is run. Its hard rule: lubes must never resolve to the cigarette shelf.
@@ -685,6 +728,13 @@ write, so migrations are run by hand in the Supabase SQL editor):
   the Positions column.
 
 ## Recent Fixes (Sep 2026)
+- **import-sales.html was dead, and now takes several categories at once** (29 Sep). The
+  page's module aborted at load on a TDZ `ReferenceError`, so not one listener bound and
+  the file picker could not be opened — see Common Issues. The same pass turned the
+  single-category dropdown into tick rows, so one PDF can be declared as covering several
+  shelves, guarded by `scopeByCoverage` so a mis-tick cannot write a shelf down to zero.
+  The drop zone is a real button now (focusable, Enter/Space) and the file input sits
+  outside it; re-picking the same file after a failed read works.
 - **The count grid could not scroll DOWN** (28 Sep), on all three shelves. The
   multi-shelf change wrapped the scrollers in `#gridWrap` so each shelf keeps its own
   zoom and scroll position — but the wrapper was a plain block, so `.scroller{flex:1}`
