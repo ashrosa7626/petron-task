@@ -192,6 +192,28 @@ check(thresholds == [10, 5, 1], 'the rest escalate 10, 5, 1', thresholds)
 check(all('ISNUMBER' in f for _, f in rules),
       'every rule tests ISNUMBER, so an em dash is never coloured as a number')
 
+# A variance nobody can read is a variance nobody acts on. The >=10 band used
+# to be white text carried by a dark red FILL — and a fill inside a conditional
+# format is a dxf, which Excel paints from bgColor while openpyxl wrote only
+# fgColor. The fill never arrived, leaving white on white. Both halves are
+# pinned: the number is red on its own account, and the fill is written from
+# both ends so it renders as well.
+styles = z.read('xl/styles.xml').decode()
+dxfs = re.findall(r'<dxf>.*?</dxf>', re.search(r'<dxfs.*?</dxfs>', styles, re.S).group(0), re.S)
+band_fonts = [m.group(1) for d in dxfs if 'numFmt' not in d
+              for m in [re.search(r'<font>.*?<color rgb="..([0-9A-Fa-f]{6})"', d, re.S)] if m]
+reds = [c for c in band_fonts if c.upper() != bw.MUTED[2:]]
+check(len(reds) == 3, f'three variance bands are coloured (got {len(reds)})', band_fonts)
+check(all(int(c[0:2], 16) > int(c[2:4], 16) and int(c[0:2], 16) > int(c[4:6], 16)
+          for c in reds),
+      'every variance band is RED TEXT — never white, which is invisible when '
+      'the fill behind it does not render', reds)
+fills = re.findall(r'<patternFill patternType="solid">(.*?)</patternFill>',
+                   '\n'.join(dxfs), re.S)
+check(fills and all('bgColor' in f for f in fills),
+      'a conditional fill carries bgColor — Excel paints a dxf fill from that, '
+      'not fgColor', fills)
+
 qz, qwbx, qhidden, qorder = parts(query)
 check('Setup' in qorder, 'query mode ships a Setup sheet with the attach steps', qorder)
 check('Setup' not in order, 'snapshot mode does not, since there is nothing to attach')
@@ -252,6 +274,8 @@ if '--excel' in sys.argv:
   set out to out & "T5=" & (value of range "A5" of t as text) & "/" & (value of range "P5" of t as text) & "/" & (value of range "Q5" of t as text) & "|"
   set out to out & "T6=" & (value of range "A6" of t as text) & "/" & (value of range "P6" of t as text) & "|"
   set out to out & "T9=" & (value of range "A9" of t as text) & "/" & (value of range "P9" of t as text) & "|"
+  set out to out & "ink10=" & ((color of font object of display format of range "G10" of d) as text) & "|"
+  set out to out & "fill10=" & ((color of interior object of display format of range "G10" of d) as text) & "|"
 '''
     got = dict(kv.split('=', 1) for kv in excel(snap, body).split('|') if '=' in kv)
 
@@ -291,6 +315,19 @@ if '--excel' in sys.argv:
     check(got.get('T9', '').split('/')[-1] == '—',
           'and a product never checked shows a dash for days off, not 0',
           got.get('T9'))
+
+    # What Excel PAINTS, not what the file asks for. Row 10 is the -12, so it is
+    # the >=10 band — the one that shipped as white text on a fill Excel never
+    # applied, leaving white on the row banding. Measured before the fix:
+    # font 255,255,255 on fill 244,246,250.
+    def rgb(argb):
+        return ''.join(str(int(argb[i:i + 2], 16)) for i in (2, 4, 6))
+    check(got.get('ink10') == rgb(bw.RED_3),
+          'Excel paints the biggest variance in dark red, not white',
+          got.get('ink10'))
+    check(got.get('fill10') == rgb(bw.RED_3_BG),
+          'and its fill arrives — a dxf solid fill needs bgColor, which is what '
+          'made the old dark red silently do nothing', got.get('fill10'))
 else:
     print('\n(skipped the Excel checks — pass --excel to run them)')
 

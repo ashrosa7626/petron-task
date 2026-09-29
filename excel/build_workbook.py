@@ -58,18 +58,32 @@ MAX_DAYS = 60            # rows reserved on Calc for the per-day summary
 MAX_PRODUCTS = 120       # rows reserved on Calc for products (54 today)
 
 # ---------------------------------------------------------------------------
-INK = '1F2A44'
-MUTED = '8A94A6'
-RULE = 'D6DBE4'
-HEAD_BG = '0F1B3D'
-BAND = 'F4F6FA'
-WARN_AMBER = '9A6500'
-RED_1 = 'C0392B'
-RED_2 = '96281B'
-RED_3 = 'FFFFFF'
-RED_3_BG = '922B21'
-RED_FILL_LIGHT = 'FDEDEC'
-AMBER_FILL = 'FEF5E7'
+# Every colour is written as 8-digit ARGB. Six digits work, but openpyxl fills
+# in the alpha byte for you and different versions fill in a different one —
+# 3.1.5 writes 00, the version this workbook shipped from wrote FF — so a
+# rebuild on another machine rewrites all 36 colours in the file for no reason.
+# Saying FF here makes the output the same whoever builds it.
+INK = 'FF1F2A44'
+MUTED = 'FF8A94A6'
+RULE = 'FFD6DBE4'
+HEAD_BG = 'FF0F1B3D'
+BAND = 'FFF4F6FA'
+WARN_AMBER = 'FF9A6500'
+# The three variance bands. All three are RED TEXT and get darker as the gap
+# grows; the fill behind them is emphasis and nothing more. The >=10 band used
+# to be white text on a dark red fill, which is how a variance came to be
+# invisible on the shop's copy: a solid fill inside a CONDITIONAL format is a
+# dxf, and Excel paints a dxf solid fill from bgColor, not fgColor. openpyxl
+# writes fgColor, so the dark red never arrived and white text was left sitting
+# on a white cell. dxf_fill() below now writes both, but the colours no longer
+# depend on that having worked — a fill that fails to render must never take
+# the number with it.
+RED_1 = 'FFC0392B'        # >= 1 pack
+RED_2 = 'FF96281B'        # >= 5 packs
+RED_3 = 'FF7B241C'        # >= 10 packs, the darkest red
+RED_3_BG = 'FFF5B7B1'     # light enough that RED_3 reads on top of it
+RED_FILL_LIGHT = 'FFFDEDEC'
+AMBER_FILL = 'FFFEF5E7'
 
 THIN = Side(style='thin', color=RULE)
 BOX = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
@@ -393,10 +407,10 @@ def write_daily(ws):
     ws['A3'].alignment = Alignment(horizontal='left', vertical='center')
     ws['B3'] = f'=IFERROR(INDEX({D["count_date"]},MATCH(1,{D["day_no"]},0)),"")'
     ws['B3'].number_format = DATE_FMT
-    ws['B3'].font = Font(name='Calibri', size=14, bold=True, color='1F4E79')
+    ws['B3'].font = Font(name='Calibri', size=14, bold=True, color='FF1F4E79')
     ws['B3'].alignment = Alignment(horizontal='left', vertical='center')
     ws['B3'].border = BOX
-    ws['B3'].fill = PatternFill('solid', fgColor='EAF1FB')
+    ws['B3'].fill = PatternFill('solid', fgColor='FFEAF1FB')
 
     dv = DataValidation(type='list', formula1=f'={calc_days}',
                         allow_blank=False, showDropDown=False)
@@ -436,7 +450,7 @@ def write_daily(ws):
 
     for i, (text, width, align) in enumerate(DAILY_HEADERS, start=1):
         c = ws.cell(row=HDR_ROW, column=i, value=text)
-        c.font = Font(name='Calibri', size=10, bold=True, color='FFFFFF')
+        c.font = Font(name='Calibri', size=10, bold=True, color='FFFFFFFF')
         c.fill = PatternFill('solid', fgColor=HEAD_BG)
         c.alignment = Alignment(horizontal=align, vertical='center', wrap_text=True)
         c.border = BOX
@@ -499,11 +513,27 @@ def write_daily(ws):
     ws.oddFooter.right.text = 'Page &[Page] of &[Pages]'
 
 
+def dxf_fill(colour):
+    """A solid fill for a CONDITIONAL format, coloured from both ends.
+
+    A conditional format is written as a dxf, and Excel paints a dxf solid fill
+    from bgColor — openpyxl only writes fgColor, so the fill silently does not
+    appear. Setting both means the cell comes out the same colour whichever end
+    the reader takes.
+    """
+    return PatternFill('solid', fgColor=colour, bgColor=colour)
+
+
 def variance_rules(ws, rng, anchor):
-    """Grey at zero, red from one pack, heavier at five and again at ten.
+    """Grey at zero, red from one pack, darker at five and again at ten.
 
     Every rule tests ISNUMBER first, so an em dash — which means "not known" —
     is never coloured as though it were a number.
+
+    The NUMBER is always red and never white. Legibility is the font's job
+    alone: the >=10 band was white on dark red, the fill did not render (see
+    dxf_fill), and the variance that mattered most was the one nobody could
+    read.
     """
     grey = Font(name='Calibri', size=10, color=MUTED)
     for rule in (
@@ -511,10 +541,10 @@ def variance_rules(ws, rng, anchor):
                     font=grey, stopIfTrue=True),
         FormulaRule(formula=[f'AND(ISNUMBER({anchor}),ABS({anchor})>=10)'],
                     font=Font(name='Calibri', size=10, bold=True, color=RED_3),
-                    fill=PatternFill('solid', fgColor=RED_3_BG), stopIfTrue=True),
+                    fill=dxf_fill(RED_3_BG), stopIfTrue=True),
         FormulaRule(formula=[f'AND(ISNUMBER({anchor}),ABS({anchor})>=5)'],
                     font=Font(name='Calibri', size=10, bold=True, color=RED_2),
-                    fill=PatternFill('solid', fgColor=RED_FILL_LIGHT), stopIfTrue=True),
+                    fill=dxf_fill(RED_FILL_LIGHT), stopIfTrue=True),
         FormulaRule(formula=[f'AND(ISNUMBER({anchor}),ABS({anchor})>=1)'],
                     font=Font(name='Calibri', size=10, bold=True, color=RED_1),
                     stopIfTrue=True),
@@ -539,7 +569,7 @@ def write_trends(ws, calc):
     hdr = ['Product'] + [''] * TREND_DAYS + ['Days off', 'Total', 'Worst']
     for i, text in enumerate(hdr, start=1):
         c = ws.cell(row=TRENDS_ROW0, column=i, value=text)
-        c.font = Font(name='Calibri', size=10, bold=True, color='FFFFFF')
+        c.font = Font(name='Calibri', size=10, bold=True, color='FFFFFFFF')
         c.fill = PatternFill('solid', fgColor=HEAD_BG)
         c.alignment = Alignment(horizontal='center' if i > 1 else 'left',
                                 vertical='center', wrap_text=True)
@@ -670,7 +700,7 @@ def write_notes(ws):
         if kind == 'h1':
             c.font = Font(name='Calibri', size=16, bold=True, color=INK)
         elif kind == 'h2':
-            c.font = Font(name='Calibri', size=12, bold=True, color='1F4E79')
+            c.font = Font(name='Calibri', size=12, bold=True, color='FF1F4E79')
             c.border = UNDER
         else:
             c.font = Font(name='Calibri', size=10, color=INK)
@@ -729,7 +759,7 @@ def write_setup(ws):
         if kind == 'h1':
             c.font = Font(name='Calibri', size=16, bold=True, color=INK)
         elif kind == 'h2':
-            c.font = Font(name='Calibri', size=12, bold=True, color='1F4E79')
+            c.font = Font(name='Calibri', size=12, bold=True, color='FF1F4E79')
             c.border = UNDER
         else:
             c.font = Font(name='Calibri', size=10, color=INK)

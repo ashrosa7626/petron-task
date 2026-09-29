@@ -3,3 +3,6 @@
 
 # Build artefact of --mode snapshot; only used for testing
 excel/Cigarette Reconciliation (snapshot).xlsx
+
+# Excel owner/lock files, left behind when a workbook is opened
+~$*

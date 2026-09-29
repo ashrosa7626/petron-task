@@ -44,7 +44,21 @@ adding up on the day a delivery went out.
 
 Rows are ordered by **absolute** variance descending, so the problems are at the top
 instead of wherever the alphabet put them. Variance is grey at zero and red from one
-pack, getting heavier at five and again at ten.
+pack, darkening at five and again at ten — and the number stays **red text** the whole
+way up. It was white on a dark red fill at ten and above, which is how the biggest
+variances came to be unreadable: a fill inside a conditional format is a dxf, Excel
+paints one from `bgColor`, openpyxl wrote only `fgColor`, so the red never arrived and
+the white text sat on a white cell. The fill is now written from both ends, but the
+colours no longer depend on it — a fill that fails to render must not take the number
+with it.
+
+**The workbook committed here is a live copy with the Power Query already attached** —
+it carries the DataMashup, both connections and an extra `Counts` sheet that were added
+by hand. `build_workbook.py` cannot produce any of that, so running it over this file
+throws the setup away and leaves you re-attaching the query. The colour fix above was
+applied to `xl/styles.xml` inside the file instead, which is why the builder and the
+workbook were changed by two different routes. Rebuild only when the LAYOUT changes,
+and expect to follow the Setup sheet afterwards.
 
 The line at the top right says how many days are loaded and what the latest one is.
 **If the day you counted this morning is not the latest, the file has not refreshed.**
