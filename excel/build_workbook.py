@@ -842,14 +842,16 @@ def setup_rows():
     reading it has no way to tell which one is right.
     """
     n = len(TABS)
+    first = TABS[0]
     wide = max(len(t['plural']) for t in TABS)
     table = [(f"     {t['plural'].title():<{wide}}   query named  {t['query']:<8} "
               f"loads to  {t['data']}!$A$1", '') for t in TABS]
     return [
-        ('Attach the data — about fifteen minutes, once per shelf', 'h1'),
+        ('Attach the data — about fifteen minutes, once', 'h1'),
         ('', ''),
         (f'There is one query per shelf, {n} in all, and each one lands on its own hidden '
-         'sheet. Until a shelf\'s query is attached its tabs are empty and the line at the '
+         'sheet. You paste the query once and duplicate it for the rest, so the extra '
+         'shelves are a couple of minutes each. Until a shelf\'s query is attached its tabs are empty and the line at the '
          'top right of its Daily tab says so. Nothing is broken; the rows simply are not '
          'there yet. After it is done the workbook refreshes itself and this sheet can be '
          'ignored.', ''),
@@ -862,6 +864,11 @@ def setup_rows():
          'naming a date. A tab quietly showing another shelf\'s rows would otherwise look '
          'perfectly reasonable and be about the wrong stock entirely.', ''),
         ('', ''),
+        ('Paste the query ONCE, then duplicate it', 'h2'),
+        ('Steps 1 to 5 build the first shelf from the .m file. Step 6 clones it for the '
+         'others, which is quicker and cannot introduce a typo into the parts that must stay '
+         'identical — only the Category line is ever meant to differ.', ''),
+        ('', ''),
         ('1. Open a blank query', 'h2'),
         ('Data > Get Data > From Other Sources > Blank Query.', ''),
         ('', ''),
@@ -869,30 +876,37 @@ def setup_rows():
         ('Home > Advanced Editor. Delete what is there. Paste the whole of counts_query.m '
          'from the excel folder. Done.', ''),
         ('', ''),
-        ('3. Set the shelf, and name the query to match', 'h2'),
-        ('Near the top of the pasted query there is one line:  Category = "CIGARETTES",', ''),
-        *[(f'For {t["plural"]}, set  Category = "{t["category"]}",  and name the query '
-           f'{t["query"]}.', '') for t in TABS],
-        ('The name is in the Query Settings pane on the right. It does not drive any formula '
-         '— the sheets address columns by position — but the next person has to be able to '
-         'tell the queries apart.', ''),
+        (f'3. Name it  {first["query"]}', 'h2'),
+        (f'In the Query Settings pane on the right. Leave the Category line alone — it '
+         f'already says "{first["category"]}". The name drives no formula, since the sheets '
+         f'address columns by position, but the next person has to be able to tell the '
+         f'queries apart.', ''),
         ('', ''),
-        ('4. Load it onto that shelf\'s Data sheet', 'h2'),
-        ('Home > Close & Load To... > Table > Existing worksheet > put the cursor in the cell '
-         'named in the table above > OK. If Excel asks about credentials for supabase.co, '
-         'choose Anonymous.', ''),
-        ('IMPORTANT: it must land at A1 of the right sheet, and the columns must sit in the '
-         'order the query returns them, because every formula in the workbook finds its '
-         'values by column position. If it lands somewhere else, undo and redo this step.', ''),
+        (f'4. Load it onto  {first["data"]}!$A$1', 'h2'),
+        (f'Home > Close & Load To... > Table > Existing worksheet > put the cursor in '
+         f'{first["data"]}!$A$1 > OK. If Excel asks about credentials for supabase.co, '
+         f'choose Anonymous.', ''),
+        ('IMPORTANT: it must land at A1 of that sheet, and the columns must sit in the order '
+         'the query returns them, because every formula in the workbook finds its values by '
+         'column position. If it lands somewhere else, undo and redo this step.', ''),
+        ('Do NOT use plain "Close & Load" — that makes a new sheet of its own and leaves the '
+         'Data sheet empty, so every tab stays blank while looking attached.', ''),
         ('', ''),
         ('5. Make it automatic', 'h2'),
         ('Data > Queries & Connections > right-click the query > Properties. Tick "Refresh '
-         'data when opening the file" and "Refresh every 60 minutes". Do this for each one.', ''),
+         'data when opening the file" and "Refresh every 60 minutes".', ''),
         ('', ''),
-        (f'6. Repeat for the other {"shelf" if n == 2 else "shelves"}', 'h2'),
-        (f'Steps 1 to 5 again for each remaining row of the table above, {n - 1} more '
-         f'{"time" if n == 2 else "times"}. The queries are independent: attaching one does '
-         'nothing to the others, and a shelf with no query is simply a pair of empty tabs.', ''),
+        (f'6. Duplicate it for the other {"shelf" if n == 2 else "shelves"}', 'h2'),
+        (f'Data > Queries & Connections. Right-click {first["query"]} > Duplicate. Then on '
+         f'the copy:', ''),
+        ('  a. Rename it to the query name in the table above.', ''),
+        ('  b. Home > Advanced Editor, and change the one Category line to that shelf.', ''),
+        ('  c. Close & Load To... > Table > Existing worksheet > that shelf\'s cell from the '
+         'table above.', ''),
+        ('  d. Properties > tick the same two refresh boxes.', ''),
+        (f'{n - 1} more {"time" if n == 2 else "times"}, one per remaining row. The queries '
+         f'are independent: attaching one does nothing to the others, and a shelf with no '
+         f'query is simply a pair of empty tabs.', ''),
         ('', ''),
         ('Then check three things', 'h2'),
         ('The top right of each Daily tab names that shelf\'s latest counted day. It should '
@@ -970,6 +984,22 @@ def build(raw, mode, out):
     wb.calculation.fullCalcOnLoad = True
     wb.active = 0
     wb.save(out)
+
+    # Read the saved file BACK and check every shelf is in it.
+    #
+    # Not paranoia about openpyxl: the failure this is for is a person having the
+    # workbook open in Excel while this runs. Excel then writes its own in-memory
+    # copy over the new file when it closes, and what is left on disk is the old
+    # layout — which is how a three-shelf build got committed as a two-shelf
+    # workbook, with the tabs verified in a scratch copy that was never the file
+    # being shipped. Verify the artefact, not a copy of it.
+    from openpyxl import load_workbook                                  # noqa: E402
+    saved = load_workbook(out, read_only=True).sheetnames
+    missing = [n for t in TABS for n in (t['daily'], t['trends'], t['calc'], t['data'])
+               if n not in saved]
+    if missing:
+        sys.exit(f'{out} came back from disk without {missing}. Is it open in Excel? '
+                 f'Close it and run this again.')
     return wb
 
 

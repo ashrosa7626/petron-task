@@ -7,10 +7,11 @@ It covers **all three shelves**: cigarettes, lubes and heated tobacco, one pair 
 each. The filename is now a misnomer and is kept anyway, for the same reason
 `cigarette stock/` is — too much points at it.
 
-Setup is about fifteen minutes **per shelf** — the **Setup sheet inside the workbook**
-walks through it, and `counts_query.m` is the query to paste, twice, with one line
-changed. Until a shelf's query is attached its two tabs say so at the top right. After
-it is done the Setup sheet can be ignored.
+Setup is about fifteen minutes, **once** — the **Setup sheet inside the workbook** walks
+through it. You paste `counts_query.m` for the first shelf, then right-click the query and
+**Duplicate** it for the others, changing one line each time, so the extra shelves are a
+couple of minutes apiece. Until a shelf's query is attached its two tabs say so at the top
+right. After it is done the Setup sheet can be ignored.
 
 ## What's in it
 
@@ -98,9 +99,20 @@ sheets with formulas, conditional formats, validation and print areas cannot be 
 into a live file, unlike the variance-colour fix above, which was patched straight into
 `xl/styles.xml` and left every other part byte-identical.
 
-So: rebuild only when the LAYOUT changes, and expect to follow the Setup sheet afterwards
-— now twice, once per shelf. The previous copy is in git history if anything is needed
-back out of it.
+Grafting the new sheets into a live file was tried and does not work: Excel will copy
+sheets between open workbooks, but it rewrites every formula on the copies into an
+**external reference to the source file's absolute path**, so the result breaks as soon as
+that file moves. Copying the referenced sheets across first does not prevent it.
+
+So: rebuild only when the LAYOUT changes, and expect to re-attach afterwards — mitigated by
+the Duplicate route above. The previous copy is in git history if anything is needed back
+out of it.
+
+One more thing the builder now does: it **reads the saved file back** and refuses if a
+shelf's sheets are missing. That is not about openpyxl — it is about the workbook being
+**open in Excel** while the builder runs, in which case Excel writes its own copy over the
+new file on close and the old layout is what survives. It happened, and a three-shelf build
+went into git as a two-shelf workbook.
 
 The line at the top right says how many days are loaded and what the latest one is.
 **If the day you counted this morning is not the latest, the file has not refreshed.**

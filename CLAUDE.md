@@ -647,7 +647,19 @@ Supporting notes:
   - **Adding tabs means REBUILDING, and a rebuild discards the attached queries.** Unlike
     a styles-only patch, new sheets with formulas, conditional formats, validation and
     print areas cannot be grafted into the live file. Whoever does this owes the user the
-    Setup sheet and an honest estimate.
+    Setup sheet and an honest estimate. **Grafting was tried and does not work**: Excel
+    will copy sheets between open workbooks, but it rewrites every formula on the copies
+    into an EXTERNAL reference to the source file's absolute path
+    (`'/tmp/…/[fresh3.xlsx]IlumaData'!$U:$U`), and copying the referenced sheets first
+    does not prevent it. The Setup sheet now says paste the query **once** and
+    **Duplicate** it per shelf, which is the cheap part of the cost.
+  - **`build()` reads the saved file back and checks every shelf is in it.** Not paranoia
+    about openpyxl — the failure is somebody having the workbook OPEN in Excel while the
+    builder runs: Excel writes its own in-memory copy over the new file on close, and what
+    is left on disk is the old layout. That is how a three-shelf build was committed as a
+    two-shelf workbook on 29 Sep, having been "verified" in a scratch copy that was never
+    the file being shipped. **Verify the artefact, not a copy of it** — and after
+    `git add` of a binary, check the staged blob.
   - **`excel()` in the verifier binds the workbook BY NAME.** `active workbook` was still
     one of the user's own open files on the second call of a run, so every
     `worksheet "Daily" of wbk` missed with "the object you are trying to access does not
