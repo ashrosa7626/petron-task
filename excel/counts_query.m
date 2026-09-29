@@ -1,19 +1,29 @@
 // ===========================================================================
-// Petron — cigarette reconciliation
+// Petron — stock reconciliation, ONE SHELF PER COPY
 // Power Query (M) for Excel. Pulls every SUBMITTED count from Supabase.
 //
-// This query feeds the whole workbook. Daily and Trends read it by structured
-// reference, so it must be named exactly  Counts  and loaded to the Data sheet.
+// This one file installs TWICE, once per shelf, differing only in the Category
+// line below. Each copy lands on its own hidden sheet and feeds its own pair of
+// tabs — a shelf reconciles against its own POS report, so mixing them would put
+// three shelves under one trading day.
+//
+//   Category = "CIGARETTES"   name it  Counts   load to  Data!$A$1
+//   Category = "LUBES"        name it  Lubes    load to  LubesData!$A$1
+//
+// One file rather than two, because two copies of one query drift: the workbook
+// addresses the Data sheets by COLUMN POSITION, so a column added to one copy and
+// not the other silently shifts every figure on that shelf's tabs by one.
 //
 // To install:
 //   Data > Get Data > From Other Sources > Blank Query
 //   Home > Advanced Editor > replace everything with this > Done
-//   Rename the query to  Counts   (the sheet formulas depend on that name)
-//   Close & Load To... > Table > Existing worksheet > Data!$A$1
+//   Set the Category line for the shelf you are installing
+//   Rename the query as above, then
+//   Close & Load To... > Table > Existing worksheet > the cell named above
 //   If Excel asks about credentials for supabase.co, choose Anonymous.
 //
-// To make it automatic:
-//   Data > Queries & Connections > right-click Counts > Properties
+// To make it automatic (per query):
+//   Data > Queries & Connections > right-click the query > Properties
 //     [x] Refresh data when opening the file
 //     [x] Refresh every 60 minutes
 //
@@ -33,10 +43,17 @@ let
     Resource = "vw_daily_reconciliation",
     Branch   = "SAFARI",
 
-    // This workbook is the CIGARETTE report. The view carries lubes and heated
-    // tobacco too since 15_categories.sql, and without this filter their rows
-    // would land in the Daily sheet — tripling the row count and mixing three
-    // shelves under one trading day. A lubes workbook is a separate file.
+    // >>> THE ONE LINE THAT DIFFERS BETWEEN THE TWO INSTALLS <<<
+    //
+    // "CIGARETTES" for the query named Counts, loaded to Data!$A$1.
+    // "LUBES"      for the query named Lubes,  loaded to LubesData!$A$1.
+    // "ILUMA"      exists in the view but has no tabs yet.
+    //
+    // The view carries all three since 15_categories.sql, and without this filter
+    // their rows would land on one Data sheet together — tripling the row count
+    // and mixing three shelves under one trading day. The workbook checks the
+    // result: a tab fed by the wrong shelf's query says WRONG QUERY at its top
+    // right rather than showing the other shelf's stock as if it were this one's.
     Category = "CIGARETTES",
     PageSize = 1000,
 

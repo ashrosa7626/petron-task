@@ -601,12 +601,44 @@ Supporting notes:
     and `build_workbook.py` addresses `Data` by position, so the shape is not free
     to move.
 - **Excel reporting: generated layout, Power Query data** (`excel/`, Sep 2026).
-  `build_workbook.py` writes `Cigarette Reconciliation.xlsx` — **Daily** (one trading
-  day from a dropdown, summary block, sorted by *absolute* variance desc, prints on one
-  page), **Trends** (last 14 counted days, sorted by days-off before size so a leak
-  outranks an event), **Notes**, **Setup**, and hidden **Calc** + **Data**. The rows
-  come from `counts_query.m`, attached once by hand; after that it is refresh-on-open
-  and the builder is only re-run to change the *layout*.
+  `build_workbook.py` writes `Cigarette Reconciliation.xlsx` — **one pair of tabs per
+  shelf**, plus **Notes**, **Setup** and a hidden **Calc** + **Data** pair each. Per
+  shelf: **Daily** (one trading day from a dropdown, summary block, sorted by *absolute*
+  variance desc, prints on one page) and **Trends** (last 14 counted days, sorted by
+  days-off before size so a leak outranks an event). The rows come from
+  `counts_query.m`, attached once by hand; after that it is refresh-on-open and the
+  builder is only re-run to change the *layout*.
+  - **One shelf, one pair of tabs, one query** (29 Sep 2026, at Rosa's request — lubes).
+    `TABS` in the builder is the whole configuration; adding heated tobacco is one entry
+    and one more query attached. **CIGARETTES keeps the original sheet names**
+    (`Daily`/`Trends`/`Calc`/`Data`) because a file in use already has `Counts` loaded to
+    `Data!$A$1` — renaming that sheet would break an attachment for nothing. Lubes gets
+    `Lubes Daily`/`Lubes Trends` and, space-free because formulas name them,
+    `LubesCalc`/`LubesData`.
+  - **The two queries are ONE FILE with one line changed**, `Category = "…"`. Two copies
+    would drift, and since the sheets address `Data` by column *position*, a column added
+    to one copy and not the other silently shifts every figure on that shelf by one.
+  - **A tab checks that the right query fed it.** The mistake this layout makes possible
+    is attaching the cigarette query to the lubes sheet, and a Lubes tab showing cigarette
+    rows is the Excel version of a count filed against the wrong branch — every figure
+    plausible, every one about the wrong stock. The stamp says **WRONG QUERY** instead of
+    a date. Two traps in writing that test, both hit: it needs the `"<>"` criterion as
+    well or the blank part of the column reads as "not this category" and it fires
+    permanently; and it must start at **row 2**, because the header cell holds the word
+    `category`, which is itself non-blank and not `CIGARETTES`. It is the one reference in
+    the file that is not a whole column.
+  - **`prepare()` runs once per category.** `day_no`, `rank` and `prod_no` are positions
+    within one shelf's own history — what each query computes over its own filtered result
+    — so preparing everything once and splitting afterwards would number the lubes days by
+    where they fall among the cigarettes. `build()` takes RAW view rows for this reason.
+  - **`sheet_ref()` returns the bang**, `Data!` not `Data`. Leaving it to the caller is how
+    the first cut of this emitted `Data$U:$U` into every formula on every sheet — which
+    Excel reads as an unknown name, so the whole workbook came out `#NAME?` rather than
+    as anything resembling a bad sheet reference.
+  - **Adding tabs means REBUILDING, and a rebuild discards the attached queries.** Unlike
+    a styles-only patch, four new sheets with formulas, conditional formats, validation
+    and print areas cannot be grafted into the live file. Whoever does this owes the user
+    the Setup sheet and an honest estimate.
   - **Why not push.** It shipped as a snapshot first. Rosa pressed Refresh All, saw the
     newest date in the file, and reasonably concluded it had worked — it had not, and
     two days of counts were already invisible. A workbook that looks refreshed and is
@@ -641,7 +673,8 @@ Supporting notes:
     formulas**, so `verify_workbook.py --excel` can open it, switch the day and read back
     **Excel's own answers** — which is the only way to test the COUNTIFS rules carrying
     "an unknown variance is not a zero", and — since Excel is the only thing that can
-  say what it actually PAINTS — the variance colours. 53 checks. The snapshot file is
+  say what it actually PAINTS — the variance colours, and that each shelf's tabs compute
+  from their own shelf. 79 checks. The snapshot file is
   gitignored.
   - **A conditional fill is a dxf, and Excel paints a dxf solid fill from `bgColor`.**
     openpyxl writes `fgColor`, so the fill silently never appears. The variance band for
@@ -829,8 +862,9 @@ exactly the shrinkage case. Setting list prices is a data task.
 end-to-end tests and are labelled as such). None yet for lubes or Iluma.
 
 **The view kept its shape.** 18 columns, the first 17 in their original order with
-`category` appended — verified 28 Sep. `counts_query.m` filters to `CIGARETTES`, so the
-Excel workbook is unaffected by the other two shelves existing.
+`category` appended — verified 28 Sep. `counts_query.m` filters to **one** category, and
+the workbook attaches it twice — `CIGARETTES` to `Data`, `LUBES` to `LubesData` — so each
+shelf's tabs see only their own rows.
 
 **Still open:**
 - **Nilai Desa Jati has no planogram** for any category, so nothing can be counted there.

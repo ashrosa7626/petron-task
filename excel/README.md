@@ -1,25 +1,56 @@
-# Cigarette reconciliation — the Excel workbook
+# Stock reconciliation — the Excel workbook
 
 `Cigarette Reconciliation.xlsx` **refreshes itself.** Open it, or press
 **Data → Refresh All**, and it pulls straight from the database. No script to run.
 
-That needs a one-time setup of about fifteen minutes — the **Setup sheet inside the
-workbook** walks through it, and `counts_query.m` is the query to paste. Until it is
-done, Daily says "No data yet" and nothing else works. After it is done the Setup sheet
-can be ignored.
+It covers **two shelves**: cigarettes and lubes, one pair of tabs each. The filename is
+now a misnomer and is kept anyway, for the same reason `cigarette stock/` is — too much
+points at it.
+
+Setup is about fifteen minutes **per shelf** — the **Setup sheet inside the workbook**
+walks through it, and `counts_query.m` is the query to paste, twice, with one line
+changed. Until a shelf's query is attached its two tabs say so at the top right. After
+it is done the Setup sheet can be ignored.
 
 ## What's in it
 
 | sheet | |
 |---|---|
-| **Daily** | One trading day, chosen from a dropdown. Summary block on top, products below, worst variance first. Prints on one page. |
-| **Trends** | Variance by product over the last 14 counted days. |
+| **Daily** | Cigarettes: one trading day, chosen from a dropdown. Summary block on top, products below, worst variance first. Prints on one page. |
+| **Trends** | Cigarettes: variance by product over the last 14 counted days. |
+| **Lubes Daily** | The same thing for the lubes shelf. |
+| **Lubes Trends** | The same thing for the lubes shelf. |
 | **Notes** | What the columns mean and what can make them lie. |
-| **Setup** | The one-time attach instructions. |
-| **Calc** | Hidden. The working-out. |
-| **Data** | Hidden. Where the query lands — the raw view, every column. |
+| **Setup** | The one-time attach instructions, per shelf. |
+| **Calc** / **LubesCalc** | Hidden. The working-out, one per shelf. |
+| **Data** / **LubesData** | Hidden. Where each query lands — the raw view, every column. |
 
-Daily and Trends are formulas over `Data`, addressed **by whole column**
+### One shelf, one pair of tabs, one query
+
+A category is a shelf, and each reconciles against its **own POS report** — so each gets
+its own query, its own hidden `Calc` and `Data`, and its own `Daily` and `Trends`. The
+two halves read nothing from each other, which `verify_workbook.py` asserts in both
+directions.
+
+The two queries are the **same file with one line changed**, `Category = "…"`. One file
+rather than two, because two copies drift — and since the sheets address `Data` by column
+*position*, a column added to one copy and not the other would silently shift every
+figure on that shelf by one column.
+
+That makes one mistake possible: attaching a shelf's query to the other shelf's `Data`
+sheet. A Lubes tab showing cigarette rows would look entirely reasonable and be about the
+wrong stock, so each `Daily` checks its own feed and says **WRONG QUERY** at the top right
+instead of naming a date. The test drives Excel and confirms it both stays quiet when
+correct and fires when the queries are swapped.
+
+Cigarettes deliberately keeps the original sheet names. A workbook already in use has
+`Counts` loaded to `Data!$A$1`, and renaming that sheet would break the attachment for
+no gain.
+
+**Heated tobacco is not here yet** — it has no POS import, so it would reconcile to
+nothing. It is one entry in `TABS` and one more query when that changes.
+
+Every tab is formulas over its own `Data`, addressed **by whole column**
 (`Data!$N:$N`), so new days and new products appear on refresh with nothing edited.
 
 > Not by structured reference (`Counts[variance_packs]`), which was the obvious choice
@@ -52,13 +83,16 @@ the white text sat on a white cell. The fill is now written from both ends, but 
 colours no longer depend on it — a fill that fails to render must not take the number
 with it.
 
-**The workbook committed here is a live copy with the Power Query already attached** —
-it carries the DataMashup, both connections and an extra `Counts` sheet that were added
-by hand. `build_workbook.py` cannot produce any of that, so running it over this file
-throws the setup away and leaves you re-attaching the query. The colour fix above was
-applied to `xl/styles.xml` inside the file instead, which is why the builder and the
-workbook were changed by two different routes. Rebuild only when the LAYOUT changes,
-and expect to follow the Setup sheet afterwards.
+**Rebuilding discards whatever queries are attached.** The copy committed here was a
+live one — DataMashup, connections and an extra hand-added sheet — and adding the lubes
+tabs meant rebuilding, which threw all of that away. There was no alternative: four new
+sheets with formulas, conditional formats, validation and print areas cannot be grafted
+into a live file, unlike the variance-colour fix above, which was patched straight into
+`xl/styles.xml` and left every other part byte-identical.
+
+So: rebuild only when the LAYOUT changes, and expect to follow the Setup sheet afterwards
+— now twice, once per shelf. The previous copy is in git history if anything is needed
+back out of it.
 
 The line at the top right says how many days are loaded and what the latest one is.
 **If the day you counted this morning is not the latest, the file has not refreshed.**

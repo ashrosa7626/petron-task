@@ -107,7 +107,59 @@ DATA_COLS = [
     'abs_variance', 'rank', 'day_no', 'prod_no', 'row_key',
 ]
 COL = {name: get_column_letter(i) for i, name in enumerate(DATA_COLS, start=1)}
-D = {name: f"Data!${COL[name]}:${COL[name]}" for name in DATA_COLS}
+
+
+def sheet_ref(name):
+    """A sheet name as a formula prefix, bang included: `Data!` or `'My Data'!`.
+
+    The bang is part of what this returns on purpose. Leaving it to the caller is
+    how the first version of this refactor emitted `Data$U:$U` in every formula on
+    every sheet — which Excel reads as a name it has never heard of, so the whole
+    workbook came out as #NAME? rather than as anything that looked like a bug in
+    a sheet reference.
+
+    Only the Calc and Data sheets are ever named inside a formula, and those are
+    deliberately kept space-free so nothing depends on the quoting — but a rename
+    that added a space would otherwise produce `Lubes Data!$A:$A`, which is
+    equally broken and equally quiet.
+    """
+    bare = re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', name)
+    return f"{name}!" if bare else f"'{name}'!"
+
+
+def dcols(data_sheet):
+    """Whole-column references into one Data sheet, by column name.
+
+    Whole columns rather than structured references, and that choice is the
+    reason the column ORDER on the Data sheet is load-bearing — see the module
+    docstring. One dict per category, because each shelf has its own Data sheet
+    fed by its own query.
+    """
+    return {name: f"{sheet_ref(data_sheet)}${COL[name]}:${COL[name]}" for name in DATA_COLS}
+
+
+# ---------------------------------------------------------------------------
+# One shelf, one set of tabs.
+#
+# A category is a shelf, and each reconciles against its own POS report, so each
+# gets its own query, its own hidden Data and Calc, and its own Daily and Trends
+# — the same layout generated twice rather than a second workbook to keep in
+# step. Adding heated tobacco is one more entry here and one more query attached.
+#
+# CIGARETTES deliberately keeps the ORIGINAL sheet names. The workbook already in
+# use has the `Counts` query loaded to `Data!$A$1`; renaming that sheet would
+# break the attachment in a file somebody has open, to no purpose.
+# ---------------------------------------------------------------------------
+TABS = [
+    {'category': 'CIGARETTES', 'label': 'Cigarette', 'plural': 'cigarettes',
+     'daily': 'Daily', 'trends': 'Trends', 'calc': 'Calc', 'data': 'Data',
+     'query': 'Counts'},
+    {'category': 'LUBES', 'label': 'Lubes', 'plural': 'lubes',
+     'daily': 'Lubes Daily', 'trends': 'Lubes Trends',
+     # No space in the hidden ones: they are the only sheets a formula names.
+     'calc': 'LubesCalc', 'data': 'LubesData',
+     'query': 'Lubes'},
+]
 
 
 # ===========================================================================
@@ -243,7 +295,7 @@ CALC_DAY_ROW = 3
 CALC_PROD_ROW = 3
 
 
-def write_calc(ws):
+def write_calc(ws, D):
     ws.sheet_state = 'hidden'
     ws['A1'] = 'per-day summary (day_no 1 = most recent counted day)'
     ws['A1'].font = Font(bold=True)
@@ -379,24 +431,46 @@ HDR_ROW = 9
 DAILY_ROWS = 70          # products shown; more than any day has
 
 
-def write_daily(ws):
-    calc_days = f'Calc!$B${CALC_DAY_ROW}:$B${CALC_DAY_ROW + MAX_DAYS - 1}'
+def write_daily(ws, tab, D):
+    calc = sheet_ref(tab['calc'])
+    calc_days = f'{calc}$B${CALC_DAY_ROW}:$B${CALC_DAY_ROW + MAX_DAYS - 1}'
 
     def pick(col):
-        idx = f'INDEX(Calc!${col}${CALC_DAY_ROW}:${col}${CALC_DAY_ROW + MAX_DAYS - 1},$L$1)'
+        idx = f'INDEX({calc}${col}${CALC_DAY_ROW}:${col}${CALC_DAY_ROW + MAX_DAYS - 1},$L$1)'
         return f'IF($L$1="","—",IF({idx}="","—",{idx}))'
 
     ws['L1'] = f'=IFERROR(MATCH($B$3,{calc_days},0),"")'
 
-    ws['A1'] = 'Cigarette reconciliation'
+    ws['A1'] = f"{tab['label']} reconciliation"
     ws['A1'].font = Font(name='Calibri', size=18, bold=True, color=INK)
     ws.merge_cells('A1:D1')
     # The stamp whose absence let a stale file pass for a fresh one. The newest
     # day in the file is a better signal than a refresh time: if the day you
     # counted this morning is not in the list, the number here says so.
-    ws['F1'] = (f'=IF(COUNT({D["day_no"]})=0,"Data sheet is empty — attach the query",'
-                f'"Safari · "&COUNT(Calc!$B${CALC_DAY_ROW}:$B${CALC_DAY_ROW + MAX_DAYS - 1})'
-                f'&" days loaded, latest "&TEXT(MAX({D["count_date"]}),"dd mmm yyyy"))')
+    # Also checks that the query feeding this tab is the RIGHT one. Two queries
+    # differing by a single line is exactly the mistake that gets made, and a
+    # Lubes tab quietly showing cigarette rows is the Excel version of a count
+    # filed against the wrong branch: every figure looks reasonable and every one
+    # is about something else.
+    #
+    # Two subtleties, both of which got this wrong first time round:
+    #   * the "<>" criterion as well, or the blank part of the column counts as
+    #     "not this category" and the warning is permanent;
+    #   * from row 2, not the whole column — row 1 holds the header, and the word
+    #     "category" is itself non-blank and not "CIGARETTES", so a whole-column
+    #     version fired on every tab of a perfectly correct workbook. This is the
+    #     one reference in the file that is not a whole column, and it still grows
+    #     on refresh because it runs to the last row Excel has.
+    cc = COL['category']
+    cat = f'{sheet_ref(tab["data"])}${cc}$2:${cc}$1048576'
+    wrong = f'COUNTIFS({cat},"<>",{cat},"<>{tab["category"]}")'
+    ws['F1'] = (f'=IF(COUNT({D["day_no"]})=0,'
+                f'"No rows yet — no submitted {tab["plural"]} count, or the '
+                f'{tab["query"]} query is not attached",'
+                f'IF({wrong}>0,"WRONG QUERY: this sheet has rows that are not '
+                f'{tab["category"]} — reattach {tab["query"]}",'
+                f'"Safari · "&COUNT({calc}$B${CALC_DAY_ROW}:$B${CALC_DAY_ROW + MAX_DAYS - 1})'
+                f'&" days loaded, latest "&TEXT(MAX({D["count_date"]}),"dd mmm yyyy")))')
     ws['F1'].font = Font(name='Calibri', size=10, bold=True, color=MUTED)
     ws['F1'].alignment = Alignment(horizontal='right')
     ws.merge_cells('F1:J1')
@@ -440,7 +514,8 @@ def write_daily(ws):
     # Before the query is attached there is no day to describe, and a bare em
     # dash in a highlighted bar reads as broken rather than as "not set up yet".
     ws['A7'] = (f'=IF(COUNT({D["day_no"]})=0,'
-                f'"No data yet — follow the Setup sheet to attach the query, once.",'
+                f'"Nothing to show yet. Either no {tab["plural"]} count has been submitted, '
+                f'or the {tab["query"]} query is not attached — see the Setup sheet.",'
                 f'{pick("O")})')
     ws['A7'].font = Font(name='Calibri', size=10, bold=True, color=WARN_AMBER)
     ws['A7'].alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
@@ -509,7 +584,7 @@ def write_daily(ws):
     ws.page_margins.left = ws.page_margins.right = 0.4
     ws.page_margins.top = ws.page_margins.bottom = 0.5
     ws.print_options.horizontalCentered = True
-    ws.oddFooter.left.text = 'Cigarette reconciliation — &[Tab]'
+    ws.oddFooter.left.text = f"{tab['label']} reconciliation — &[Tab]"
     ws.oddFooter.right.text = 'Page &[Page] of &[Pages]'
 
 
@@ -555,8 +630,9 @@ def variance_rules(ws, rng, anchor):
 TRENDS_ROW0 = 4
 
 
-def write_trends(ws, calc):
-    ws['A1'] = f'Variance by product — last {TREND_DAYS} counted days'
+def write_trends(ws, handles, tab, D):
+    calc = sheet_ref(tab['calc'])
+    ws['A1'] = f"{tab['label']} variance by product — last {TREND_DAYS} counted days"
     ws['A1'].font = Font(name='Calibri', size=16, bold=True, color=INK)
     ws['A2'] = ('Sorted by how many days the product disagreed with the POS, then by total. '
                 'A product off a little every night sits above one that was off a lot once. '
@@ -577,16 +653,16 @@ def write_trends(ws, calc):
     # Day headers are the dates themselves, newest first, straight off Calc.
     for j in range(1, TREND_DAYS + 1):
         c = ws.cell(row=TRENDS_ROW0, column=1 + j)
-        c.value = (f'=IF(Calc!$B${CALC_DAY_ROW + j - 1}="","",'
-                   f'TEXT(Calc!$B${CALC_DAY_ROW + j - 1},"dd mmm"))')
+        c.value = (f'=IF({calc}$B${CALC_DAY_ROW + j - 1}="","",'
+                   f'TEXT({calc}$B${CALC_DAY_ROW + j - 1},"dd mmm"))')
     ws.row_dimensions[TRENDS_ROW0].height = 26
     ws.column_dimensions['A'].width = 30
     for i in range(2, ncols + 1):
         ws.column_dimensions[L(i)].width = 9.5
 
-    cr, co, ct, cw = calc['rank'], calc['off'], calc['total'], calc['worst']
+    cr, co, ct, cw = handles['rank'], handles['off'], handles['total'], handles['worst']
     pr0, pr1 = CALC_PROD_ROW, CALC_PROD_ROW + MAX_PRODUCTS - 1
-    rank_rng = f'Calc!${cr}${pr0}:${cr}${pr1}'
+    rank_rng = f'{calc}${cr}${pr0}:${cr}${pr1}'
 
     for k in range(1, MAX_PRODUCTS + 1):
         r = TRENDS_ROW0 + k
@@ -595,7 +671,7 @@ def write_trends(ws, calc):
         hit = f'AND(ISNUMBER({m}),{m}<>"")'
 
         def pull(col_letter, calc_col, fmt=None, bold=False, align='right'):
-            src = f'INDEX(Calc!${calc_col}${pr0}:${calc_col}${pr1},{m})'
+            src = f'INDEX({calc}${calc_col}${pr0}:${calc_col}${pr1},{m})'
             c = ws[f'{col_letter}{r}']
             c.value = f'=IF({hit},IF({src}="","—",{src}),"")'
             c.alignment = Alignment(horizontal=align, vertical='center')
@@ -608,7 +684,7 @@ def write_trends(ws, calc):
             return c
 
         c = ws[f'A{r}']
-        c.value = (f'=IF({hit},INDEX(Calc!$S${pr0}:$S${pr1},{m}),"")')
+        c.value = (f'=IF({hit},INDEX({calc}$S${pr0}:$S${pr1},{m}),"")')
         c.alignment = Alignment(horizontal='left', vertical='center')
         c.border = BOX
         c.font = Font(name='Calibri', size=10, color=INK)
@@ -616,7 +692,7 @@ def write_trends(ws, calc):
             c.fill = PatternFill('solid', fgColor=BAND)
 
         for j in range(1, TREND_DAYS + 1):
-            pull(L(1 + j), L(calc['day_first'] + j - 1), INT_FMT)
+            pull(L(1 + j), L(handles['day_first'] + j - 1), INT_FMT)
         pull(L(TREND_DAYS + 2), co, INT_FMT, bold=True)
         pull(L(TREND_DAYS + 3), ct, INT_FMT, bold=True)
         pull(L(TREND_DAYS + 4), cw, INT_FMT)
@@ -636,7 +712,16 @@ def write_trends(ws, calc):
 
 
 NOTES = [
-    ('Cigarette reconciliation — how to read this', 'h1'),
+    ('Reconciliation — how to read this', 'h1'),
+    ('', ''),
+    ('One shelf, one pair of tabs', 'h2'),
+    ('Daily and Trends are the cigarette gondola. Lubes Daily and Lubes Trends are the '
+     'lubes shelf. They are the same layout twice over and they read nothing from each '
+     'other: each pair is fed by its own query, because each shelf is counted separately '
+     'and reconciles against its own POS report. Everything below applies to both.', ''),
+    ('Heated tobacco is not here yet. It is counted alongside the cigarettes but prints '
+     'its own sales report, so it needs its own pair of tabs and its own query — one entry '
+     'in the builder when its sales start being imported.', ''),
     ('', ''),
     ('Daily', 'h2'),
     ('Pick a trading day from the dropdown at the top. Everything below it, and every '
@@ -683,12 +768,18 @@ NOTES = [
      'whatever date that was. Check "Opening from" before believing a large variance.', ''),
     ('', ''),
     ('Refreshing', 'h2'),
-    ('Data > Refresh All, or just open the file if refresh-on-open is ticked. The rows '
-     'come from the database through the query named Counts; the sheets are formulas on '
-     'top of them, so new days and new products appear without anything being edited.', ''),
-    ('The Data and Calc sheets are hidden. Data is the query\'s landing zone and Calc '
-     'holds the working-out. Neither should be edited by hand: Data is overwritten on '
-     'every refresh, and Calc is what Daily and Trends read.', ''),
+    ('Data > Refresh All, or just open the file if refresh-on-open is ticked. It refreshes '
+     'every shelf at once. The rows come from the database through one query per shelf — '
+     'Counts for cigarettes, Lubes for lubes; the sheets are formulas on top of them, so '
+     'new days and new products appear without anything being edited.', ''),
+    ('The Data and Calc sheets are hidden — one pair per shelf. Data is a query\'s landing '
+     'zone and Calc holds the working-out. Neither should be edited by hand: Data is '
+     'overwritten on every refresh, and Calc is what that shelf\'s tabs read.', ''),
+    ('If a Daily tab says WRONG QUERY at the top right, the two queries have been swapped: '
+     'one of them is filtered to the other shelf. Reattach it with the right Category line '
+     '— the Setup sheet has the detail.', ''),
+    ('An empty pair of tabs means no count of that shelf has been SUBMITTED yet. A draft '
+     'never reaches Excel, which is deliberate: a half-finished count must not reconcile.', ''),
 ]
 
 
@@ -710,11 +801,21 @@ def write_notes(ws):
 
 
 SETUP = [
-    ('Attach the data — about fifteen minutes, once', 'h1'),
+    ('Attach the data — about fifteen minutes, once per shelf', 'h1'),
     ('', ''),
-    ('Until this is done, Daily and Trends are empty and the line at the top right of '
-     'Daily says "Data sheet is empty". Nothing is broken; the rows simply are not there '
-     'yet. After it is done the workbook refreshes itself and this sheet can be ignored.', ''),
+    ('There is one query per shelf, and each one lands on its own hidden sheet. Until a '
+     'shelf\'s query is attached its tabs are empty and the line at the top right of its '
+     'Daily tab says so. Nothing is broken; the rows simply are not there yet. After it is '
+     'done the workbook refreshes itself and this sheet can be ignored.', ''),
+    ('', ''),
+    ('     Cigarettes    query named  Counts    loads to  Data!$A$1', ''),
+    ('     Lubes         query named  Lubes     loads to  LubesData!$A$1', ''),
+    ('', ''),
+    ('The two queries are the SAME FILE with one line changed. That is the one thing to be '
+     'careful about here, and the workbook checks it for you: if a tab ends up fed by the '
+     'wrong shelf\'s query, the line at its top right says WRONG QUERY instead of naming a '
+     'date. A Lubes tab quietly showing cigarette rows would otherwise look perfectly '
+     'reasonable and be about the wrong stock entirely.', ''),
     ('', ''),
     ('1. Open a blank query', 'h2'),
     ('Data > Get Data > From Other Sources > Blank Query.', ''),
@@ -723,31 +824,41 @@ SETUP = [
     ('Home > Advanced Editor. Delete what is there. Paste the whole of counts_query.m '
      'from the excel folder. Done.', ''),
     ('', ''),
-    ('3. Name it exactly  Counts', 'h2'),
-    ('In the Query Settings pane on the right. The name matters less than it used to — '
-     'the sheets address columns by position, not by table name — but keep it so the next '
-     'person can find it.', ''),
+    ('3. Set the shelf, and name the query to match', 'h2'),
+    ('Near the top of the pasted query there is one line:  Category = "CIGARETTES",', ''),
+    ('For the cigarette query leave it alone and name the query  Counts.', ''),
+    ('For the lubes query change it to  Category = "LUBES",  and name the query  Lubes.', ''),
+    ('The name is in the Query Settings pane on the right. It does not drive any formula — '
+     'the sheets address columns by position — but the next person has to be able to tell '
+     'the two apart.', ''),
     ('', ''),
-    ('4. Load it onto the Data sheet', 'h2'),
-    ('Home > Close & Load To... > Table > Existing worksheet > put the cursor in Data!$A$1 '
-     '> OK. If Excel asks about credentials for supabase.co, choose Anonymous.', ''),
-    ('IMPORTANT: it must land on the Data sheet at A1. The columns must sit in the order '
-     'the query returns them, because every formula in the workbook finds its values by '
-     'column position. If it lands somewhere else, undo and redo this step.', ''),
+    ('4. Load it onto that shelf\'s Data sheet', 'h2'),
+    ('Home > Close & Load To... > Table > Existing worksheet > put the cursor in the cell '
+     'named in the table above > OK. If Excel asks about credentials for supabase.co, '
+     'choose Anonymous.', ''),
+    ('IMPORTANT: it must land at A1 of the right sheet, and the columns must sit in the '
+     'order the query returns them, because every formula in the workbook finds its values '
+     'by column position. If it lands somewhere else, undo and redo this step.', ''),
     ('', ''),
     ('5. Make it automatic', 'h2'),
-    ('Data > Queries & Connections > right-click Counts > Properties. Tick "Refresh data '
-     'when opening the file" and "Refresh every 60 minutes".', ''),
+    ('Data > Queries & Connections > right-click the query > Properties. Tick "Refresh '
+     'data when opening the file" and "Refresh every 60 minutes". Do this for each one.', ''),
+    ('', ''),
+    ('6. Repeat for the other shelf', 'h2'),
+    ('Steps 1 to 5 again, with the other row of the table above. The two queries are '
+     'independent: attaching one does nothing to the other, and a shelf with no query is '
+     'simply a pair of empty tabs.', ''),
     ('', ''),
     ('Then check three things', 'h2'),
-    ('The top right of Daily names the latest counted day. It should be the most recent '
-     'count that has been submitted.', ''),
+    ('The top right of each Daily tab names that shelf\'s latest counted day. It should be '
+     'the most recent count of that shelf that has been submitted — and it must not say '
+     'WRONG QUERY.', ''),
     ('Pick the earliest day in the dropdown — the very first count. Variance, Opening and '
      'Sold (counted) should all read as dashes, and the amber line should say there is no '
      'opening figure. If any of those read 0 instead, tell Claude: a dash means "not '
      'checked" and a zero means "agreed", and they must never be confused.', ''),
-    ('Submit a count, then press Data > Refresh All. The new day should appear in the '
-     'dropdown on its own.', ''),
+    ('Submit a count, then press Data > Refresh All. The new day should appear in that '
+     'shelf\'s dropdown on its own.', ''),
 ]
 
 
@@ -769,22 +880,44 @@ def write_setup(ws):
 
 
 # ===========================================================================
-def build(rows, mode, out):
+def build(raw, mode, out):
+    """One workbook, one set of tabs per shelf.
+
+    Takes RAW view rows, not prepared ones: prepare() ranks and numbers within
+    the set it is given, so it has to run once per category — see below.
+
+    The visible tabs come first in TABS order, then Notes and Setup, then every
+    hidden Calc and Data. Each shelf's Daily and Trends read only its OWN Calc,
+    which reads only its own Data — nothing crosses between shelves, so a query
+    attached to the wrong Data sheet shows up on that tab's stamp rather than
+    quietly changing another one's figures.
+    """
     wb = Workbook()
-    daily = wb.active
-    daily.title = 'Daily'
-    trends = wb.create_sheet('Trends')
+    visible = []
+    for i, tab in enumerate(TABS):
+        daily = wb.active if i == 0 else wb.create_sheet(tab['daily'])
+        daily.title = tab['daily']
+        visible.append((tab, daily, wb.create_sheet(tab['trends'])))
+
     notes = wb.create_sheet('Notes')
     if mode == 'query':
-        setup = wb.create_sheet('Setup')
-        write_setup(setup)
-    calc = wb.create_sheet('Calc')
-    data = wb.create_sheet('Data')
+        write_setup(wb.create_sheet('Setup'))
 
-    write_data(data, rows, mode)
-    handles = write_calc(calc)
-    write_daily(daily)
-    write_trends(trends, handles)
+    for tab, daily, trends in visible:
+        calc = wb.create_sheet(tab['calc'])
+        data = wb.create_sheet(tab['data'])
+        D = dcols(tab['data'])
+        # Each shelf is ranked within ITSELF. day_no, rank and prod_no are
+        # positions in one category's own history — exactly what each query
+        # computes over its own filtered result set — so preparing the whole lot
+        # once and splitting it afterwards would number lubes days by where they
+        # fall among the cigarettes.
+        mine = [r for r in raw if (r.get('category') or 'CIGARETTES') == tab['category']]
+        write_data(data, prepare(mine)[0] if mine else [], mode)
+        handles = write_calc(calc, D)
+        write_daily(daily, tab, D)
+        write_trends(trends, handles, tab, D)
+
     write_notes(notes)
 
     # Nothing in the file carries a cached result, so Excel has to be told to
@@ -804,26 +937,35 @@ def main():
         HERE, 'Cigarette Reconciliation.xlsx' if args.mode == 'query'
         else 'Cigarette Reconciliation (snapshot).xlsx')
 
-    rows, days, prods = [], [], []
+    raw = []
     if args.mode == 'snapshot':
         raw = fetch(anon_key())
         if not raw:
             sys.exit(f'{VIEW} returned nothing for {BRANCH}. Is a count submitted?')
-        rows, days, prods = prepare(raw)
 
-    build(rows, args.mode, out)
+    build(raw, args.mode, out)
 
     print(f'wrote {out}  [{args.mode}]')
     if args.mode == 'query':
-        print('  Data is empty by design. Follow the Setup sheet to attach the query,')
-        print('  then the workbook refreshes itself — no more running this script.')
-    else:
-        print(f'  {len(rows)} rows over {len(days)} days, {len(prods)} products')
-        if days:
-            print(f'  latest {days[0]}, earliest {days[-1]}')
-    if len(prods) > MAX_PRODUCTS or len(days) > MAX_DAYS:
-        print(f'  WARNING: exceeds the reserved Calc rows '
-              f'(days {len(days)}/{MAX_DAYS}, products {len(prods)}/{MAX_PRODUCTS})')
+        print('  Every Data sheet is empty by design. Follow the Setup sheet to attach')
+        print(f'  the {len(TABS)} queries once, then the workbook refreshes itself.')
+
+    # Per shelf, because each tab is fed and bounded separately. A shelf with no
+    # submitted count is worth saying out loud rather than leaving as a tab that
+    # looks broken.
+    for tab in TABS:
+        mine = [r for r in raw if (r.get('category') or 'CIGARETTES') == tab['category']]
+        if args.mode != 'snapshot':
+            continue
+        if not mine:
+            print(f'  {tab["daily"]}: no rows — no submitted {tab["plural"]} count in the view')
+            continue
+        rows, days, prods = prepare(mine)
+        print(f'  {tab["daily"]}: {len(rows)} rows over {len(days)} days, '
+              f'{len(prods)} products (latest {days[0]}, earliest {days[-1]})')
+        if len(prods) > MAX_PRODUCTS or len(days) > MAX_DAYS:
+            print(f'    WARNING: exceeds the reserved Calc rows '
+                  f'(days {len(days)}/{MAX_DAYS}, products {len(prods)}/{MAX_PRODUCTS})')
 
 
 if __name__ == '__main__':

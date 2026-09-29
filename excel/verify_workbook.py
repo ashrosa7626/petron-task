@@ -62,30 +62,46 @@ PRICE = 12.70
 ADDED = {('One Bad Night', '2026-09-10'): 6}
 
 
-def synthetic():
+def synthetic(plan, category, pid0, dates):
     rows = []
-    for di, d in enumerate(DATES):
-        for pi, (name, plan) in enumerate(sorted(PLAN.items())):
-            v = plan[di]
+    for di, d in enumerate(dates):
+        for pi, (name, series) in enumerate(sorted(plan.items())):
+            v = series[di]
             add = ADDED.get((name, d), 0)
             sold = 20 + add - 15
             rows.append({
                 'branch_id': 'SAFARI', 'count_date': d, 'shift': None,
-                'staff_name': 'Tester', 'product_id': f'90000{pi}',
+                'staff_name': 'Tester', 'product_id': f'{pid0 + pi}',
                 'plu': f'11111111{pi}', 'short_name': name,
                 'pos_description': name.upper(),
                 'opening_packs': 20, 'add_in': add, 'closing_packs': 15,
                 'sold_physical': sold, 'sold_pos': None if v is None else sold - v,
                 'variance_packs': v,
-                'opening_date': DATES[di - 1] if di else None,
+                'opening_date': dates[di - 1] if di else None,
                 'unit_price_used': PRICE,
                 'variance_rm': None if v is None else round(v * PRICE, 2),
+                'category': category,
             })
     return rows
 
 
-raw = synthetic()
-rows, days, prods = bw.prepare(raw)
+# A second shelf, deliberately DIFFERENT in every way the tabs could confuse:
+# fewer products, fewer days, its own dates, and a variance that would be wrong
+# if a Lubes formula reached into the cigarette Data sheet. It is also the only
+# thing that exercises the second set of tabs at all — without it the lubes half
+# of the workbook would ship having never been computed once.
+LUBE_PLAN = {
+    'Lube Leak':  [4, 4],
+    'Lube Clean': [0, 0],
+}
+LUBE_DATES = ['2026-09-20', '2026-09-21']
+
+raw = (synthetic(PLAN, 'CIGARETTES', 900000, DATES)
+       + synthetic(LUBE_PLAN, 'LUBES', 800000, LUBE_DATES))
+cig_raw = [r for r in raw if r['category'] == 'CIGARETTES']
+lube_raw = [r for r in raw if r['category'] == 'LUBES']
+rows, days, prods = bw.prepare(cig_raw)
+lube_rows, lube_days, lube_prods = bw.prepare(lube_raw)
 
 print('ranking within a day — absolute variance, unknown last\n')
 day = sorted([r for r in rows if str(r['count_date']) == '2026-09-10'],
@@ -141,7 +157,7 @@ print('\nthe generated file\n')
 tmp = tempfile.mkdtemp()
 snap = os.path.join(tmp, 'snapshot.xlsx')
 query = os.path.join(tmp, 'query.xlsx')
-bw.build(rows, 'snapshot', snap)
+bw.build(raw, 'snapshot', snap)
 bw.build([], 'query', query)
 
 import re                            # noqa: E402
@@ -214,6 +230,58 @@ check(fills and all('bgColor' in f for f in fills),
       'a conditional fill carries bgColor — Excel paints a dxf fill from that, '
       'not fgColor', fills)
 
+# ---------------------------------------------------------------------------
+# The second shelf. One layout, generated twice, and the property that matters is
+# that the two halves are ISOLATED: a lubes figure must never be read out of the
+# cigarette Data sheet. Both tabs look plausible either way, which is exactly why
+# it has to be asserted rather than eyeballed.
+# ---------------------------------------------------------------------------
+print('\nthe lubes tabs\n')
+
+check(order[:4] == ['Daily', 'Trends', 'Lubes Daily', 'Lubes Trends'],
+      'each shelf gets a Daily and a Trends, cigarettes first', order[:4])
+check(hidden.get('LubesCalc') == 'hidden' and hidden.get('LubesData') == 'hidden',
+      'and its own hidden Calc and Data', hidden)
+check(hidden.get('Data') == 'hidden' and 'Data' in order,
+      'the cigarette sheets keep their original names, so an attached query still lands')
+
+sheet = {name: z.read(f'xl/worksheets/sheet{i + 1}.xml').decode()
+         for i, name in enumerate(order)}
+
+lubes_daily = sheet['Lubes Daily']
+check('LubesData!' in lubes_daily, 'Lubes Daily reads LubesData')
+check('LubesCalc!' in lubes_daily, 'and LubesCalc')
+
+# The isolation, both ways. `Data!` is a substring of nothing else; `LubesData!`
+# contains `Data!` only after `Lubes`, so strip those first before looking.
+def foreign(xml, own, other):
+    return [o for o in other if o in xml.replace(own, '')]
+
+for name, own, others, claim in (
+    ('Lubes Daily',  'LubesData!', ['Data!'], 'Lubes Daily never reads the cigarette Data sheet'),
+    ('Lubes Daily',  'LubesCalc!', ['Calc!'], 'nor the cigarette Calc sheet'),
+    ('Lubes Trends', 'LubesCalc!', ['Calc!'], 'Lubes Trends never reads the cigarette Calc sheet'),
+    ('Daily',        'Data!',      ['LubesData!', 'LubesCalc!'], 'Daily never reads the lubes sheets'),
+    ('Trends',       'Calc!',      ['LubesCalc!', 'LubesData!'], 'nor does Trends'),
+):
+    leaked = foreign(sheet[name], own, others)
+    check(not leaked, claim, leaked)
+
+# The stamp that catches the two queries being swapped — the one mistake this
+# layout makes possible, since the queries differ by a single line.
+check('WRONG QUERY' in lubes_daily and '&gt;LUBES' in lubes_daily.replace('"<>LUBES"', '&gt;LUBES'),
+      'Lubes Daily says WRONG QUERY if its Data sheet holds another shelf\'s rows')
+check('WRONG QUERY' in sheet['Daily'], 'and so does Daily')
+
+# Nothing may hard-code the cigarette count. 54 products and 70 rows is the
+# cigarette shelf; lubes is 31 and Iluma 21, and the tab has to fit all of them.
+# Nothing may be sized to the cigarette shelf. 54 products is cigarettes; lubes is
+# 31 and Iluma 21, and one layout has to print all of them on a page.
+last = bw.FIRST_ROW + bw.DAILY_ROWS - 1
+check(f"'Lubes Daily'!$A$1:$J${last}" in wbx,
+      f'Lubes Daily prints the same A1:J{last} area, wide enough for any shelf', 
+      re.findall(r"'?[A-Za-z ]+'?!\$A\$1:\$J\$\d+", wbx))
+
 qz, qwbx, qhidden, qorder = parts(query)
 check('Setup' in qorder, 'query mode ships a Setup sheet with the attach steps', qorder)
 check('Setup' not in order, 'snapshot mode does not, since there is nothing to attach')
@@ -244,6 +312,8 @@ tell application "Microsoft Excel"
   set wbk to active workbook
   set d to worksheet "Daily" of wbk
   set t to worksheet "Trends" of wbk
+  set ld to worksheet "Lubes Daily" of wbk
+  set lt to worksheet "Lubes Trends" of wbk
   set out to ""
 {script_body}
   close wbk saving no
@@ -276,6 +346,17 @@ if '--excel' in sys.argv:
   set out to out & "T9=" & (value of range "A9" of t as text) & "/" & (value of range "P9" of t as text) & "|"
   set out to out & "ink10=" & ((color of font object of display format of range "G10" of d) as text) & "|"
   set out to out & "fill10=" & ((color of interior object of display format of range "G10" of d) as text) & "|"
+  set out to out & "LtitleA=" & (value of range "A1" of ld as text) & "|"
+  set out to out & "Lstamp=" & (value of range "F1" of ld as text) & "|"
+  set out to out & "Lday=" & (value of range "B3" of ld as text) & "|"
+  set out to out & "Lprods=" & (value of range "H3" of ld as text) & "|"
+  set out to out & "LwithVar=" & (value of range "A6" of ld as text) & "|"
+  set out to out & "Ltot=" & (value of range "D6" of ld as text) & "|"
+  set out to out & "Lr10=" & (value of range "A10" of ld as text) & "/" & (value of range "G10" of ld as text) & "|"
+  set out to out & "Lr11=" & (value of range "A11" of ld as text) & "/" & (value of range "G11" of ld as text) & "|"
+  set out to out & "Lr12=" & (value of range "A12" of ld as text) & "|"
+  set out to out & "LT5=" & (value of range "A5" of lt as text) & "/" & (value of range "P5" of lt as text) & "|"
+  set out to out & "Cstamp=" & (value of range "F1" of d as text) & "|"
 '''
     got = dict(kv.split('=', 1) for kv in excel(snap, body).split('|') if '=' in kv)
 
@@ -328,6 +409,62 @@ if '--excel' in sys.argv:
     check(got.get('fill10') == rgb(bw.RED_3_BG),
           'and its fill arrives — a dxf solid fill needs bgColor, which is what '
           'made the old dark red silently do nothing', got.get('fill10'))
+
+    # ---------------------------------------------------------------------
+    # The lubes tabs, computed by Excel from their OWN shelf. The fixture gives
+    # lubes 2 products over 2 days with a variance of 4 on one of them, against
+    # the cigarettes' 5 products over 3 days — so every figure below would be a
+    # different number if a formula had reached across.
+    # ---------------------------------------------------------------------
+    print()
+    check(got.get('LtitleA') == 'Lubes reconciliation',
+          'the second tab names its own shelf', got.get('LtitleA'))
+    check('WRONG QUERY' not in got.get('Lstamp', ''),
+          'and does not think it has the wrong query', got.get('Lstamp'))
+    check('WRONG QUERY' not in got.get('Cstamp', ''),
+          'nor does the cigarette tab', got.get('Cstamp'))
+    check(got.get('Lstamp', '').endswith('21 Sep 2026')
+          and ' 2 days loaded' in got.get('Lstamp', ''),
+          'its stamp counts the LUBES days — 2, latest 21 Sep — not the 3 cigarette days',
+          got.get('Lstamp'))
+    check(got.get('Lday', '').startswith('date Monday, September 21, 2026')
+          or '21' in got.get('Lday', ''),
+          'it opens on the latest lubes day', got.get('Lday'))
+    check(got.get('Lprods') == '2.0', '2 products, which is the lubes fixture', got.get('Lprods'))
+    check(got.get('LwithVar') == '1.0', '1 of them disagrees', got.get('LwithVar'))
+    check(got.get('Ltot') == '4.0', 'total variance 4 — the lubes number, not -2',
+          got.get('Ltot'))
+    check(got.get('Lr10', '').startswith('Lube Leak/4'), 'row 10 is the lubes leak',
+          got.get('Lr10'))
+    check(got.get('Lr11', '').startswith('Lube Clean/0'), 'row 11 is the lubes zero',
+          got.get('Lr11'))
+    check(got.get('Lr12') == '', 'and row 12 is blank — no cigarette has leaked in',
+          repr(got.get('Lr12')))
+    check(got.get('LT5', '').startswith('Lube Leak/2'),
+          'Lubes Trends ranks its own products, 2 days off', got.get('LT5'))
+
+    # And the guard has to FIRE when it should. The two queries differ by one
+    # line, so attaching the cigarette one to the lubes sheet is the realistic
+    # mistake — simulated here by relabelling the rows already on LubesData,
+    # which is exactly what that would look like from the sheet's point of view.
+    from openpyxl import load_workbook                      # noqa: E402
+    swapped = os.path.join(tmp, 'swapped.xlsx')
+    wbk = load_workbook(snap)
+    ldata = wbk['LubesData']
+    cc = bw.COL['category']
+    for row in range(2, ldata.max_row + 1):
+        if ldata[f'{cc}{row}'].value:
+            ldata[f'{cc}{row}'] = 'CIGARETTES'
+    # openpyxl writes no cached results, and re-saving drops the flag the builder
+    # sets — without putting it back Excel opens the file showing blanks and the
+    # check reads an empty stamp rather than the warning it is looking for.
+    wbk.calculation.fullCalcOnLoad = True
+    wbk.save(swapped)
+    bad = excel(swapped, '''
+  set out to out & "stamp=" & (value of range "F1" of ld as text) & "|"
+''')
+    check('WRONG QUERY' in bad,
+          'and it FIRES when the cigarette query is attached to the lubes sheet', bad)
 else:
     print('\n(skipped the Excel checks — pass --excel to run them)')
 
