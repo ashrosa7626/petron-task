@@ -3,9 +3,9 @@
 `Cigarette Reconciliation.xlsx` **refreshes itself.** Open it, or press
 **Data → Refresh All**, and it pulls straight from the database. No script to run.
 
-It covers **two shelves**: cigarettes and lubes, one pair of tabs each. The filename is
-now a misnomer and is kept anyway, for the same reason `cigarette stock/` is — too much
-points at it.
+It covers **all three shelves**: cigarettes, lubes and heated tobacco, one pair of tabs
+each. The filename is now a misnomer and is kept anyway, for the same reason
+`cigarette stock/` is — too much points at it.
 
 Setup is about fifteen minutes **per shelf** — the **Setup sheet inside the workbook**
 walks through it, and `counts_query.m` is the query to paste, twice, with one line
@@ -20,10 +20,12 @@ it is done the Setup sheet can be ignored.
 | **Trends** | Cigarettes: variance by product over the last 14 counted days. |
 | **Lubes Daily** | The same thing for the lubes shelf. |
 | **Lubes Trends** | The same thing for the lubes shelf. |
+| **Iluma Daily** | The same thing for heated tobacco. The tab is short; the title inside it says *Heated tobacco reconciliation*. |
+| **Iluma Trends** | The same thing for heated tobacco. |
 | **Notes** | What the columns mean and what can make them lie. |
 | **Setup** | The one-time attach instructions, per shelf. |
-| **Calc** / **LubesCalc** | Hidden. The working-out, one per shelf. |
-| **Data** / **LubesData** | Hidden. Where each query lands — the raw view, every column. |
+| **Calc** / **LubesCalc** / **IlumaCalc** | Hidden. The working-out, one per shelf. |
+| **Data** / **LubesData** / **IlumaData** | Hidden. Where each query lands — the raw view, every column. |
 
 ### One shelf, one pair of tabs, one query
 
@@ -32,8 +34,8 @@ its own query, its own hidden `Calc` and `Data`, and its own `Daily` and `Trends
 two halves read nothing from each other, which `verify_workbook.py` asserts in both
 directions.
 
-The two queries are the **same file with one line changed**, `Category = "…"`. One file
-rather than two, because two copies drift — and since the sheets address `Data` by column
+The three queries are the **same file with one line changed**, `Category = "…"`. One file
+rather than three, because copies drift — and since the sheets address `Data` by column
 *position*, a column added to one copy and not the other would silently shift every
 figure on that shelf by one column.
 
@@ -47,8 +49,14 @@ Cigarettes deliberately keeps the original sheet names. A workbook already in us
 `Counts` loaded to `Data!$A$1`, and renaming that sheet would break the attachment for
 no gain.
 
-**Heated tobacco is not here yet** — it has no POS import, so it would reconcile to
-nothing. It is one entry in `TABS` and one more query when that changes.
+**Heated tobacco has no sales report imported yet**, and its tabs still fill in: the
+counts give Opening, Added, Closing and Sold (counted), while Sold (POS) and Variance stay
+as dashes. That is the honest reading — nothing has been checked against anything — and
+the test drives Excel to confirm it never renders as a confident zero.
+
+The Setup and Notes text is generated from `TABS`, so the shelf table, the per-shelf
+`Category` lines and the "one query per shelf" roll-call cannot fall out of step with what
+the builder actually makes. Adding a fourth shelf is one entry.
 
 Every tab is formulas over its own `Data`, addressed **by whole column**
 (`Data!$N:$N`), so new days and new products appear on refresh with nothing edited.

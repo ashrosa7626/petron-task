@@ -96,8 +96,20 @@ LUBE_PLAN = {
 }
 LUBE_DATES = ['2026-09-20', '2026-09-21']
 
+# Heated tobacco, as it actually stands: counted, but with no sales report loaded,
+# so every variance is UNKNOWN. That is the case worth pinning — a shelf whose
+# whole column is unknown must read as dashes and an amber "no POS loaded" line,
+# never as a confident agreement on zero.
+ILUMA_PLAN = {
+    'Terea Amber': [None],
+    'Terea Blue':  [None],
+    'Terea Green': [None],
+}
+ILUMA_DATES = ['2026-09-25']
+
 raw = (synthetic(PLAN, 'CIGARETTES', 900000, DATES)
-       + synthetic(LUBE_PLAN, 'LUBES', 800000, LUBE_DATES))
+       + synthetic(LUBE_PLAN, 'LUBES', 800000, LUBE_DATES)
+       + synthetic(ILUMA_PLAN, 'ILUMA', 700000, ILUMA_DATES))
 cig_raw = [r for r in raw if r['category'] == 'CIGARETTES']
 lube_raw = [r for r in raw if r['category'] == 'LUBES']
 rows, days, prods = bw.prepare(cig_raw)
@@ -231,19 +243,27 @@ check(fills and all('bgColor' in f for f in fills),
       'not fgColor', fills)
 
 # ---------------------------------------------------------------------------
-# The second shelf. One layout, generated twice, and the property that matters is
-# that the two halves are ISOLATED: a lubes figure must never be read out of the
-# cigarette Data sheet. Both tabs look plausible either way, which is exactly why
-# it has to be asserted rather than eyeballed.
+# One layout, generated once per shelf, and the property that matters is that the
+# halves are ISOLATED: a lubes figure must never be read out of the cigarette Data
+# sheet. Every tab looks plausible either way, which is exactly why it has to be
+# asserted rather than eyeballed. Driven off bw.TABS so a shelf added later is
+# checked without anybody remembering to add it here.
 # ---------------------------------------------------------------------------
-print('\nthe lubes tabs\n')
+print(f'\nthe per-shelf tabs — {len(bw.TABS)} shelves\n')
 
-check(order[:4] == ['Daily', 'Trends', 'Lubes Daily', 'Lubes Trends'],
-      'each shelf gets a Daily and a Trends, cigarettes first', order[:4])
-check(hidden.get('LubesCalc') == 'hidden' and hidden.get('LubesData') == 'hidden',
+want = [n for t in bw.TABS for n in (t['daily'], t['trends'])]
+check(order[:len(want)] == want,
+      'each shelf gets a Daily and a Trends, in TABS order with cigarettes first', order)
+check(all(hidden.get(t['calc']) == 'hidden' and hidden.get(t['data']) == 'hidden'
+          for t in bw.TABS),
       'and its own hidden Calc and Data', hidden)
 check(hidden.get('Data') == 'hidden' and 'Data' in order,
       'the cigarette sheets keep their original names, so an attached query still lands')
+# Excel's own limit, and the reason the hidden sheets have no spaces in them.
+check(all(len(n) <= 31 for n in order), 'no sheet name is over Excel\'s 31 characters',
+      [n for n in order if len(n) > 31])
+check(all(' ' not in t['calc'] and ' ' not in t['data'] for t in bw.TABS),
+      'no formula-referenced sheet has a space in its name, so none needs quoting')
 
 sheet = {name: z.read(f'xl/worksheets/sheet{i + 1}.xml').decode()
          for i, name in enumerate(order)}
@@ -257,30 +277,33 @@ check('LubesCalc!' in lubes_daily, 'and LubesCalc')
 def foreign(xml, own, other):
     return [o for o in other if o in xml.replace(own, '')]
 
-for name, own, others, claim in (
-    ('Lubes Daily',  'LubesData!', ['Data!'], 'Lubes Daily never reads the cigarette Data sheet'),
-    ('Lubes Daily',  'LubesCalc!', ['Calc!'], 'nor the cigarette Calc sheet'),
-    ('Lubes Trends', 'LubesCalc!', ['Calc!'], 'Lubes Trends never reads the cigarette Calc sheet'),
-    ('Daily',        'Data!',      ['LubesData!', 'LubesCalc!'], 'Daily never reads the lubes sheets'),
-    ('Trends',       'Calc!',      ['LubesCalc!', 'LubesData!'], 'nor does Trends'),
-):
-    leaked = foreign(sheet[name], own, others)
-    check(not leaked, claim, leaked)
+# Every visible tab against every OTHER shelf's hidden sheets, both directions.
+# Generated rather than listed: with three shelves that is 12 pairs, and a hand
+# list is how the one that matters gets left out.
+for t in bw.TABS:
+    own = [f"{t['data']}!", f"{t['calc']}!"]
+    others = [f"{o[k]}!" for o in bw.TABS if o is not t for k in ('data', 'calc')]
+    for tab in (t['daily'], t['trends']):
+        xml = sheet[tab]
+        for o in own:
+            xml = xml.replace(o, '')
+        leaked = [o for o in others if o in xml]
+        check(not leaked, f'{tab} reads only {t["plural"]}, never another shelf', leaked)
 
 # The stamp that catches the two queries being swapped — the one mistake this
 # layout makes possible, since the queries differ by a single line.
-check('WRONG QUERY' in lubes_daily and '&gt;LUBES' in lubes_daily.replace('"<>LUBES"', '&gt;LUBES'),
-      'Lubes Daily says WRONG QUERY if its Data sheet holds another shelf\'s rows')
-check('WRONG QUERY' in sheet['Daily'], 'and so does Daily')
+for t in bw.TABS:
+    check('WRONG QUERY' in sheet[t['daily']] and t['category'] in sheet[t['daily']],
+          f'{t["daily"]} says WRONG QUERY if its Data sheet holds another shelf\'s rows')
 
 # Nothing may hard-code the cigarette count. 54 products and 70 rows is the
 # cigarette shelf; lubes is 31 and Iluma 21, and the tab has to fit all of them.
 # Nothing may be sized to the cigarette shelf. 54 products is cigarettes; lubes is
 # 31 and Iluma 21, and one layout has to print all of them on a page.
 last = bw.FIRST_ROW + bw.DAILY_ROWS - 1
-check(f"'Lubes Daily'!$A$1:$J${last}" in wbx,
-      f'Lubes Daily prints the same A1:J{last} area, wide enough for any shelf', 
-      re.findall(r"'?[A-Za-z ]+'?!\$A\$1:\$J\$\d+", wbx))
+missing = [t['daily'] for t in bw.TABS if f"'{t['daily']}'!$A$1:$J${last}" not in wbx]
+check(not missing,
+      f'every Daily prints the same A1:J{last} area, wide enough for any shelf', missing)
 
 qz, qwbx, qhidden, qorder = parts(query)
 check('Setup' in qorder, 'query mode ships a Setup sheet with the attach steps', qorder)
@@ -304,16 +327,22 @@ check('branch_id' not in daily and 'pos_description' not in daily,
 # ===========================================================================
 def excel(path, script_body):
     """Drive Excel and read back what the FORMULAS computed."""
+    # Bound BY NAME, not as `active workbook`. Two calls in quick succession and
+    # the second one came back "the object you are trying to access does not
+    # exist" — `active workbook` was still one of the user's own open files, so
+    # every `worksheet "Daily" of wbk` missed. `open` returns no reference in
+    # Excel's AppleScript, so the name is the handle.
     osa = f'''
 set p to POSIX file "{path}"
 tell application "Microsoft Excel"
   set display alerts to false
   open p
-  set wbk to active workbook
+  set wbk to workbook "{os.path.basename(path)}"
   set d to worksheet "Daily" of wbk
   set t to worksheet "Trends" of wbk
   set ld to worksheet "Lubes Daily" of wbk
   set lt to worksheet "Lubes Trends" of wbk
+  set id2 to worksheet "Iluma Daily" of wbk
   set out to ""
 {script_body}
   close wbk saving no
@@ -357,6 +386,12 @@ if '--excel' in sys.argv:
   set out to out & "Lr12=" & (value of range "A12" of ld as text) & "|"
   set out to out & "LT5=" & (value of range "A5" of lt as text) & "/" & (value of range "P5" of lt as text) & "|"
   set out to out & "Cstamp=" & (value of range "F1" of d as text) & "|"
+  set out to out & "Istamp=" & (value of range "F1" of id2 as text) & "|"
+  set out to out & "Iprods=" & (value of range "H3" of id2 as text) & "|"
+  set out to out & "IwithVar=" & (value of range "A6" of id2 as text) & "|"
+  set out to out & "Itot=" & (value of range "D6" of id2 as text) & "|"
+  set out to out & "Imsg=" & (value of range "A7" of id2 as text) & "|"
+  set out to out & "Ir10=" & (value of range "A10" of id2 as text) & "/" & (value of range "F10" of id2 as text) & "/" & (value of range "G10" of id2 as text) & "|"
 '''
     got = dict(kv.split('=', 1) for kv in excel(snap, body).split('|') if '=' in kv)
 
@@ -442,6 +477,26 @@ if '--excel' in sys.argv:
           repr(got.get('Lr12')))
     check(got.get('LT5', '').startswith('Lube Leak/2'),
           'Lubes Trends ranks its own products, 2 days off', got.get('LT5'))
+
+    # ---------------------------------------------------------------------
+    # Heated tobacco as it actually stands: counted, with no sales report loaded.
+    # Every variance is UNKNOWN, and the one thing that must not happen is it
+    # reading as agreement. A confident "0 packs of variance" on a shelf nothing
+    # has been checked against is the worst output this workbook could produce.
+    # ---------------------------------------------------------------------
+    print()
+    check('WRONG QUERY' not in got.get('Istamp', ''),
+          'the heated tobacco tab is fed by its own query', got.get('Istamp'))
+    check(got.get('Iprods') == '3.0', '3 products, which is the Iluma fixture',
+          got.get('Iprods'))
+    check(got.get('IwithVar') == '—', 'products with variance is a DASH, not 0 — nothing '
+          'could be checked', got.get('IwithVar'))
+    check(got.get('Itot') == '—', 'and so is the total variance', got.get('Itot'))
+    check('No POS sales have been loaded' in got.get('Imsg', ''),
+          'the amber line says why, rather than leaving it to be guessed',
+          got.get('Imsg'))
+    check(got.get('Ir10', '').startswith('Terea ') and got.get('Ir10', '').endswith('/—/—'),
+          'and the row itself shows dashes for Sold (POS) and Variance', got.get('Ir10'))
 
     # And the guard has to FIRE when it should. The two queries differ by one
     # line, so attaching the cigarette one to the lubes sheet is the realistic

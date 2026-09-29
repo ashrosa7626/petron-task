@@ -2,17 +2,18 @@
 // Petron — stock reconciliation, ONE SHELF PER COPY
 // Power Query (M) for Excel. Pulls every SUBMITTED count from Supabase.
 //
-// This one file installs TWICE, once per shelf, differing only in the Category
-// line below. Each copy lands on its own hidden sheet and feeds its own pair of
-// tabs — a shelf reconciles against its own POS report, so mixing them would put
-// three shelves under one trading day.
+// This one file installs THREE TIMES, once per shelf, differing only in the
+// Category line below. Each copy lands on its own hidden sheet and feeds its own
+// pair of tabs — a shelf reconciles against its own POS report, so mixing them
+// would put three shelves under one trading day.
 //
 //   Category = "CIGARETTES"   name it  Counts   load to  Data!$A$1
 //   Category = "LUBES"        name it  Lubes    load to  LubesData!$A$1
+//   Category = "ILUMA"        name it  Iluma    load to  IlumaData!$A$1
 //
-// One file rather than two, because two copies of one query drift: the workbook
+// One file rather than three, because copies of one query drift: the workbook
 // addresses the Data sheets by COLUMN POSITION, so a column added to one copy and
-// not the other silently shifts every figure on that shelf's tabs by one.
+// not the others silently shifts every figure on that shelf's tabs by one.
 //
 // To install:
 //   Data > Get Data > From Other Sources > Blank Query
@@ -47,7 +48,7 @@ let
     //
     // "CIGARETTES" for the query named Counts, loaded to Data!$A$1.
     // "LUBES"      for the query named Lubes,  loaded to LubesData!$A$1.
-    // "ILUMA"      exists in the view but has no tabs yet.
+    // "ILUMA"      for the query named Iluma,  loaded to IlumaData!$A$1.
     //
     // The view carries all three since 15_categories.sql, and without this filter
     // their rows would land on one Data sheet together — tripling the row count

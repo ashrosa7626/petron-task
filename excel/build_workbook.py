@@ -159,6 +159,14 @@ TABS = [
      # No space in the hidden ones: they are the only sheets a formula names.
      'calc': 'LubesCalc', 'data': 'LubesData',
      'query': 'Lubes'},
+    # Heated tobacco. The tabs are named Iluma because a tab strip has to stay
+    # readable and that is what this shelf is called everywhere else in the
+    # system; the title inside the sheet says heated tobacco, which is what the
+    # count screen's toggle says.
+    {'category': 'ILUMA', 'label': 'Heated tobacco', 'plural': 'heated tobacco',
+     'daily': 'Iluma Daily', 'trends': 'Iluma Trends',
+     'calc': 'IlumaCalc', 'data': 'IlumaData',
+     'query': 'Iluma'},
 ]
 
 
@@ -715,13 +723,14 @@ NOTES = [
     ('Reconciliation — how to read this', 'h1'),
     ('', ''),
     ('One shelf, one pair of tabs', 'h2'),
-    ('Daily and Trends are the cigarette gondola. Lubes Daily and Lubes Trends are the '
-     'lubes shelf. They are the same layout twice over and they read nothing from each '
-     'other: each pair is fed by its own query, because each shelf is counted separately '
-     'and reconciles against its own POS report. Everything below applies to both.', ''),
-    ('Heated tobacco is not here yet. It is counted alongside the cigarettes but prints '
-     'its own sales report, so it needs its own pair of tabs and its own query — one entry '
-     'in the builder when its sales start being imported.', ''),
+    ('SHELF_ROLL', ''),
+    ('They are the same layout repeated, and they read nothing from each other: each pair '
+     'is fed by its own query, because each shelf is counted separately and reconciles '
+     'against its own POS report. Everything below applies to all of them.', ''),
+    ('A shelf with no sales report imported yet still fills in — opening, added, closing '
+     'and Sold (counted) all come from the counts. It is Sold (POS) and Variance that stay '
+     'as dashes until that shelf\'s report is loaded, which is the honest answer: nothing '
+     'has been checked against anything.', ''),
     ('', ''),
     ('Daily', 'h2'),
     ('Pick a trading day from the dropdown at the top. Everything below it, and every '
@@ -770,23 +779,47 @@ NOTES = [
     ('Refreshing', 'h2'),
     ('Data > Refresh All, or just open the file if refresh-on-open is ticked. It refreshes '
      'every shelf at once. The rows come from the database through one query per shelf — '
-     'Counts for cigarettes, Lubes for lubes; the sheets are formulas on top of them, so '
-     'new days and new products appear without anything being edited.', ''),
+     'QUERY_ROLL; the sheets are formulas on top of them, so new days and new products '
+     'appear without anything being edited.', ''),
     ('The Data and Calc sheets are hidden — one pair per shelf. Data is a query\'s landing '
      'zone and Calc holds the working-out. Neither should be edited by hand: Data is '
      'overwritten on every refresh, and Calc is what that shelf\'s tabs read.', ''),
-    ('If a Daily tab says WRONG QUERY at the top right, the two queries have been swapped: '
-     'one of them is filtered to the other shelf. Reattach it with the right Category line '
-     '— the Setup sheet has the detail.', ''),
+    ('If a Daily tab says WRONG QUERY at the top right, it is being fed another shelf\'s '
+     'query — the queries differ by one line and two of them have been mixed up. Reattach '
+     'that one with the right Category line; the Setup sheet has the detail.', ''),
     ('An empty pair of tabs means no count of that shelf has been SUBMITTED yet. A draft '
      'never reaches Excel, which is deliberate: a half-finished count must not reconcile.', ''),
 ]
 
 
+def notes_rows():
+    """NOTES, with the two shelf roll-calls filled in from TABS.
+
+    Placeholders rather than a hand-typed list of tab names, for the same reason
+    the Setup table is generated: a sentence naming two shelves in a workbook that
+    has three is worse than no sentence at all, and nothing would have failed.
+    """
+    pairs = listof([f"{t['daily']} and {t['trends']} are {t['plural']}" for t in TABS])
+    queries = listof([f"{t['query']} for {t['plural']}" for t in TABS])
+    out = []
+    for text, kind in NOTES:
+        if text == 'SHELF_ROLL':
+            text = pairs[0].upper() + pairs[1:] + '.'
+        elif 'QUERY_ROLL' in text:
+            text = text.replace('QUERY_ROLL', queries)
+        out.append((text, kind))
+    return out
+
+
+def listof(xs):
+    """"a", "a and b", "a, b and c" — the same shape the import page uses."""
+    return xs[0] if len(xs) < 2 else ', '.join(xs[:-1]) + ' and ' + xs[-1]
+
+
 def write_notes(ws):
     ws.column_dimensions['A'].width = 112
     r = 1
-    for text, kind in NOTES:
+    for text, kind in notes_rows():
         c = ws.cell(row=r, column=1, value=text)
         if kind == 'h1':
             c.font = Font(name='Calibri', size=16, bold=True, color=INK)
@@ -800,72 +833,84 @@ def write_notes(ws):
     ws.sheet_view.showGridLines = False
 
 
-SETUP = [
-    ('Attach the data — about fifteen minutes, once per shelf', 'h1'),
-    ('', ''),
-    ('There is one query per shelf, and each one lands on its own hidden sheet. Until a '
-     'shelf\'s query is attached its tabs are empty and the line at the top right of its '
-     'Daily tab says so. Nothing is broken; the rows simply are not there yet. After it is '
-     'done the workbook refreshes itself and this sheet can be ignored.', ''),
-    ('', ''),
-    ('     Cigarettes    query named  Counts    loads to  Data!$A$1', ''),
-    ('     Lubes         query named  Lubes     loads to  LubesData!$A$1', ''),
-    ('', ''),
-    ('The two queries are the SAME FILE with one line changed. That is the one thing to be '
-     'careful about here, and the workbook checks it for you: if a tab ends up fed by the '
-     'wrong shelf\'s query, the line at its top right says WRONG QUERY instead of naming a '
-     'date. A Lubes tab quietly showing cigarette rows would otherwise look perfectly '
-     'reasonable and be about the wrong stock entirely.', ''),
-    ('', ''),
-    ('1. Open a blank query', 'h2'),
-    ('Data > Get Data > From Other Sources > Blank Query.', ''),
-    ('', ''),
-    ('2. Paste the query', 'h2'),
-    ('Home > Advanced Editor. Delete what is there. Paste the whole of counts_query.m '
-     'from the excel folder. Done.', ''),
-    ('', ''),
-    ('3. Set the shelf, and name the query to match', 'h2'),
-    ('Near the top of the pasted query there is one line:  Category = "CIGARETTES",', ''),
-    ('For the cigarette query leave it alone and name the query  Counts.', ''),
-    ('For the lubes query change it to  Category = "LUBES",  and name the query  Lubes.', ''),
-    ('The name is in the Query Settings pane on the right. It does not drive any formula — '
-     'the sheets address columns by position — but the next person has to be able to tell '
-     'the two apart.', ''),
-    ('', ''),
-    ('4. Load it onto that shelf\'s Data sheet', 'h2'),
-    ('Home > Close & Load To... > Table > Existing worksheet > put the cursor in the cell '
-     'named in the table above > OK. If Excel asks about credentials for supabase.co, '
-     'choose Anonymous.', ''),
-    ('IMPORTANT: it must land at A1 of the right sheet, and the columns must sit in the '
-     'order the query returns them, because every formula in the workbook finds its values '
-     'by column position. If it lands somewhere else, undo and redo this step.', ''),
-    ('', ''),
-    ('5. Make it automatic', 'h2'),
-    ('Data > Queries & Connections > right-click the query > Properties. Tick "Refresh '
-     'data when opening the file" and "Refresh every 60 minutes". Do this for each one.', ''),
-    ('', ''),
-    ('6. Repeat for the other shelf', 'h2'),
-    ('Steps 1 to 5 again, with the other row of the table above. The two queries are '
-     'independent: attaching one does nothing to the other, and a shelf with no query is '
-     'simply a pair of empty tabs.', ''),
-    ('', ''),
-    ('Then check three things', 'h2'),
-    ('The top right of each Daily tab names that shelf\'s latest counted day. It should be '
-     'the most recent count of that shelf that has been submitted — and it must not say '
-     'WRONG QUERY.', ''),
-    ('Pick the earliest day in the dropdown — the very first count. Variance, Opening and '
-     'Sold (counted) should all read as dashes, and the amber line should say there is no '
-     'opening figure. If any of those read 0 instead, tell Claude: a dash means "not '
-     'checked" and a zero means "agreed", and they must never be confused.', ''),
-    ('Submit a count, then press Data > Refresh All. The new day should appear in that '
-     'shelf\'s dropdown on its own.', ''),
-]
+def setup_rows():
+    """The attach instructions, generated from TABS.
+
+    The shelf table used to be typed out by hand, which is a list of sheet names
+    and cell addresses sitting next to the code that decides them — the two would
+    have disagreed the first time a shelf was added or renamed, and the person
+    reading it has no way to tell which one is right.
+    """
+    n = len(TABS)
+    wide = max(len(t['plural']) for t in TABS)
+    table = [(f"     {t['plural'].title():<{wide}}   query named  {t['query']:<8} "
+              f"loads to  {t['data']}!$A$1", '') for t in TABS]
+    return [
+        ('Attach the data — about fifteen minutes, once per shelf', 'h1'),
+        ('', ''),
+        (f'There is one query per shelf, {n} in all, and each one lands on its own hidden '
+         'sheet. Until a shelf\'s query is attached its tabs are empty and the line at the '
+         'top right of its Daily tab says so. Nothing is broken; the rows simply are not '
+         'there yet. After it is done the workbook refreshes itself and this sheet can be '
+         'ignored.', ''),
+        ('', ''),
+        *table,
+        ('', ''),
+        (f'All {n} queries are the SAME FILE with one line changed. That is the one thing to '
+         'be careful about here, and the workbook checks it for you: if a tab ends up fed by '
+         'the wrong shelf\'s query, the line at its top right says WRONG QUERY instead of '
+         'naming a date. A tab quietly showing another shelf\'s rows would otherwise look '
+         'perfectly reasonable and be about the wrong stock entirely.', ''),
+        ('', ''),
+        ('1. Open a blank query', 'h2'),
+        ('Data > Get Data > From Other Sources > Blank Query.', ''),
+        ('', ''),
+        ('2. Paste the query', 'h2'),
+        ('Home > Advanced Editor. Delete what is there. Paste the whole of counts_query.m '
+         'from the excel folder. Done.', ''),
+        ('', ''),
+        ('3. Set the shelf, and name the query to match', 'h2'),
+        ('Near the top of the pasted query there is one line:  Category = "CIGARETTES",', ''),
+        *[(f'For {t["plural"]}, set  Category = "{t["category"]}",  and name the query '
+           f'{t["query"]}.', '') for t in TABS],
+        ('The name is in the Query Settings pane on the right. It does not drive any formula '
+         '— the sheets address columns by position — but the next person has to be able to '
+         'tell the queries apart.', ''),
+        ('', ''),
+        ('4. Load it onto that shelf\'s Data sheet', 'h2'),
+        ('Home > Close & Load To... > Table > Existing worksheet > put the cursor in the cell '
+         'named in the table above > OK. If Excel asks about credentials for supabase.co, '
+         'choose Anonymous.', ''),
+        ('IMPORTANT: it must land at A1 of the right sheet, and the columns must sit in the '
+         'order the query returns them, because every formula in the workbook finds its '
+         'values by column position. If it lands somewhere else, undo and redo this step.', ''),
+        ('', ''),
+        ('5. Make it automatic', 'h2'),
+        ('Data > Queries & Connections > right-click the query > Properties. Tick "Refresh '
+         'data when opening the file" and "Refresh every 60 minutes". Do this for each one.', ''),
+        ('', ''),
+        (f'6. Repeat for the other {"shelf" if n == 2 else "shelves"}', 'h2'),
+        (f'Steps 1 to 5 again for each remaining row of the table above, {n - 1} more '
+         f'{"time" if n == 2 else "times"}. The queries are independent: attaching one does '
+         'nothing to the others, and a shelf with no query is simply a pair of empty tabs.', ''),
+        ('', ''),
+        ('Then check three things', 'h2'),
+        ('The top right of each Daily tab names that shelf\'s latest counted day. It should '
+         'be the most recent count of that shelf that has been submitted — and it must not '
+         'say WRONG QUERY.', ''),
+        ('Pick the earliest day in the dropdown — the very first count. Variance, Opening and '
+         'Sold (counted) should all read as dashes, and the amber line should say there is no '
+         'opening figure. If any of those read 0 instead, tell Claude: a dash means "not '
+         'checked" and a zero means "agreed", and they must never be confused.', ''),
+        ('Submit a count, then press Data > Refresh All. The new day should appear in that '
+         'shelf\'s dropdown on its own.', ''),
+    ]
 
 
 def write_setup(ws):
     ws.column_dimensions['A'].width = 104
     r = 1
-    for text, kind in SETUP:
+    for text, kind in setup_rows():
         c = ws.cell(row=r, column=1, value=text)
         if kind == 'h1':
             c.font = Font(name='Calibri', size=16, bold=True, color=INK)

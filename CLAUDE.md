@@ -608,13 +608,18 @@ Supporting notes:
   days-off before size so a leak outranks an event). The rows come from
   `counts_query.m`, attached once by hand; after that it is refresh-on-open and the
   builder is only re-run to change the *layout*.
-  - **One shelf, one pair of tabs, one query** (29 Sep 2026, at Rosa's request — lubes).
-    `TABS` in the builder is the whole configuration; adding heated tobacco is one entry
-    and one more query attached. **CIGARETTES keeps the original sheet names**
+  - **One shelf, one pair of tabs, one query** (29 Sep 2026, at Rosa's request — lubes,
+    then heated tobacco the same day). `TABS` in the builder is the whole configuration
+    and **all three shelves are in it**; the Setup and Notes text is generated from it, so
+    a hand-typed sentence naming two shelves cannot survive into a workbook that has
+    three. **CIGARETTES keeps the original sheet names**
     (`Daily`/`Trends`/`Calc`/`Data`) because a file in use already has `Counts` loaded to
     `Data!$A$1` — renaming that sheet would break an attachment for nothing. Lubes gets
     `Lubes Daily`/`Lubes Trends` and, space-free because formulas name them,
-    `LubesCalc`/`LubesData`.
+    `LubesCalc`/`LubesData`. Heated tobacco is `Iluma Daily`/`Iluma Trends` +
+    `IlumaCalc`/`IlumaData` — the **tabs** say Iluma because a tab strip has to stay
+    readable and that is the name used everywhere else in this system, while the title
+    inside the sheet says *Heated tobacco reconciliation*, matching the count screen.
   - **The two queries are ONE FILE with one line changed**, `Category = "…"`. Two copies
     would drift, and since the sheets address `Data` by column *position*, a column added
     to one copy and not the other silently shifts every figure on that shelf by one.
@@ -635,10 +640,18 @@ Supporting notes:
     the first cut of this emitted `Data$U:$U` into every formula on every sheet — which
     Excel reads as an unknown name, so the whole workbook came out `#NAME?` rather than
     as anything resembling a bad sheet reference.
+  - **Heated tobacco reconciles to nothing yet** and its tabs still fill in: 3 submitted
+    counts, 21 products, and `Sold (POS)`/`Variance` as **dashes** because no Iluma sales
+    report has been imported. That case is pinned in Excel itself — a shelf nothing has
+    been checked against must never render a confident `0` of variance.
   - **Adding tabs means REBUILDING, and a rebuild discards the attached queries.** Unlike
-    a styles-only patch, four new sheets with formulas, conditional formats, validation
-    and print areas cannot be grafted into the live file. Whoever does this owes the user
-    the Setup sheet and an honest estimate.
+    a styles-only patch, new sheets with formulas, conditional formats, validation and
+    print areas cannot be grafted into the live file. Whoever does this owes the user the
+    Setup sheet and an honest estimate.
+  - **`excel()` in the verifier binds the workbook BY NAME.** `active workbook` was still
+    one of the user's own open files on the second call of a run, so every
+    `worksheet "Daily" of wbk` missed with "the object you are trying to access does not
+    exist". `open` returns no reference in Excel's AppleScript; the basename is the handle.
   - **Why not push.** It shipped as a snapshot first. Rosa pressed Refresh All, saw the
     newest date in the file, and reasonably concluded it had worked — it had not, and
     two days of counts were already invisible. A workbook that looks refreshed and is
@@ -674,7 +687,7 @@ Supporting notes:
     **Excel's own answers** — which is the only way to test the COUNTIFS rules carrying
     "an unknown variance is not a zero", and — since Excel is the only thing that can
   say what it actually PAINTS — the variance colours, and that each shelf's tabs compute
-  from their own shelf. 79 checks. The snapshot file is
+  from their own shelf. 89 checks. The snapshot file is
   gitignored.
   - **A conditional fill is a dxf, and Excel paints a dxf solid fill from `bgColor`.**
     openpyxl writes `fgColor`, so the fill silently never appears. The variance band for
