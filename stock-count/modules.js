@@ -106,3 +106,52 @@ export function hasCategories(rows) {
 export function withCategory(row, category, supported) {
   return supported ? { ...row, category } : { ...row };
 }
+
+
+/* ------------------------------------------------------------------------
+   Why a shelf has no active planogram.
+
+   "This branch has no lubes planogram yet" is the right thing to say when a
+   shelf has genuinely never been set up, and it is badly wrong when the shelf is
+   there and only its `planogram_version` row has gone. That happened on 01 Oct
+   2026: versions 1, 2, 4 and 6 were deleted while their facings stayed, so the
+   lubes shelf existed in full — 50 facings, 34 products — and every page said it
+   was not set up. The data to tell the difference was one query away.
+
+   Returns a sentence to add to the refusal, or null when there is nothing more
+   to say than "not set up yet". Diagnostic only: it never changes what a page
+   lets you do, because a shelf with no active version genuinely cannot be
+   counted either way.
+   ------------------------------------------------------------------------ */
+export async function diagnoseShelf(db, branchId, category) {
+  const vres = await db.from('planogram_version').select('*');
+  if (vres.error) return null;
+  const versions = vres.data || [];
+
+  const mine = versions.filter(v => v.branch_id === branchId && catOf(v) === category);
+  if (mine.length) {
+    const ids = mine.map(v => `v${v.version_id} (${v.status})`).join(', ');
+    return `This shelf HAS ${mine.length === 1 ? 'a planogram version' : 'planogram versions'} ` +
+      `— ${ids} — but none is active, so nothing resolves. Make one active again on the ` +
+      `Edit the Shelf page.`;
+  }
+
+  /* No version row at all for this shelf. Are there facings pointing at a
+     version that does not exist? Orphans carry no category, so they cannot be
+     attributed to this shelf — but naming them is still the actionable fact,
+     and it is the only way anyone finds out the shelf was not lost, only its
+     row. Migration 17 restores them and adds the foreign key that makes this
+     unreachable again. */
+  const fres = await db.from('planogram_facing').select('version_id');
+  if (fres.error) return null;
+  const known = new Set(versions.map(v => v.version_id));
+  const orphans = [...new Set((fres.data || []).map(f => f.version_id))]
+    .filter(v => !known.has(v)).sort((a, b) => a - b);
+  if (orphans.length) {
+    return `Something is wrong with the data rather than the setup: there are shelf facings ` +
+      `for version ${orphans.join(', ')} but no matching row in planogram_version, so no ` +
+      `shelf can resolve to them. The layout is not lost — run ` +
+      `<b>17_restore_planogram_versions.sql</b> to put the version rows back.`;
+  }
+  return null;
+}

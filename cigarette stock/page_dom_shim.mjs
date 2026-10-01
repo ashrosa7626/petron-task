@@ -115,6 +115,8 @@ class El {
     if (m) return m[2] === undefined ? m[1] in this.attrs : this.attrs[m[1]] === m[2];
     m = /^([a-z]+)\[type=([a-z]+)\]$/.exec(sel);
     if (m) return this.tagName === m[1] && this.attrs.type === m[2];
+    m = /^([a-z]*)\.([A-Za-z0-9_-]+)$/.exec(sel);
+    if (m) return (!m[1] || this.tagName === m[1]) && this.classList.contains(m[2]);
     if (/^[a-z]+$/.test(sel)) return this.tagName === sel;
     throw new Error(`page_dom_shim: selector not supported: ${sel}`);
   }
@@ -137,6 +139,13 @@ class El {
   dispatchEvent(ev) {
     ev.target = ev.target || this;
     for (let n = this; n; n = n.parent) {
+      // Both routes, because pages use both: addEventListener for things wired
+      // once at load, and an `onclick =` assignment for a handler that has to be
+      // REPLACED every time a view re-renders with a new closure. history.html
+      // does the latter for its buttons, and a shim that only knew about
+      // addEventListener reported the buttons as dead.
+      const direct = n['on' + ev.type];
+      if (typeof direct === 'function') direct.call(n, ev);
       for (const fn of (n.listeners[ev.type] || []).slice()) fn.call(n, ev);
     }
     return true;
@@ -177,10 +186,19 @@ export function makeDocument(html) {
     createElement(tag) { return new El(String(tag).toLowerCase(), doc); }
   };
   doc.head = new El('head', doc);
-  for (const m of html.matchAll(/<([a-zA-Z][a-zA-Z0-9]*)\b[^>]*\bid="([^"]+)"/g)) {
+  // The WHOLE tag, not up to the id: `hidden` is as often written after the id
+  // as before it, and matching only the prefix made every such element start out
+  // visible — which is the opposite of what the page expects and quietly broke
+  // the first checks written against it.
+  for (const m of html.matchAll(/<([a-zA-Z][a-zA-Z0-9]*)\b([^>]*)>/g)) {
+    const tag = m[0], attrs = m[2];
+    const id = /\bid="([^"]+)"/.exec(attrs);
+    if (!id) continue;
     const node = new El(m[1].toLowerCase(), doc);
-    if (/\bhidden\b/.test(m[0])) node.hidden = true;
-    doc.ids.set(m[2], node);
+    if (/\bhidden\b/.test(attrs.replace(/"[^"]*"/g, ''))) node.hidden = true;
+    const cls = /\bclass="([^"]+)"/.exec(attrs);
+    if (cls) node.setAttribute('class', cls[1]);
+    doc.ids.set(id[1], node);
   }
   return doc;
 }
@@ -208,7 +226,10 @@ export function makeDb(tables) {
     from(table) {
       const q = { table, filters: [] };
       calls.push(q);
-      const rows = () => (tables[table] || []);
+      const rows = () => {
+        const t = tables[table];
+        return Array.isArray(t) ? t : ((t && t.rows) || []);
+      };
       const builder = {
         select(cols) { q.select = cols; return builder; },
         eq(c, v) { q.filters.push(['eq', c, v]); return builder; },
@@ -217,7 +238,25 @@ export function makeDb(tables) {
         order() { return builder; },
         limit() { return builder; },
         upsert(r) { q.upsert = r; return builder; },
-        then(resolve) { return Promise.resolve(q.result || { data: rows(), error: null }).then(resolve); }
+        update(r) { q.update = r; return builder; },
+        insert(r) { q.insert = r; return builder; },
+        then(resolve) {
+          /* A per-table override, so a test can make one table answer with an
+             error (the table does not exist yet) or with an EMPTY ARRAY — which
+             is how PostgREST reports an RLS refusal, and the mistake this module
+             has made three times. Both have to be reachable from a test.
+
+             It may be a FUNCTION of the query, because a table is usually read
+             and written in the same page: overriding every call on it would
+             starve the read that has to succeed first for there to be anything
+             to write. */
+          const o = tables[table];
+          const over = o && o.__result;
+          const res = typeof over === 'function' ? (over(q) || { data: rows(), error: null })
+            : over ? over
+            : { data: rows(), error: null };
+          return Promise.resolve(res).then(resolve);
+        }
       };
       q.builder = builder;
       return builder;

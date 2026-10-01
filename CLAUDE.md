@@ -132,6 +132,24 @@ Hosted on GitHub Pages: https://ashrosa7626.github.io/petron-task/
   "the fix didn't deploy" on 17 Sep. Either wait ten minutes, hard-reload, or check
   with `await import('./mod.js?probe=' + Date.now())` and compare against the module
   the page actually holds.
+- **Deleting a `planogram_version` row orphans its facings and breaks a shelf, and the
+  page cannot tell you why.** Found 01 Oct 2026: `planogram_version` held only the two
+  `active` rows, while `planogram_facing` still had 162 facings for v1, 162 for v2, 47 for
+  v4 and 50 for v6. So the **lubes shelf existed in full** — 50 facings, 34 products — and
+  every page said the shelf was not set up, because resolution is on `status='active'` and
+  there was no row at all. **Nine submitted cigarette counts** also pointed at versions
+  that no longer existed.
+  `01_schema.sql` declares `planogram_facing.version_id references planogram_version on
+  delete cascade` and `stock_count.version_id references planogram_version`, under which
+  this state is **unreachable** — the delete would cascade or be blocked. So those
+  constraints are not on the live tables; the database did not come from `01_schema.sql`
+  exactly, which is established here (it was hand-edited once before, losing LD 100 Red).
+  `17_restore_planogram_versions.sql` puts the rows back, bumps the identity sequence,
+  refuses to continue if anything is still orphaned, and **adds the two foreign keys** so
+  it cannot recur. `diagnoseShelf()` in `modules.js` now says "there are facings for
+  version N but no row" instead of "not set up yet" — note `read_version` is
+  `using (status = 'active')`, so anon cannot see archived rows and only the orphan branch
+  of that diagnosis fires for a page without a login.
 - **A top-level throw in a page's module unbinds the WHOLE PAGE, silently.** Every
   `addEventListener` below the throw never runs, so the page draws correctly and then does
   nothing when touched — no error on screen, only a console line nobody on the shop floor
@@ -388,6 +406,25 @@ Supporting notes:
   adjacent). Each piece needs a "1 of 3" marker, sibling highlighting with
   off-screen direction hints, and the progress footer counts products (54), not
   blocks (58).
+- **A submitted count can be CORRECTED, and never silently** (01 Oct 2026, at Rosa's
+  request). `history.html` gets a **Correct counts** button inside an open report: the packs
+  column becomes inputs, and saving needs a name and a reason. `18_count_corrections.sql`
+  is what makes it honest — a `before update` **trigger** refuses a change to `packs` on a
+  submitted count unless both arrived with it, and writes the before-and-after into
+  `stock_count_correction` **itself**, `security definer`, so the page cannot skip the
+  record or fail halfway and leave the change without one. That table has **no insert,
+  update or delete policy**: only the trigger can put a row there and nothing can remove
+  one. The count then carries a *Corrected* tag in the list and a note naming every
+  figure, its old value, the reason and who gave it.
+  - **It restates two days, not one.** Opening is the previous submitted count's closing,
+    so a correction moves that day's variance *and* the next day's opening. The
+    confirmation says which, and says whether a POS report exists for the day — with no
+    sales loaded nothing has been compared against anything yet and only stock levels move.
+  - Access was a decision, not a default: **anyone at the device**, matching the rest of
+    the module, which has no sign-in by design. The protection is the trail, not a gate.
+  - **`update_line` had to widen to a submitted parent**, and it states `WITH CHECK`
+    explicitly — the `05` trap, where Postgres reuses `USING` as `WITH CHECK` and a count
+    could never leave draft.
 - **Blind count** — never display the expected or previous quantity anywhere on
   the count screen.
 - Drafts write every keystroke to localStorage and sync on submit; submit requires
@@ -770,7 +807,15 @@ write, so migrations are run by hand in the Supabase SQL editor):
   wrong key strands a count already open on the shop device.
 - `verify_sales_scope.mjs` — offline. `scopeByCoverage`: one shelf, several shelves in one
   report, the mis-ticked shelf that must not be zero-filled, and the pre-migration case.
-- `verify_import_page.mjs` — offline, and the only test that **loads a page**. It runs
+- `verify_planogram_errors.mjs` — offline. What the shelf editor SAYS when a workbook is
+  wrong, because a refusal nobody can act on reads as a bug in the checker and the next
+  move after that is to work around it. Pins that a duplicate POS Item ID names **both**
+  rows and both descriptions, and that `104719`/`0104719` are not treated as the same ID.
+- `verify_history_page.mjs` — offline, loads `history.html` and drives a correction end to
+  end: the button appears on a submitted count and not a draft, a save without a name or a
+  reason is refused, the update carries `corrected_by`/`corrected_reason`, an **empty array
+  is reported as a refusal** rather than a success, and a corrected count says so.
+- `verify_import_page.mjs` — offline, loads a page the same way. It runs
   `import-sales.html`'s own module under `page_dom_shim.mjs` and asserts it reaches the
   end, that pressing the drop zone opens the file picker, and that the category ticks
   behave — including with a `localStorage` that throws. It exists because nothing in the
@@ -784,6 +829,15 @@ write, so migrations are run by hand in the Supabase SQL editor):
   Re-run it when the three missing POS Item IDs arrive. It refuses a missing or
   duplicate Item ID, a grid label matching no product, and the grid disagreeing with
   the Positions column.
+
+## Recent Fixes (Oct 2026)
+- **The lubes shelf came back, and submitted counts can be corrected** (01 Oct).
+  `planogram_version` rows had been deleted while their facings stayed, so lubes could not
+  be counted and nine submitted counts referenced nothing —
+  `17_restore_planogram_versions.sql` restores them and adds the foreign keys that make it
+  impossible. The duplicate-Item-ID refusal now names both rows and both descriptions,
+  which is why it read as a false positive. `history.html` gained **Correct counts**,
+  backed by the trigger in `18_count_corrections.sql`.
 
 ## Recent Fixes (Sep 2026)
 - **import-sales.html was dead, and now takes several categories at once** (29 Sep). The

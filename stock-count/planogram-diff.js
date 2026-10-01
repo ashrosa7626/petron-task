@@ -133,7 +133,18 @@ export function readWorkbook(sheets) {
       continue;
     }
     if (products.has(pid)) {
-      errors.push(`${where}: POS Item ID ${pid} appears twice. Each product needs its own.`);
+      /* Name BOTH rows and both descriptions.
+         It used to say only "row 34: POS Item ID 104719 appears twice", which
+         tells you the second one and leaves you to find the first by eye down a
+         column of six-digit numbers — reported 01 Oct as a duplicate that was
+         not there. It was there; the message could not show it. */
+      const first = products.get(pid);
+      errors.push(`POS Item ID ${pid} is on two rows of Full Stock List: ` +
+        `row ${first.row} ("${first.pos_description || first.short_name || '?'}") and ` +
+        `row ${r + 1} ("${desc || '?'}"). Each product needs its own ID — the count, the ` +
+        `sales import and every past count all join on it, so two products sharing one ` +
+        `would be merged into a single line. Delete the row that should not be there, or ` +
+        `take the right ID from the till.`);
       continue;
     }
     const p = { product_id: pid, pos_description: desc, plu: at('PLU'), row: r + 1 };

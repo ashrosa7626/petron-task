@@ -106,6 +106,39 @@
     .voidbox .bar{margin-bottom:0}
     .bar{display:flex;gap:9px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
     .bar .grow{flex:1}
+
+    /* Correcting a submitted count. Amber, not red: this is a legitimate thing
+       to do, unlike voiding a restock — but it restates a past day, so it does
+       not get to look like ordinary typing either. */
+    .edit-panel{border-color:rgba(245,158,11,0.4);margin-bottom:14px}
+    .edit-panel .lbl{font-size:0.74rem;font-weight:700;text-transform:uppercase;
+                     letter-spacing:0.7px;margin-bottom:8px;color:var(--p-amber)}
+    .ehint{font-size:0.82rem;line-height:1.55;color:var(--p-text2);margin-bottom:12px}
+    .efields{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+    .efields label{flex:1 1 220px;font-size:0.72rem;color:var(--p-text3);
+                   text-transform:uppercase;letter-spacing:0.6px}
+    .efields .inp{display:block;width:100%;margin-top:5px;background:var(--p-btn-sec);
+                  border:1px solid var(--p-border);border-radius:8px;color:var(--p-text);
+                  padding:10px 12px;font-size:0.92rem;font-family:var(--font);outline:none}
+    .efields .inp:focus{border-color:var(--p-amber)}
+    .edit-panel .bar{margin-bottom:0}
+    #eStatus{font-size:0.82rem;color:var(--p-text3)}
+    #eStatus.err{color:var(--p-red)}
+    .btn.pri{background:linear-gradient(135deg,var(--p-orange),var(--p-amber));color:#0B0F1A;
+             border-color:transparent;font-weight:800}
+    /* The packs input, in the table. Same width as the figure it replaces so the
+       column does not jump when editing starts. */
+    .pk-in{width:72px;background:var(--p-btn-sec);border:1px solid var(--p-border);
+           border-radius:6px;color:var(--p-text);text-align:right;font-family:var(--mono);
+           font-size:0.9rem;padding:4px 6px;outline:none;-moz-appearance:textfield}
+    .pk-in::-webkit-outer-spin-button,.pk-in::-webkit-inner-spin-button{
+           -webkit-appearance:none;margin:0}
+    .pk-in:focus{border-color:var(--p-amber)}
+    .pk-in.chg{border-color:var(--p-amber);background:rgba(245,158,11,0.12);font-weight:700}
+    .tag.fixed{background:rgba(245,158,11,0.15);color:var(--p-amber);
+               border:1px solid rgba(245,158,11,0.4)}
+    .cor-list{font-size:0.8rem;line-height:1.6;color:var(--p-text2);margin-top:8px}
+    .cor-list .mono{color:var(--p-text3)}
     /* Room for the menu button the sidebar puts at top-left. It is the only
        way out of a page now — the old back links went one place each, and from
        inside the cigarette module there was no route to the rest of the app. */
@@ -169,9 +202,38 @@
     <div id="dNotes"></div>
     <div class="bar">
       <div class="grow"></div>
+      <button class="btn" id="btnEdit" hidden>Correct counts</button>
       <button class="btn" id="btnCsv">Download CSV</button>
       <button class="btn" id="btnPrint">Print</button>
     </div>
+
+    <!-- The correction panel. Shown only while editing, and it asks for the two
+         things the database will refuse the change without: a name and a reason.
+         Both are required by a trigger, not by this page, so there is no version
+         of this screen that can write a correction nobody can account for. -->
+    <div class="card edit-panel" id="editPanel" hidden>
+      <div class="lbl a">Correcting a submitted count</div>
+      <div class="ehint">Change any <b>Packs</b> figure below, then save. This restates that
+        day&rsquo;s variance and the next day&rsquo;s opening &mdash; opening is the previous
+        submitted count&rsquo;s closing &mdash; so the workbook will show different numbers
+        than it did before. That is the point of a correction; it is not a surprise to avoid.</div>
+      <div class="efields">
+        <label>Your name
+          <input class="inp" id="eWho" type="text" placeholder="Who is correcting this"
+                 autocomplete="name">
+        </label>
+        <label>Reason
+          <input class="inp" id="eWhy" type="text"
+                 placeholder="e.g. recounted the shelf, 12 not 21">
+        </label>
+      </div>
+      <div class="bar">
+        <div class="grow" id="eStatus"></div>
+        <button class="btn" id="btnEditCancel">Cancel</button>
+        <button class="btn pri" id="btnEditSave">Save corrections</button>
+      </div>
+    </div>
+
     <div class="tblwrap"><table id="dTable"></table></div>
   </div>
 </div>
@@ -273,6 +335,18 @@ async function init() {
   }
   ctx.counts.forEach(c => { c.lineCount = tally.get(c.count_id) || 0; });
 
+  /* Which counts carry a correction, so the list says so without opening each
+     one. Optional, like the detail fetch: before 18_count_corrections.sql the
+     table does not exist and asking for it fails the whole query. */
+  const corTally = new Map();
+  if (ids.length) {
+    const cr = await db.from('stock_count_correction').select('count_id').in('count_id', ids);
+    if (!cr.error) {
+      for (const r of (cr.data || [])) corTally.set(r.count_id, (corTally.get(r.count_id) || 0) + 1);
+    }
+  }
+  ctx.counts.forEach(c => { c.corrections = corTally.get(c.count_id) || 0; });
+
   await loadRestocks();
 
   // Read the deep link BEFORE renderList() runs: it calls history.replaceState
@@ -350,7 +424,8 @@ function renderList() {
 
   el('listHd').textContent = 'Submitted counts';
   el('listSub').innerHTML = 'Every count taken for this branch, newest first. ' +
-    'A submitted count is frozen and cannot be reopened.';
+    'A submitted count cannot be reopened and counted again &mdash; but a figure that is ' +
+    'wrong can be corrected from inside it, with a reason that stays attached to the day.';
 
   if (!ctx.counts.length) {
     el('listRows').innerHTML =
@@ -369,6 +444,7 @@ function renderList() {
       </div>
       <div class="row-r">
         <span class="tag ${submitted ? 'sub' : 'drf'}">${submitted ? 'Submitted' : 'Draft'}</span>
+        ${c.corrections ? `<span class="tag fixed">Corrected</span>` : ''}
         <div class="row-n">${submitted
           ? c.lineCount + ' products &middot; ' + stamp(c.submitted_at)
           : (c.lineCount ? c.lineCount + ' products' : 'on the counting device')}</div>
@@ -547,15 +623,31 @@ async function openCount(id) {
   setStatus('Loading count…');
   history.replaceState(null, '', location.pathname + '?count=' + id);
 
-  const [lineRes, recRes] = await Promise.all([
+  const [lineRes, recRes, corRes, posRes] = await Promise.all([
     db.from('stock_count_line').select('product_id,packs,add_in,not_on_shelf').eq('count_id', id),
     // The view carries only submitted counts, and joins the previous day's
     // closing as this day's opening.
     db.from('vw_daily_reconciliation')
       .select('product_id,opening_packs,add_in,closing_packs,sold_physical,sold_pos,variance_packs')
-      .eq('branch_id', ctx.branchId).eq('count_date', c.count_date)
+      .eq('branch_id', ctx.branchId).eq('count_date', c.count_date),
+    /* Corrections to this count. Optional: 18_count_corrections.sql may not be
+       run yet, and asking for a table that is not there fails the whole query —
+       the same reason nothing SELECTs `category` by name. An error here means
+       the feature is not installed, which the Correct button then says. */
+    db.from('stock_count_correction')
+      .select('product_id,old_packs,new_packs,reason,corrected_by,corrected_at')
+      .eq('count_id', id).order('corrected_at'),
+    /* Whether a POS report exists for this day, which decides whether a
+       correction restates a variance somebody has already read or only changes a
+       stock level nothing has been compared against yet. */
+    db.from('pos_sales_daily').select('product_id')
+      .eq('branch_id', ctx.branchId).eq('sale_date', c.count_date).limit(1)
   ]);
   if (lineRes.error) return setStatus('Could not read the count lines: ' + lineRes.error.message, true);
+
+  ctx.canCorrect = !corRes.error;
+  ctx.corrections = corRes.error ? [] : (corRes.data || []);
+  ctx.hasPos = !posRes.error && (posRes.data || []).length > 0;
 
   const rec = new Map((recRes.data || []).map(r => [r.product_id, r]));
   const rows = (lineRes.data || []).map(l => {
@@ -567,6 +659,9 @@ async function openCount(id) {
       pos: ctx.order.get(l.product_id) || 'zzz',
       packs: l.not_on_shelf && l.packs === null ? 0 : l.packs,
       not_on_shelf: l.not_on_shelf,
+      // What the database holds right now, untouched by the not_on_shelf
+      // read-back above — the value a correction is compared against.
+      dbPacks: l.packs,
       r: rec.get(l.product_id) || null
     };
   }).sort((a, b) => a.pos.localeCompare(b.pos) || a.short_name.localeCompare(b.short_name));
@@ -574,7 +669,9 @@ async function openCount(id) {
   renderDetail(c, rows, rec.size > 0);
 }
 
-function renderDetail(c, rows, hasRec) {
+function renderDetail(c, rows, hasRec, editing) {
+  editing = !!editing;
+  ctx.detail = { c, rows, hasRec };
   el('status').hidden = true;
   el('detailView').hidden = false;
   el('btnBack').hidden = false;
@@ -614,6 +711,27 @@ function renderDetail(c, rows, hasRec) {
   }
   el('dNotes').innerHTML = notes.join('');
 
+  /* Corrected counts say so, everywhere the count is shown. A figure that
+     disagrees with a printout from last week needs its reason attached to it,
+     not filed somewhere else. */
+  if ((ctx.corrections || []).length) {
+    const who = [...new Set(ctx.corrections.map(x => x.corrected_by))].join(', ');
+    const last = ctx.corrections[ctx.corrections.length - 1];
+    notes.push(`<div class="note warn"><b>Corrected</b> &mdash;
+      ${ctx.corrections.length} ${ctx.corrections.length === 1 ? 'figure has' : 'figures have'}
+      been changed since this count was submitted, by ${esc(who)},
+      last on ${esc(stamp(last.corrected_at))}. The variance below is the restated one.
+      <div class="cor-list">` +
+      ctx.corrections.map(x => {
+        const p = ctx.products.get(x.product_id) || {};
+        return `<div><b>${esc(p.short_name || x.product_id)}</b>
+          <span class="mono">${x.old_packs === null ? '&mdash;' : x.old_packs} &rarr;
+          ${x.new_packs}</span> &middot; ${esc(x.reason)}
+          <span class="mono">(${esc(x.corrected_by)}, ${esc(stamp(x.corrected_at))})</span></div>`;
+      }).join('') + `</div></div>`);
+    el('dNotes').innerHTML = notes.join('');
+  }
+
   const num = v => (v === null || v === undefined) ? '<span class="dash">&mdash;</span>' : v;
   const varCell = v => {
     if (v === null || v === undefined) return '<span class="dash">&mdash;</span>';
@@ -632,7 +750,11 @@ function renderDetail(c, rows, hasRec) {
       <td class="pos">${esc(String(r.pos).replace(/(\d+)$/, m => String(Number(m))))}</td>
       <td>${esc(r.short_name)}</td>
       <td class="plu">${esc(r.plu)}</td>
-      <td class="n ${(r.packs || 0) === 0 ? 'z' : ''}">${r.packs === null ? '&mdash;' : r.packs}</td>` +
+      ${editing
+        ? `<td class="n"><input class="pk-in" type="number" inputmode="numeric" min="0" step="1"
+              data-pid="${esc(r.product_id)}" value="${r.packs === null ? '' : r.packs}"
+              aria-label="Packs for ${esc(r.short_name)}"></td>`
+        : `<td class="n ${(r.packs || 0) === 0 ? 'z' : ''}">${r.packs === null ? '&mdash;' : r.packs}</td>`}` +
       (hasRec ? `<td class="n">${num(r.r && r.r.opening_packs)}</td>
         <td class="n">${num(r.r && r.r.add_in)}</td>
         <td class="n">${num(r.r && r.r.sold_physical)}</td>
@@ -642,6 +764,165 @@ function renderDetail(c, rows, hasRec) {
 
   el('btnCsv').onclick = () => downloadCsv(c, rows, hasRec);
   el('btnPrint').onclick = () => window.print();
+
+  /* Only a submitted count can be corrected. A draft holds no lines at all until
+     it is submitted — the figures are still on the counting device — so there is
+     nothing here to edit and a button would be a lie. */
+  const can = c.status === 'submitted' && rows.length > 0;
+  el('btnEdit').hidden = !can || editing;
+  el('editPanel').hidden = !editing;
+  el('btnCsv').disabled = editing;
+  el('btnPrint').disabled = editing;
+
+  if (can && !ctx.canCorrect) {
+    el('btnEdit').hidden = false;
+    el('btnEdit').onclick = () => setEditStatus(
+      'Corrections are not installed on this database yet — run ' +
+      '18_count_corrections.sql, then reload this page.', true, true);
+  } else if (can) {
+    el('btnEdit').onclick = () => startEdit();
+  }
+  if (editing) {
+    el('eWho').value = store.get(CORRECT_WHO) || '';
+    el('eWhy').value = '';
+    markChanged();
+    el('dTable').oninput = markChanged;
+    el('btnEditCancel').onclick = () => renderDetail(c, rows, hasRec, false);
+    el('btnEditSave').onclick = () => saveCorrections();
+  } else {
+    el('dTable').oninput = null;
+  }
+}
+
+/* ===================== correcting a submitted count =====================
+   The database is what guarantees the audit trail: a BEFORE UPDATE trigger
+   refuses to change `packs` on a submitted count without a name and a reason,
+   and writes the before-and-after itself (18_count_corrections.sql). This page
+   therefore cannot produce a silent correction even if it is wrong — which is
+   the right way round, because the page is the part that gets rewritten. */
+const CORRECT_WHO = 'cig_correct_who';
+
+/* localStorage is full on the shop device often enough that a bare setItem has
+   stranded a page here before. Same helper as restock.html, same reason. */
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* survivable */ } }
+};
+
+function setEditStatus(msg, isErr, intoNotes) {
+  const t = intoNotes ? el('dNotes') : el('eStatus');
+  if (intoNotes) {
+    t.insertAdjacentHTML('beforeend', `<div class="note ${isErr ? 'err' : 'info'}">${msg}</div>`);
+  } else {
+    t.textContent = msg || '';
+    t.className = isErr ? 'err' : '';
+  }
+}
+
+function startEdit() {
+  const d = ctx.detail;
+  renderDetail(d.c, d.rows, d.hasRec, true);
+  el('editPanel').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  setEditStatus(ctx.hasPos
+    ? 'A POS report is loaded for this day, so saving will restate its variance.'
+    : 'No POS report is loaded for this day yet, so only the stock figures change.');
+}
+
+/* Highlight what has actually moved, so Save is pressed knowing the count. */
+function changedRows() {
+  const out = [];
+  for (const inp of el('dTable').querySelectorAll('.pk-in')) {
+    const row = ctx.detail.rows.find(r => r.product_id === inp.dataset.pid);
+    if (!row) continue;
+    const txt = inp.value.trim();
+    if (txt === '') continue;                       // blank is "leave it alone"
+    const n = Number(txt);
+    if (!Number.isInteger(n) || n < 0) continue;
+    const was = row.dbPacks === null ? null : Number(row.dbPacks);
+    if (n !== was) out.push({ product_id: row.product_id, short_name: row.short_name,
+                              from: was, to: n });
+  }
+  return out;
+}
+
+function markChanged() {
+  const changed = new Set(changedRows().map(c => c.product_id));
+  for (const inp of el('dTable').querySelectorAll('.pk-in')) {
+    inp.classList.toggle('chg', changed.has(inp.dataset.pid));
+  }
+  const n = changed.size;
+  const base = ctx.hasPos
+    ? 'A POS report is loaded for this day, so saving will restate its variance.'
+    : 'No POS report is loaded for this day yet, so only the stock figures change.';
+  setEditStatus(n ? `${n} figure${n === 1 ? '' : 's'} changed. ${base}` : base);
+}
+
+async function saveCorrections() {
+  const who = el('eWho').value.trim();
+  const why = el('eWhy').value.trim();
+  const changed = changedRows();
+
+  if (!changed.length) return setEditStatus('Nothing has changed yet.', true);
+  if (who.length < 2) { el('eWho').focus(); return setEditStatus('Put your name on this.', true); }
+  if (why.length < 3) {
+    el('eWhy').focus();
+    return setEditStatus('Give a reason — somebody will ask why this day changed.', true);
+  }
+
+  /* Warn with the consequence spelled out, not a generic "are you sure". The
+     next day's opening is the previous count's closing, so a correction moves
+     two days of arithmetic, and it moves variance only where a POS report
+     exists to compare against. */
+  const list = changed.slice(0, 6).map(c =>
+    `  ${c.short_name}: ${c.from === null ? '—' : c.from} → ${c.to}`).join('\n') +
+    (changed.length > 6 ? `\n  …and ${changed.length - 6} more` : '');
+  const consequence = ctx.hasPos
+    ? `\n\nThis day has POS sales loaded, so its VARIANCE will change, and so will the ` +
+      `opening figure of the next count. The Excel workbook will show different numbers ` +
+      `than it did before.`
+    : `\n\nNo POS sales are loaded for this day, so no variance moves yet — but the next ` +
+      `count's opening figure comes from these numbers and will change.`;
+  if (!confirm(`Correct ${changed.length} figure${changed.length === 1 ? '' : 's'} on ` +
+      `${ctx.detail.c.title}?\n\n${list}${consequence}\n\nRecorded against ${who}.`)) return;
+
+  store.set(CORRECT_WHO, who);
+  el('btnEditSave').disabled = true;
+  el('btnEditCancel').disabled = true;
+  setEditStatus('Saving…');
+
+  /* One row at a time, and stop at the first failure. A partial correction is
+     recoverable — the audit table says exactly which ones landed — whereas
+     carrying on past an error would leave nobody able to tell. */
+  let done = 0;
+  for (const c of changed) {
+    const { data, error } = await db.from('stock_count_line')
+      .update({ packs: c.to, corrected_by: who, corrected_reason: why })
+      .eq('count_id', ctx.detail.c.count_id).eq('product_id', c.product_id)
+      .select('product_id');
+    if (error) {
+      el('btnEditSave').disabled = false;
+      el('btnEditCancel').disabled = false;
+      return setEditStatus(`Stopped after ${done} of ${changed.length}: ` +
+        `${c.short_name} — ${error.message}`, true);
+    }
+    /* An RLS refusal is 200 with an empty array and no error — the mistake this
+       module has made three times. Count the rows back. */
+    if (!(data || []).length) {
+      el('btnEditSave').disabled = false;
+      el('btnEditCancel').disabled = false;
+      return setEditStatus(`Stopped after ${done} of ${changed.length}: the database ` +
+        `accepted no change to ${c.short_name}. If 18_count_corrections.sql has not been ` +
+        `run, a submitted count is still frozen.`, true);
+    }
+    done++;
+  }
+
+  el('btnEditSave').disabled = false;
+  el('btnEditCancel').disabled = false;
+  // Re-open from the database rather than patching the screen: the view has
+  // recomputed, and showing a stale variance next to a corrected figure is
+  // exactly the confusion this is meant to remove.
+  await openCount(ctx.detail.c.count_id);
 }
 
 function downloadCsv(c, rows, hasRec) {

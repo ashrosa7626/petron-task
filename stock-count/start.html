@@ -96,8 +96,8 @@
 </div>
 
 <script type="module">
-import { currentModule, href, categoryLabel, sessionKey, staffKey, catOf, hasCategories }
-  from './modules.js';
+import { currentModule, href, categoryLabel, sessionKey, staffKey, catOf, hasCategories,
+  diagnoseShelf } from './modules.js';
 
 const MOD = currentModule();
 const SUPABASE_URL = 'https://vwffiuciogthfzekkkkz.supabase.co';
@@ -235,11 +235,17 @@ async function init() {
   const missing = ctx.cats.filter(c => !c.version);
   ctx.cats = ctx.cats.filter(c => c.version);
   if (!ctx.cats.length) {
-    return fail(`<b>${escapeHtml(ctx.branchName)}</b> has no ` +
+    fail(`<b>${escapeHtml(ctx.branchName)}</b> has no ` +
       missing.map(m => `<b>${escapeHtml(categoryLabel(m.category).toLowerCase())}</b>`).join(' or ') +
       ` planogram yet, so there is nothing to count here. Counts, restocks and history all ` +
       `belong to a branch and a shelf, and will not be shown from another one. Switch branch ` +
       `in the menu, or set the shelf up on the Edit the Shelf page.`);
+    /* "Not set up yet" is a guess until the data is asked. When the shelf is in
+       fact there and only its version row is missing, saying it was never set up
+       sends somebody off to rebuild a planogram that already exists. */
+    const why = await diagnoseShelf(db, ctx.branchId, missing[0].category);
+    if (why) note('warn', why);
+    return;
   }
   if (missing.length) {
       ctx.missingNote = `No <b>${escapeHtml(missing.map(m => categoryLabel(m.category).toLowerCase()).join(' or '))}</b> ` +
