@@ -27,12 +27,16 @@ Hosted on GitHub Pages: https://ashrosa7626.github.io/petron-task/
 - Key is in app.js
 - Task tables: daily_assignments, completions, users, task_templates, categories,
   subcategories, subgroups, shift_briefings, shift_staff
-- Cigarette tables: branch, product, product_alias, planogram_version, planogram_facing,
-  stock_count, stock_count_line, pos_sales_daily, stock_restock, stock_restock_line,
-  plus the views vw_count_submitted, vw_restock_daily and vw_daily_reconciliation
+- Stock-count tables (all three shelves): branch, product, product_alias,
+  planogram_version, planogram_facing, stock_count, stock_count_line, pos_sales_daily,
+  stock_restock, stock_restock_line, plus the views vw_count_submitted, vw_restock_daily
+  and vw_daily_reconciliation. `stock_count_correction` arrives with migration 18 and is
+  **not in the live database yet** — see the state section at the bottom.
 - `users` carries `auth_id` and `role` (staff / lead / supervisor). It is what
   `lead.html`, `supervisor.html` and `stock-count/planogram.html` gate on — 13 leads
-  and 47 staff as of 25 Sep 2026
+  and 47 staff as of 25 Sep 2026. **`history.html` deliberately does NOT gate on it**:
+  correcting a submitted count is open to whoever is at the device, and the protection is
+  the audit trail rather than a login (decided 01 Oct 2026)
 - shift_staff table is RLS-blocked for anon key — do NOT rely on it for reads/writes; use shift_briefings instead
 
 ## Branch System
@@ -150,6 +154,12 @@ Hosted on GitHub Pages: https://ashrosa7626.github.io/petron-task/
   version N but no row" instead of "not set up yet" — note `read_version` is
   `using (status = 'active')`, so anon cannot see archived rows and only the orphan branch
   of that diagnosis fires for a page without a login.
+- **PostgREST returns 1000 rows and does not say it truncated.** `limit=20000` does not
+  lift it; the cap is server-side. `stock_count_line` and `vw_daily_reconciliation` are
+  both past 3000 rows, so one unpaged `select=*` reads the first third and looks whole. On
+  22 Oct that made 60 submitted counts appear to hold **zero lines** — a false catastrophe
+  that was one paragraph away from being written into this file as fact. Page until a batch
+  comes back short. `counts_query.m` already does, and this is why.
 - **A top-level throw in a page's module unbinds the WHOLE PAGE, silently.** Every
   `addEventListener` below the throw never runs, so the page draws correctly and then does
   nothing when touched — no error on screen, only a console line nobody on the shop floor
@@ -247,9 +257,10 @@ must name both roles.**
 
 
 Daily physical count of the cigarette gondola (Safari: 6 shelves A–F × 27 positions,
-162 facings, 54 products, **58 blocks**). Spec, workbook and SQL live in
-`cigarette stock/` — `BRIEF.md`, `01_schema.sql` … `16_seed_lubes_iluma.sql`,
-`CIGARETTES PLANOGRAM.xlsx`, `products_reference.csv`.
+162 facings, 54 products). The block count depends on how the shelf is merchandised and
+moves whenever it is edited — see Shelf shapes below for the current figures. Spec,
+workbook and SQL live in `cigarette stock/` — `BRIEF.md`, `01_schema.sql` …
+`18_count_corrections.sql`, `CIGARETTES PLANOGRAM.xlsx`, `products_reference.csv`.
 Run the SQL in numbered order. Counts are in **packs**; cartons are out of scope.
 
 Pages, all under `stock-count/`:
@@ -348,12 +359,24 @@ share so the round-trip property is testable. Historically, and still true of th
 id, PLU and positions. When they disagree, the workbook wins and the database gets a
 migration.
 
-**Shelf shapes** (measured, not assumed): cigarettes A–F × 27 = **162 facings, 54
-products, 58 blocks**; Iluma A–L × 3 = **34 facings, 21 products** (row L holds 1);
-lubes A–D, **ragged** — A/B are 17 wide, C/D are 8 — = **47 facings, 31 products, 4
-split**. Three lubes positions (B1, B9, B10) are **empty on purpose**: those products
-have no POS Item ID yet, so they cannot be seeded. Add them on the Edit the Shelf page
-when the till gives one up.
+**Shelf shapes** (measured 22 Oct 2026, not assumed): cigarettes A–F × 27 = **162
+facings, 54 products, 61 blocks, 6 split**; Iluma A–L × 3 = **34 facings, 21 products,
+21 blocks** (row L holds 1); lubes A–D, **ragged** — A/B are 17 wide, C/D are 8 — =
+**50 facings, 34 products, 38 blocks, 4 split**.
+
+**Block and split counts are not constants.** The gondola is full, so adding a product
+always takes a facing from another one, which changes how regions break into drawn
+pieces. The cigarette shelf went from 58 blocks / 3 split to 61 / 6 when it was
+re-merchandised on 01 Oct, with the same 54 products in the same 162 facings. `EXPECT` in
+`verify_blocks.mjs` and the table in the state section at the bottom of this file hold
+these numbers and must be re-measured together. The **structural** checks are the ones
+that mean something: every facing drawn exactly once, no block overlapping another, every
+split product carrying a correct "n of m".
+
+Lubes once had three positions (B1, B9, B10) **empty on purpose**, because those products
+had no POS Item ID and could not be seeded. They have IDs now — 104719 Blaze HTP 0W40 1L,
+104720 Rev-X Turbo HTP 5W40 1L, 103583 Rev-X Syn Blend 10W40 1L — and are on the shelf in
+v6, which is why lubes is 34 products in 50 facings rather than 31 in 47.
 
 **An L-shaped region is drawn as several blocks and must still be marked.** Lubes Blaze
 Multi 20W50 4L holds C7, C8 and D8 — connected, so ONE region, but not a rectangle, so
@@ -838,6 +861,9 @@ write, so migrations are run by hand in the Supabase SQL editor):
   impossible. The duplicate-Item-ID refusal now names both rows and both descriptions,
   which is why it read as a false positive. `history.html` gained **Correct counts**,
   backed by the trigger in `18_count_corrections.sql`.
+  **Neither migration is fully in as of 22 Oct** — 17 was run in pieces so the foreign keys
+  are still missing and version rows are still being deleted (v3 went after the repair),
+  and 18 has not been run at all. See the state section at the bottom of this file.
 
 ## Recent Fixes (Sep 2026)
 - **import-sales.html was dead, and now takes several categories at once** (29 Sep). The
@@ -877,11 +903,11 @@ write, so migrations are run by hand in the Supabase SQL editor):
     two unrelated blocks and half of it would never be counted. Numbered by drawn piece
     now.
   - **the sales zero-fill had to be scoped.** Unscoped, a cigarette import would write a
-    zero-sales row for all 31 lubes and 21 TEREA daily, with no error, and their
+    zero-sales row for all 37 lubes and 21 TEREA daily, with no error, and their
     reconciliation would read as the whole shelf walking out.
   - **the pages must work before their migration runs.** They deploy on push; the SQL is
     run by hand later; the count happens at midnight. Nothing SELECTs `category` by name
-    and a module counts the shelves that exist. `verify_pre_migration.mjs` pins it.
+    and a module counts the shelves that exist. `verify_resolution.mjs` pins it.
 
 ## Recent Fixes (Apr–May 2026)
 - **lead.html**: dead `leadBranchLabel` reference caused tasks stuck on "Loading..."
@@ -895,71 +921,88 @@ write, so migrations are run by hand in the Supabase SQL editor):
 - **dashboard.html**: Tasks of the Day flat list above staff completion journey; font sizes bumped across all pages
 - **style.css**: base font bumped 16px → 17px; small labels bumped proportionally in briefing.html and dashboard.html
 
-## Stock Count Modules — State as of 28 Sep 2026
+## Stock Count Modules — State as of 22 Oct 2026
 Probed against the live database, not remembered. **Re-probe before trusting**: this
-section has gone stale four times now, always by assuming a migration's state rather
-than asking. Anything dated here is a snapshot.
+section has gone stale five times now, always by assuming a migration's state rather than
+asking. Anything dated here is a snapshot.
 
-**Migrations: 01–16 are ALL applied.** Probed 28 Sep — `product.category` returns
-`{CIGARETTES: 54, LUBES: 34, ILUMA: 21}`, and three active planogram versions exist.
+**PROBE WITH PAGING.** PostgREST caps every response at **1000 rows** and says nothing
+about it. `stock_count_line` is 3250 rows and `vw_daily_reconciliation` is 3250, so a
+single `select=*&limit=20000` returns the first 1000 and looks complete. On 22 Oct that
+made 60 submitted counts appear to hold **zero lines** — a false catastrophe that was
+nearly written down here as fact. Page until a batch comes back short, the way
+`counts_query.m` does and for the same reason.
 
-**Three shelves, all seeded and all counting:**
+**Migrations: 01–16 applied. 17 PARTIALLY applied. 18 NOT run.**
+- **17 is half in.** The v6 LUBES row is back and carries the note the script writes, so
+  the `insert` ran — but v1, v2, v4 are *still* orphaned, **v3 has since joined them**, and
+  the two foreign keys in section 3 are absent. Section 2 raises and rolls the whole
+  transaction back while any orphan remains, so running the file whole would have undone
+  the insert; it must have been run in pieces. **The deletion is therefore still
+  happening**: v3 was the active cigarette version on 01 Oct and is now a version row that
+  does not exist with 162 facings still pointing at it.
+  **Live damage: 779 facings orphaned across v1/v2/v3/v4, and 23 counts referencing a
+  version row that is gone** (9 at v1, 1 at v2, 11 at v3, 2 at v4). Finish the script —
+  sections 1 and 3 together, in one transaction — and the orphans and the recurrence both
+  go.
+- **18 is not run**, so `stock_count_correction` does not exist and `stock_count_line` has
+  no `corrected_by`. The **Correct counts** button on `history.html` detects this and names
+  the migration instead of failing; nothing else is affected.
 
-| category | version | shelves | facings | products | split |
-|---|---|---|---|---|---|
-| CIGARETTES | v3 | A–F × 27 | 162 | 54 | 3 |
-| LUBES | v4 | A–D (ragged 17/17/8/8) | 47 | 31 | 4 |
-| ILUMA | v5 | A–L × 3 | 34 | 21 | 0 |
+**Three shelves, all counting daily, all reconciling:**
 
-`verify_blocks.mjs` checks **all three** against live data and they reconcile: no
-overlaps, every drawn cell matching its facing, every split product correctly marked.
-Lubes carries 3 **inactive** products (off the shelf) plus the 3 with no POS Item ID
-that were never seeded — B1, B9, B10 render as empty cells.
+| category | version | shelves | facings | products | blocks | split |
+|---|---|---|---|---|---|---|
+| CIGARETTES | v7 (01 Oct) | A–F × 27 | 162 | 54 | 61 | 6 |
+| LUBES | v6 (29 Sep) | A–D (ragged 17/17/8/8) | 50 | 34 | 38 | 4 |
+| ILUMA | v5 (25 Sep) | A–L × 3 | 34 | 21 | 21 | 0 |
 
-**The toggle works in production.** 25/09 and 27/09 each have a CIGARETTES *and* an
-ILUMA count by the same person — one sitting, both shelves, submitted together, which
-is exactly what the segmented control was for. **The first lubes count is a draft
-dated 28/09.**
+`verify_blocks.mjs` checks **all three** against live data and they reconcile: no overlaps,
+every drawn cell matching its facing, every split product correctly marked. The cigarette
+shelf was re-merchandised on 01 Oct — same 54 products in the same 162 facings, but 61
+drawn blocks and 6 split products where it was 58 and 3. **Those numbers move whenever the
+shelf is edited**, which is ordinary; the pinned constants in `verify_blocks.mjs` and this
+table have to be re-measured together.
 
-**Counts:** CIGARETTES 16 submitted / 3 draft, ILUMA 2 submitted / 2 draft, LUBES 1
-draft. **Two sittings were started and never submitted** — 26/09 (Asyraf) and 28/09
-(Luqman, all three categories, presumably still in progress). A draft holds no lines,
-so it reconciles nothing and leaves a gap in the opening chain.
+**Counts: 89 total, 82 submitted and every one complete.** No partial and no empty
+submitted count anywhere — checked with paging. CIGARETTES 40 submitted / 2 draft, ILUMA
+26 / 1, LUBES 16 / 4. Daily counting runs to 21 Oct across all three shelves. Lubes has
+been counted every day since it came back on 01 Oct.
 
-**Variance is live for cigarettes only.** 14–18 Sep each have all 54 products with a
-real variance. `pos_sales_daily` still holds only those six days (09/09 and 14–18/09),
-so **19–28 Sep are counted but have no POS side**, and Iluma's two submitted counts
-show no variance at all because no Iluma sales report has been imported. That is
-expected, not a fault: lubes and Iluma print as separate POS reports and neither has
-been loaded yet.
+**All three shelves now have POS imports**, which is the big change since September:
+cigarettes 25 days, Iluma 18, lubes 17, all latest **18 Oct**. 2306 rows in
+`pos_sales_daily`.
 
-**Variance RM** works from `pos_sales_daily.unit_price`. `product.unit_price` is still
-null for all 109 products, so a product that did not sell has no RM figure — which is
-exactly the shrinkage case. Setting list prices is a data task.
+**Variance is live everywhere.** `vw_daily_reconciliation` holds 3250 rows over 18 columns:
+CIGARETTES 2162 rows / 40 days / 1298 with a variance, LUBES 544 / 16 / 374, ILUMA 544 / 26
+/ 378. Counts run three days past the sales (21 Oct vs 18 Oct), so the newest days have no
+POS side yet — expected, not a fault.
 
-**Restocks:** 8 records, all CIGARETTES — 5 submitted, 3 void (two of which were my own
-end-to-end tests and are labelled as such). None yet for lubes or Iluma.
+**Variance RM** comes from `pos_sales_daily.unit_price`, which the sales loader now writes:
+726 cigarette rows, 111 Iluma, 23 lubes carry an RM figure. `product.unit_price` is **still
+null for all 112**, so a product that did not sell still has no RM — which is exactly the
+shrinkage case. Setting list prices remains a data task.
 
-**The view kept its shape.** 18 columns, the first 17 in their original order with
-`category` appended — verified 28 Sep. `counts_query.m` filters to **one** category, and
-the workbook attaches it twice — `CIGARETTES` to `Data`, `LUBES` to `LubesData` — so each
-shelf's tabs see only their own rows.
+**Restocks: 80.** CIGARETTES 53 submitted + 3 void, ILUMA 19, LUBES 5.
 
 **Still open:**
-- **Nilai Desa Jati has no planogram** for any category, so nothing can be counted there.
-- **No POS import for lubes or Iluma**, so neither reconciles yet. Their counts are
-  stock levels until a sales report for each is loaded.
-- **19–28 Sep have no cigarette POS import** — ten days of counts waiting.
-- **Two unsubmitted count sittings** (26/09, 28/09).
-- **`product.unit_price` unset** for all 109.
-- **Three lubes positions have no POS Item ID** (B1 Blaze HTP 0W40 1L, B9 Rev-X Turbo
-  HTP 5W40 1L, B10 Rev-X Syn Blend 15W40). Add them on Edit the Shelf when the till
-  gives one up; `gen_seed_from_xlsx.py` can also be re-run.
-- The repo's `CIGARETTES PLANOGRAM.xlsx` is a stale parser fixture — the database is
-  the source of truth. `excel/Lubes planogram.xlsx` is the same for lubes and Iluma.
+- **Finish migration 17** (sections 1 and 3 together) — 779 orphaned facings, 23 counts
+  pointing at nothing, and the foreign keys still missing so it keeps recurring.
+- **Run migration 18** to make the Correct counts button work.
+- **Nilai Desa Jati still has no planogram** for any category, so nothing can be counted
+  there. Three active versions exist and all three are SAFARI.
+- **`product.unit_price` unset** for all 112.
+- **Seven drafts linger**: count 2 (26/08), 27, 28, 29 (29/09), 24 (28/09), 32 (01/10) and
+  61 (11/10) — four of them lubes. A draft holds no lines, so it reconciles nothing and
+  leaves a gap in the opening chain.
+- The repo's `CIGARETTES PLANOGRAM.xlsx` is a stale parser fixture — the database is the
+  source of truth, and the cigarette shelf has moved twice since. `excel/Lubes planogram.xlsx`
+  is the same for lubes and Iluma, and **cannot be uploaded to the editor**: its sheets are
+  "Lubes Planogram" / "Lubes Stock List", not the "Planogram" / "Full Stock List" the page
+  reads. Download from the page, edit that.
 - `short_name` values are still drafts.
-- **`cigarette stock/` is now a misnomer** — it holds the migrations and tests for all
-  three shelves. Not renamed because every doc, test and script path references it.
+- **`cigarette stock/` is a misnomer** — it holds the migrations and tests for all three
+  shelves. Not renamed because every doc, test and script path references it.
 
 ## Deployment
 - git add . → git commit -m "message" → git push

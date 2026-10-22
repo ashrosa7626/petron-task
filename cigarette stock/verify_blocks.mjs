@@ -30,12 +30,28 @@ if (!versions.length) throw new Error('no active planogram version');
 const products = new Map(
   (await get('product?select=product_id,short_name,plu,brand,category')).map(p => [p.product_id, p]));
 
-// What each shelf should be. Not a guess: measured from the workbook and the
-// seed, and pinned here so a bad edit or a half-run migration is loud.
+// What each shelf should be. Not a guess: read off the live planogram and
+// pinned here so a bad edit or a half-run migration is loud.
+//
+// These numbers MOVE when somebody re-merchandises a shelf on the Edit the Shelf
+// page, which is an ordinary thing to do — the gondola is full, so adding a
+// product always takes a facing from another one, and that changes the block
+// count and often the split count. Re-measured 22 Oct 2026:
+//
+//   cigarettes  v3 -> v7 on 01 Oct: still 54 products in 162 facings, but 61
+//               drawn blocks and 6 split products, up from 58 and 3.
+//   lubes       v4 -> v6: 34 products in 50 facings, up from 31 in 47 — the
+//               three that had no POS Item ID when lubes was first seeded.
+//
+// When this check fails, read the structural ones above it first. If every
+// facing is still drawn exactly once with no overlap and every split marker is
+// right, the shelf is sound and these constants are simply behind; update them
+// and the table in CLAUDE.md together. If a structural check failed too, the
+// shelf itself is wrong and the numbers are the least of it.
 const EXPECT = {
-  CIGARETTES: { products: 54, facings: 162, blocks: 58, split: 3 },
+  CIGARETTES: { products: 54, facings: 162, blocks: 61, split: 6 },
   ILUMA:      { products: 21, facings: 34,  blocks: 21, split: 0 },
-  LUBES:      { products: 31, facings: 47,  blocks: 35, split: 4 }
+  LUBES:      { products: 34, facings: 50,  blocks: 38, split: 4 }
 };
 
 for (const v of versions.sort((a, b) => a.category.localeCompare(b.category))) {
